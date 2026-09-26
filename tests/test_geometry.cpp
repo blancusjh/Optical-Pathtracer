@@ -199,3 +199,41 @@ TEST(point_location_identifies_regions) {
     CHECK(sc.world.locate({5, 0.2, 0.1}) == sc.world.bodies()[b].regions[0]);
     CHECK(sc.world.locate({0, 0, 0}) == sc.world.ambientRegion());
 }
+
+TEST(dome_and_round_wall_are_exact_and_open_where_cut) {
+    // Rays from inside the observatory: hits lie on the surfaces (to ~1e-12 m) and never inside
+    // the slit or the window; rays aimed through the middle of an opening escape.
+    const double R = 4.5, H = 3.2;
+    DomeShape dome(R, radians(170), 1.8, radians(80));
+    RoundWallShape wall(R, H, {{radians(250), 1.2, 1.2, 2.6}});
+    Rng rng(5, 6);
+    int domeHits = 0, wallHits = 0;
+    for (int i = 0; i < 20000; ++i) {
+        Vec3 o{rng.uniform() * 2 - 1, rng.uniform() * 2 - 1, 0.2 + rng.uniform()};
+        Vec3 d = sampleUniformSphere(rng.uniform(), rng.uniform());
+        LocalHit h;
+        if (dome.intersect({o, d}, 0, Inf, h)) {
+            domeHits++;
+            CHECK_NEAR(length(h.p), R, 1e-11);
+            CHECK(h.p.z >= -1e-12);
+            // Not in the slit: lateral distance from the slit plane ≥ half width, or beyond its top.
+            Vec3 s{std::sin(radians(170)), std::cos(radians(170)), 0};  // azimuth from +y toward +x
+            Vec3 side = cross(Vec3(0, 0, 1), s);
+            bool inSlit = std::abs(dot(h.p, side)) < 0.9 && dot(h.p, s) > 0 &&
+                          std::atan2(h.p.z, std::abs(dot(h.p, s))) < radians(80);
+            CHECK(!inSlit);
+        }
+        if (wall.intersect({o, d}, 0, Inf, h)) {
+            wallHits++;
+            CHECK_NEAR(std::hypot(h.p.x, h.p.y), R, 1e-11);
+            CHECK(h.p.z >= -1e-12 && h.p.z <= H + 1e-12);
+        }
+    }
+    CHECK(domeHits > 1000 && wallHits > 1000);
+    LocalHit h;
+    Vec3 up = normalize(Vec3(std::sin(radians(170)), std::cos(radians(170)), 1.0));
+    CHECK(!dome.intersect({{0, 0, 0.5}, up}, 0, Inf, h));
+    Vec3 win{std::sin(radians(250)), std::cos(radians(250)), 0};
+    CHECK(!wall.intersect({{0, 0, 1.9}, win}, 0, Inf, h));
+    CHECK(wall.intersect({{0, 0, 0.5}, win}, 0, Inf, h));
+}

@@ -111,15 +111,25 @@ bool SurfaceSensor::generate(double px, double py, Rng& rng, Ray& ray, double& w
     if (hasAim) {
         Vec3 a1, a2;
         orthonormalBasis(aimNormal, a1, a2);
+        bool useFocus = focusShare > 0 && rng.uniform() < focusShare;
+        const Vec3& c = useFocus ? focusCenter : aimCenter;
+        double r = useFocus ? focusRadius : aimRadius;
         Vec2 d = sampleUniformDiskConcentric(rng.uniform(), rng.uniform());
-        Vec3 q = aimCenter + (a1 * d.x + a2 * d.y) * aimRadius;
-        Vec3 w = q - p;
-        double dist2 = lengthSq(w);
-        dir = w / std::sqrt(dist2);
+        Vec3 w = c + (a1 * d.x + a2 * d.y) * r - p;
+        dir = w / length(w);
         double cosS = dot(dir, normal_);
-        double cosA = std::abs(dot(dir, aimNormal));
-        if (cosS <= 0 || cosA <= 1e-12) { weight = 0; return false; }
-        double pdfW = dist2 / (cosA * Pi * aimRadius * aimRadius);
+        if (cosS <= 0) { weight = 0; return false; }
+        // Solid-angle density of a direction under uniform sampling of a disk ⟂ aimNormal.
+        auto diskPdf = [&](const Vec3& center, double radius) {
+            double dn = dot(dir, aimNormal);
+            if (std::abs(dn) <= 1e-12) return 0.0;
+            double t = dot(center - p, aimNormal) / dn;
+            if (t <= 0 || lengthSq(p + dir * t - center) > radius * radius) return 0.0;
+            return t * t / (std::abs(dn) * Pi * radius * radius);
+        };
+        double pdfW = (1 - focusShare) * diskPdf(aimCenter, aimRadius);
+        if (focusShare > 0) pdfW += focusShare * diskPdf(focusCenter, focusRadius);
+        if (!(pdfW > 0)) { weight = 0; return false; }
         weight = cosS / pdfW;
     } else {
         Frame f(normal_);

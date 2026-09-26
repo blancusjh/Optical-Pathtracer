@@ -1,0 +1,191 @@
+# THE OBSERVATORY — a classical domed observatory on a mountain at night.
+# Two great refractors look through the dome slit at Saturn and Jupiter; a small Keplerian
+# telescope looks out of a west window at the gibbous Moon. On the desk: books, a compass under
+# glass, an armillary of nested gimbal rings, candles. A terrestrial globe stands nearby.
+#
+# The sky is modelled, not painted: the Moon (1737 km radius at 384 400 km), Jupiter (69 911 km
+# at 6.3·10^11 m) and Saturn (58 232 km with rings, at 1.28·10^12 m) are bodies at their real
+# sizes and distances, lit by a sun 20° below the northern horizon, so the Moon's phase and the
+# planets' near-full discs follow from geometry. Stars are small emitters at 10^13 m.
+# Observers: Room, Desk, SaturnEyepiece, JupiterEyepiece, MoonEyepiece, Slit (naked eye).
+units = m
+
+world {
+    # Night sky ~10^-6 of the Moon's luminance, as on a moonlit night.
+    sky = gradient(zenith = rgb(0.03, 0.06, 0.16, luminance = 2.5e-7), horizon = rgb(0.10, 0.13, 0.24, luminance = 8e-7),
+                   ground = rgb(0.02, 0.02, 0.02, luminance = 1e-6))
+    # nee_share: a sampling choice — the sun receives 30% of light samples, the candles the rest.
+    sun { azimuth = 350deg  elevation = -20deg  temperature = 5778  luminance = 1e5  nee_share = 0.3 }
+}
+
+material plaster  { type = diffuse  reflectance = rgb(0.78, 0.74, 0.66) }
+material parquet  { type = diffuse  texture = wood(a = rgb(0.45, 0.28, 0.14), b = rgb(0.30, 0.17, 0.08), scale = 9mm, turbulence = 0.4) }
+material walnut   { type = diffuse  texture = wood(a = rgb(0.30, 0.18, 0.09), b = rgb(0.18, 0.10, 0.05), scale = 4mm, turbulence = 0.5) }
+material rug      { type = diffuse  texture = checker(a = rgb(0.45, 0.08, 0.07), b = rgb(0.30, 0.20, 0.10), scale = 0.12) }
+material brass    { type = conductor  metal = gold  roughness = 0.18  tint = rgb(0.95, 0.85, 0.65) }
+material polished { type = conductor  metal = gold  roughness = 0.06 }
+material iron     { type = diffuse  reflectance = rgb(0.08, 0.08, 0.09) }
+material paint    { type = diffuse  reflectance = rgb(0.80, 0.78, 0.72) }
+material leather1 { type = diffuse  reflectance = rgb(0.35, 0.06, 0.05) }
+material leather2 { type = diffuse  reflectance = rgb(0.08, 0.20, 0.12) }
+material leather3 { type = diffuse  reflectance = rgb(0.30, 0.18, 0.08) }
+material pages    { type = diffuse  reflectance = rgb(0.86, 0.82, 0.70) }
+material text     { type = diffuse  texture = wood(a = rgb(0.88, 0.84, 0.72), b = rgb(0.55, 0.52, 0.46), scale = 2mm, turbulence = 0.05) }
+material dial     { type = diffuse  texture = radial(a = rgb(0.92, 0.90, 0.84), b = rgb(0.15, 0.13, 0.12), scale = 18mm) }
+material needle   { type = diffuse  reflectance = rgb(0.7, 0.05, 0.03) }
+material wax      { type = diffuse  reflectance = rgb(0.92, 0.88, 0.78) }
+material earth    { type = diffuse  texture = noise(a = rgb(0.10, 0.22, 0.45), b = rgb(0.62, 0.50, 0.30), scale = 0.08) }
+material chart    { type = diffuse  texture = noise(a = rgb(0.05, 0.07, 0.20), b = rgb(0.55, 0.50, 0.38), scale = 5mm) }
+material rock     { type = diffuse  texture = terrain(a = rgb(0.18, 0.20, 0.12), b = rgb(0.30, 0.29, 0.28), c = rgb(0.85, 0.87, 0.9), scale = 40, snow_line = 160) }
+material regolith { type = diffuse  texture = noise(a = rgb(0.17, 0.165, 0.155), b = rgb(0.075, 0.075, 0.08), scale = 250000) }
+# The sun is a directional source with its irradiance at Earth. Jupiter (5.2 AU) and Saturn
+# (9.5 AU) receive 1/27 and 1/91 of it, so their albedos carry that factor: scale = (1 AU / r)^2.
+material jovian   { type = diffuse  texture = bands(a = rgb(0.86, 0.80, 0.68, scale = 0.037), b = rgb(0.50, 0.33, 0.21, scale = 0.037), c = rgb(0.92, 0.88, 0.82, scale = 0.037), scale = 14000000, turbulence = 0.25) }
+material kronian  { type = diffuse  texture = bands(a = rgb(0.86, 0.80, 0.62, scale = 0.011), b = rgb(0.72, 0.64, 0.48, scale = 0.011), c = rgb(0.88, 0.84, 0.70, scale = 0.011), scale = 16000000, turbulence = 0.15) }
+material ringC    { type = diffuse  texture = radial(a = rgb(0.55, 0.50, 0.44, scale = 0.011), b = rgb(0.30, 0.28, 0.25, scale = 0.011), scale = 30000000) }
+material ringB    { type = diffuse  texture = radial(a = rgb(0.95, 0.90, 0.80, scale = 0.011), b = rgb(0.72, 0.67, 0.58, scale = 0.011), scale = 30000000) }
+material ringA    { type = diffuse  texture = radial(a = rgb(0.82, 0.78, 0.70, scale = 0.011), b = rgb(0.60, 0.56, 0.49, scale = 0.011), scale = 30000000) }
+
+# ---------------------------------------------------------------- landscape
+# The Earth beneath the landscape: its curvature is what keeps the sun, 20° below the
+# horizon, off the mountains (a flat finite world would let it light every steep north face).
+body Earth  { type = sphere  radius = 6371000  material = rock  position = (0, 0, -6371260) }
+body Ground { type = terrain  size = (3000, 3000)  resolution = 384  amplitude = 150  feature = 700  ridge = 0.6
+              seed = 23  flat_radius = 30  material = rock }
+
+# ---------------------------------------------------------------- the building
+body Floor  { type = disk  radius = 4.5  position = on_terrain("Ground", 0, 0, 0.001)  material = parquet }
+body Rug    { type = sheet  size = (2.6, 1.8)  position = on_terrain("Ground", 0.2, 0.2, 0.002)  material = rug }
+body Wall   { type = round_wall  radius = 4.5  height = 3.2  material = plaster  position = on_terrain("Ground", 0, 0, 0)
+              openings = [(250deg, 1.2, 1.2, 2.6)] }
+body Dome   { type = dome  radius = 4.5  slit_azimuth = 170deg  slit_width = 1.8  slit_top = 80deg
+              material = plaster  position = on_terrain("Ground", 0, 0, 3.2) }
+body Chart  { type = sheet  size = (1.1, 0.75)  material = chart  position = on_terrain("Ground", 3.13, 3.13, 1.75)
+              axis = (-0.7071, -0.7071, 0)  up = (0, 0, 1) }
+
+# ---------------------------------------------------------------- the great refractors
+body GreatRefractor { type = prescription  file = "../lenses/refractor_150mm.lens"  afocal = true  tube = true  tube_material = paint
+                      position = on_terrain("Ground", 0.4188, -0.6984, 2.6556)  point_at = sky(176deg, 33deg, 1.28e12) }
+body Refractor2     { type = prescription  file = "../lenses/refractor_150mm.lens"  afocal = true  tube = true  tube_material = brass
+                      position = on_terrain("Ground", -0.4591, -0.9377, 2.7498)  point_at = sky(164deg, 38deg, 6.3e11) }
+body Pier1 { type = lathe  material = iron  segments = 48
+         profile = [(0.26, 0), (0.24, 0.08), (0.13, 0.14), (0.11, 1.847), (0.15, 1.887), (0.15, 1.967)]
+         position = on_terrain("Ground", 0.3603, 0.1383, 0.0021) }
+body Pier2 { type = lathe  material = iron  segments = 48
+         profile = [(0.26, 0), (0.24, 0.08), (0.13, 0.14), (0.11, 1.863), (0.15, 1.903), (0.15, 1.983)]
+         position = on_terrain("Ground", -0.6763, -0.1802, 0.0021) }
+
+# ---------------------------------------------------------------- the Moon telescope at the west window
+body MoonScope { type = prescription  file = "../lenses/kepler_16x.lens"  afocal = true  tube = true  tube_material = brass
+                 position = on_terrain("Ground", -3.3949, -1.2337, 1.6871)  point_at = sky(250deg, 24deg, 3.844e8) }
+body Leg1 { type = cylinder  radius = 0.014  height = 1.5452  material = walnut  position = on_terrain("Ground", -2.9874, -0.7981, 0.0030)  look_at = on_terrain("Ground", -3.1974, -1.1619, 1.4900) }
+body Leg2 { type = cylinder  radius = 0.014  height = 1.5452  material = walnut  position = on_terrain("Ground", -2.9874, -1.5256, 0.0030)  look_at = on_terrain("Ground", -3.1974, -1.1619, 1.4900) }
+body Leg3 { type = cylinder  radius = 0.014  height = 1.5452  material = walnut  position = on_terrain("Ground", -3.6174, -1.1619, 0.0030)  look_at = on_terrain("Ground", -3.1974, -1.1619, 1.4900) }
+
+# ---------------------------------------------------------------- the desk
+body DeskTop { type = box  size = (1.6, 0.75, 0.05)  position = on_terrain("Ground", 1.0, 3.3, 0.7602)  material = walnut }
+body DeskLegA { type = cylinder  radius = 0.028  height = 0.733  material = walnut  position = on_terrain("Ground", 0.26, 2.99, 0.0021)
+                repeat = (2, (1.48, 0, 0)) }
+body DeskLegB { type = cylinder  radius = 0.028  height = 0.733  material = walnut  position = on_terrain("Ground", 0.26, 3.61, 0.0021)
+                repeat = (2, (1.48, 0, 0)) }
+
+assembly BookA { position = on_terrain("Ground", 0.4200, 3.4700, 0.78540)  rotate = (0, 0, 4.0deg)
+    body BookA.Lower { type = box  size = (0.2700, 0.2000, 0.0040)  position = (0, 0, 0.00200)  material = leather1 }
+    body BookA.Pages { type = box  size = (0.2600, 0.1940, 0.0418)  position = (0.002, 0, 0.02500)  material = pages }
+    body BookA.Upper { type = box  size = (0.2700, 0.2000, 0.0040)  position = (0, 0, 0.04800)  material = leather1 }
+    body BookA.Spine { type = box  size = (0.0040, 0.2000, 0.0418)  position = (-0.13300, 0, 0.02500)  material = leather1 }
+}
+assembly BookB { position = on_terrain("Ground", 0.4300, 3.4600, 0.83550)  rotate = (0, 0, -9.0deg)
+    body BookB.Lower { type = box  size = (0.2500, 0.1800, 0.0040)  position = (0, 0, 0.00200)  material = leather2 }
+    body BookB.Pages { type = box  size = (0.2400, 0.1740, 0.0338)  position = (0.002, 0, 0.02100)  material = pages }
+    body BookB.Upper { type = box  size = (0.2500, 0.1800, 0.0040)  position = (0, 0, 0.04000)  material = leather2 }
+    body BookB.Spine { type = box  size = (0.0040, 0.1800, 0.0338)  position = (-0.12300, 0, 0.02100)  material = leather2 }
+}
+assembly BookC { position = on_terrain("Ground", 0.4100, 3.4800, 0.87760)  rotate = (0, 0, 15.0deg)
+    body BookC.Lower { type = box  size = (0.2200, 0.1600, 0.0040)  position = (0, 0, 0.00200)  material = leather3 }
+    body BookC.Pages { type = box  size = (0.2100, 0.1540, 0.0278)  position = (0.002, 0, 0.01800)  material = pages }
+    body BookC.Upper { type = box  size = (0.2200, 0.1600, 0.0040)  position = (0, 0, 0.03400)  material = leather3 }
+    body BookC.Spine { type = box  size = (0.0040, 0.1600, 0.0278)  position = (-0.10800, 0, 0.01800)  material = leather3 }
+}
+
+# An open folio: two page blocks on a leather board, gently tilted toward the spine.
+body Folio.Board { type = box  size = (0.46, 0.32, 0.005)  position = on_terrain("Ground", 0.95, 3.17, 0.78790)  material = leather1 }
+body Folio.Left  { type = box  size = (0.215, 0.30, 0.012)  position = on_terrain("Ground", 0.838, 3.17, 0.80160)  rotate = (0, 4deg, 0)
+                   material = text }
+body Folio.Right { type = box  size = (0.215, 0.30, 0.012)  position = on_terrain("Ground", 1.062, 3.17, 0.80160)  rotate = (0, -4deg, 0)
+                   material = text }
+
+# A compass: brass case, printed rose, steel needle, glass cover held by a brass bezel.
+body CompassCase  { type = cylinder  radius = 0.06  height = 0.014  material = brass  position = on_terrain("Ground", 1.380, 3.470, 0.78540) }
+body CompassDial  { type = disk  radius = 0.05  material = dial  position = on_terrain("Ground", 1.380, 3.470, 0.79950) }
+body CompassNeedle { type = box  size = (0.084, 0.004, 0.0015)  material = needle  rotate = (0, 0, 28deg)
+                     position = on_terrain("Ground", 1.380, 3.470, 0.80080) }
+body CompassGlass { type = cylinder  radius = 0.055  height = 0.003  medium = N-BK7  position = on_terrain("Ground", 1.380, 3.470, 0.80230) }
+body CompassBezel { type = torus  radius = 0.059  tube_radius = 0.0035  material = polished  position = on_terrain("Ground", 1.380, 3.470, 0.80390) }
+
+# An armillary of nested gimbal rings around a small Earth on a brass baluster.
+body ArmillaryStand { type = lathe  material = brass  segments = 48  position = on_terrain("Ground", 1.620, 3.220, 0.78540)
+                      profile = [(0.075, 0), (0.07, 0.012), (0.03, 0.02), (0.014, 0.05), (0.022, 0.09), (0.012, 0.13), (0.012, 0.32), (0.02, 0.325)] }
+body ArmillaryEarth { type = sphere  radius = 0.035  material = earth  position = on_terrain("Ground", 1.620, 3.220, 1.14550) }
+body RingHorizon  { type = torus  radius = 0.15   tube_radius = 0.004  material = brass  axis = (0, 0, 1)  position = on_terrain("Ground", 1.620, 3.220, 1.14550) }
+body RingEcliptic { type = torus  radius = 0.135  tube_radius = 0.004  material = brass  axis = (0.40, 0.10, 0.91)  position = on_terrain("Ground", 1.620, 3.220, 1.14550) }
+body RingMeridian { type = torus  radius = 0.12   tube_radius = 0.004  material = brass  axis = (0.96, 0.28, 0)  position = on_terrain("Ground", 1.620, 3.220, 1.14550) }
+
+body Holder1 { type = lathe  material = brass  segments = 40  position = on_terrain("Ground", 0.700, 3.560, 0.78540)
+                profile = [(0.045, 0), (0.042, 0.008), (0.014, 0.018), (0.010, 0.055), (0.024, 0.064), (0.022, 0.070)] }
+body Candle1 { type = cylinder  radius = 0.0105  height = 0.100  material = wax  position = on_terrain("Ground", 0.700, 3.560, 0.85550) }
+body Flame1  { type = sphere  radius = 0.0055  material = black  emission = blackbody(1850K, 60)  position = on_terrain("Ground", 0.700, 3.560, 0.96900) }
+body Holder2 { type = lathe  material = brass  segments = 40  position = on_terrain("Ground", 1.160, 3.580, 0.78540)
+                profile = [(0.045, 0), (0.042, 0.008), (0.014, 0.018), (0.010, 0.055), (0.024, 0.064), (0.022, 0.070)] }
+body Candle2 { type = cylinder  radius = 0.0105  height = 0.130  material = wax  position = on_terrain("Ground", 1.160, 3.580, 0.85550) }
+body Flame2  { type = sphere  radius = 0.0055  material = black  emission = blackbody(1850K, 60)  position = on_terrain("Ground", 1.160, 3.580, 0.99900) }
+body Holder3 { type = lathe  material = brass  segments = 40  position = on_terrain("Ground", 1.860, 3.500, 0.78540)
+                profile = [(0.045, 0), (0.042, 0.008), (0.014, 0.018), (0.010, 0.055), (0.024, 0.064), (0.022, 0.070)] }
+body Candle3 { type = cylinder  radius = 0.0105  height = 0.160  material = wax  position = on_terrain("Ground", 1.860, 3.500, 0.85550) }
+body Flame3  { type = sphere  radius = 0.0055  material = black  emission = blackbody(1850K, 60)  position = on_terrain("Ground", 1.860, 3.500, 1.02900) }
+
+# A floor candelabrum by the great refractor.
+body Candelabrum { type = lathe  material = brass  segments = 48  position = on_terrain("Ground", 1.55, -0.55, 0.0021)
+                   profile = [(0.16, 0), (0.15, 0.02), (0.05, 0.05), (0.02, 0.15), (0.03, 0.6), (0.015, 1.05), (0.05, 1.12), (0.045, 1.13)] }
+body TallCandle  { type = cylinder  radius = 0.02  height = 0.22  material = wax  position = on_terrain("Ground", 1.55, -0.55, 1.1302) }
+body TallFlame   { type = sphere  radius = 0.009  material = black  emission = blackbody(1850K, 120)
+                   position = on_terrain("Ground", 1.55, -0.55, 1.3703) }
+
+# A terrestrial globe on a turned stand.
+body GlobeStand { type = lathe  material = walnut  segments = 48  position = on_terrain("Ground", -0.75, 3.05, 0.0021)
+                  profile = [(0.24, 0), (0.22, 0.03), (0.06, 0.06), (0.035, 0.2), (0.05, 0.45), (0.03, 0.62), (0.05, 0.70), (0.045, 0.7777)] }
+body Globe      { type = sphere  radius = 0.22  material = earth  axis = (0.39, 0, 0.92)  position = on_terrain("Ground", -0.75, 3.05, 0.9999) }
+body GlobeRing  { type = torus  radius = 0.245  tube_radius = 0.006  material = brass  axis = (0, 1, 0)  position = on_terrain("Ground", -0.75, 3.05, 0.9999) }
+
+# ---------------------------------------------------------------- the sky
+body Stars   { type = starfield  count = 3500  seed = 5  distance = 1e13  angular_radius = 0.03deg  brightest = 0.6  min_elevation = -3deg }
+body Moon    { type = sphere  radius = 1737400  material = regolith  position = sky(250deg, 24deg, 3.844e8) }
+body Jupiter { type = sphere  radius = 69911000  material = jovian  axis = (0.05, 0.1, 0.99)  position = sky(164deg, 38deg, 6.3e11) }
+body Saturn  { type = sphere  radius = 58232000  material = kronian  axis = (0.054, 0.217, 0.975)  position = sky(176deg, 33deg, 1.28e12) }
+# Rings at their real radii: the faint C ring, the bright B ring, the Cassini division (a gap), the A ring.
+body SaturnRingC { type = disk  radius = 92000000  inner_radius = 74500000  material = ringC  axis = (0.054, 0.217, 0.975)  position = sky(176deg, 33deg, 1.28e12) }
+body SaturnRingB { type = disk  radius = 117580000  inner_radius = 92000100  material = ringB  axis = (0.054, 0.217, 0.975)  position = sky(176deg, 33deg, 1.28e12) }
+body SaturnRingA { type = disk  radius = 136780000  inner_radius = 122170000  material = ringA  axis = (0.054, 0.217, 0.975)  position = sky(176deg, 33deg, 1.28e12) }
+
+# ---------------------------------------------------------------- observers
+observer Room { position = on_terrain("Ground", 3.7, -0.3, 1.66)  look_at = on_terrain("Ground", -1.6, 0.9, 1.75)
+                fov = 80deg  pupil = 5mm  focus = 3.5  resolution = (800, 500) }
+observer Desk { position = on_terrain("Ground", 1.25, 2.38, 1.2)  look_at = on_terrain("Ground", 1.2, 3.32, 0.88)
+                fov = 52deg  pupil = 5mm  focus = 1.05  resolution = (720, 480) }
+# Through the eyepieces: the planets are sunlit, so these views keep daylight white and a fixed
+# exposure (the black sky would otherwise be raised to mid-grey), and give the sun 97% of the light
+# samples (the candles behind the observer contribute almost nothing here).
+observer SaturnEyepiece  { position = exit_pupil("GreatRefractor")  look_at = sky(176deg, 33deg, 1.28e12)
+                           fov = 4deg  pupil = 1.1mm  resolution = (480, 480)
+                           exposure = 5  white_balance = none  sun_share = 0.97 }
+observer JupiterEyepiece { position = exit_pupil("Refractor2")  look_at = sky(164deg, 38deg, 6.3e11)
+                           fov = 4deg  pupil = 1.1mm  resolution = (480, 480)
+                           exposure = 2.6  white_balance = none  sun_share = 0.97 }
+observer MoonEyepiece    { position = exit_pupil("MoonScope")  look_at = sky(250deg, 24deg, 3.844e8)
+                           fov = 38deg  pupil = 3mm  resolution = (480, 480)
+                           exposure = 1.3  white_balance = none  sun_share = 0.97 }
+observer Slit { position = on_terrain("Ground", 0.1, 1.9, 1.6)  look_at = sky(170deg, 42deg, 100)
+                fov = 64deg  pupil = 6mm  resolution = (640, 640) }
+
+# The eye adapts to candlelight: display white point 2000 K (the raw image is unchanged).
+render { detector = Room  spp = 256  white_balance = 2000 }

@@ -22,6 +22,7 @@ public:
     double seconds() const { return seconds_; }
     const TransportStats& stats() const { return stats_; }
     const Detector& detector() const { return *det_; }
+    const RenderSettings& settings() const { return settings_; }
 
 private:
     void passPath(int spp);
@@ -46,7 +47,9 @@ void spectralWeights(double lambda, double pdf, double out[3]);
 
 // Image output.
 void writePFM(const std::string& path, const Image& img);                 // linear sRGB, raw
-void writePNG(const std::string& path, const Image& img, double exposureEV, bool autoExposure);
+// Display rendering: exposure, optional white balance (Bradford adaptation from a Planckian white
+// of `whiteKelvin` to D65; 0 = none), highlight roll-off, sRGB encoding. Never applied to PFM.
+void writePNG(const std::string& path, const Image& img, double exposureEV, bool autoExposure, double whiteKelvin = 0);
 std::string renderMetadataJSON(const Scene& scene, const ProgressiveRenderer& r, const RenderSettings& s);
 uint64_t fnv1a(const std::string& s);
 

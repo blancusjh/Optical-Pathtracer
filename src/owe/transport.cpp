@@ -100,6 +100,20 @@ Interface Tracer::makeInterface(const SurfaceHit& hit, double lambda) const {
     it.nBack = world_.indexOf(b.back, lambda);
     it.lambda = lambda;
     it.fresnelFloor = fresnelFloor_;
+    if (it.optics->texture.kind != Texture::Kind::None) {
+        it.optics->texture.weights(it.pLocal, it.nLocal, it.tex);
+        it.texReady = true;
+    }
+    return it;
+}
+
+// The same interface at another wavelength: only the indices change.
+static Interface atWavelength(const Interface& base, const World& w, const SurfaceHit& hit, double lambda) {
+    Interface it = base;
+    const Boundary& b = w.boundaries()[hit.boundary];
+    it.nFront = w.indexOf(b.front, lambda);
+    it.nBack = w.indexOf(b.back, lambda);
+    it.lambda = lambda;
     return it;
 }
 
@@ -160,9 +174,10 @@ Spec4 Tracer::directLighting(const SurfaceHit& hit, const Vec3& d, const Wavelen
         f = Spec4(ph);
         pdfScatter = ph;
     } else {
+        Interface base = makeInterface(hit, wl.lambda[0]);
         for (int i = 0; i < NW; ++i) {
             if (wl.pdf[size_t(i)] == 0) continue;
-            Interface it = makeInterface(hit, wl.lambda[size_t(i)]);
+            Interface it = i == 0 ? base : atWavelength(base, world_, hit, wl.lambda[size_t(i)]);
             double pdf;
             f[i] = evalScatter(it, d, ls.wi, TransportMode::Radiance, pdf);
             if (i == 0) pdfScatter = pdf;
@@ -326,7 +341,7 @@ Spec4 Tracer::radiance(Ray ray, uint32_t region, Wavelengths& wl, Rng& rng, Tran
         Interface it = makeInterface(hit, hero);
         if (o.type == SurfaceType::Dielectric && !wl.secondaryTerminated()) {
             for (int i = 1; i < NW; ++i)
-                if (wl.pdf[size_t(i)] != 0 && isDispersive(it, makeInterface(hit, wl.lambda[size_t(i)]))) {
+                if (wl.pdf[size_t(i)] != 0 && isDispersive(it, atWavelength(it, world_, hit, wl.lambda[size_t(i)]))) {
                     wl.terminateSecondary();
                     maskTerminated(wl, beta);
                     break;
@@ -354,7 +369,8 @@ Spec4 Tracer::radiance(Ray ray, uint32_t region, Wavelengths& wl, Rng& rng, Tran
         beta[0] *= s.weight;
         for (int i = 1; i < NW; ++i)
             if (wl.pdf[size_t(i)] != 0)
-                beta[i] *= secondaryScatterWeight(makeInterface(hit, wl.lambda[size_t(i)]), ray.d, s, TransportMode::Radiance);
+                beta[i] *= secondaryScatterWeight(atWavelength(it, world_, hit, wl.lambda[size_t(i)]), ray.d, s,
+                                                  TransportMode::Radiance);
         if (s.transmitted) region = other;
         specular = s.delta;
         prevPdf = s.pdf;
@@ -491,10 +507,12 @@ void Tracer::traceParticle(const Detector& det, Wavelengths wl, Rng& rng, Film& 
         if (isMedium) {
             f = Spec4(hgPhase(dot(-d, wc), g));
         } else {
+            Interface base = makeInterface(hit, wl.lambda[0]);
             for (int i = 0; i < NW; ++i) {
                 if (wl.pdf[size_t(i)] == 0) continue;
                 double pdfDummy;
-                f[i] = evalScatter(makeInterface(hit, wl.lambda[size_t(i)]), d, wc, TransportMode::Importance, pdfDummy);
+                f[i] = evalScatter(i == 0 ? base : atWavelength(base, w, hit, wl.lambda[size_t(i)]), d, wc,
+                                   TransportMode::Importance, pdfDummy);
             }
             if (f.isZero()) return;
             cosX = std::abs(dot(wc, hit.n));
@@ -594,7 +612,7 @@ void Tracer::traceParticle(const Detector& det, Wavelengths wl, Rng& rng, Film& 
         if (depth >= maxDepth_) break;
         if (o.type == SurfaceType::Dielectric && !wl.secondaryTerminated()) {
             for (int i = 1; i < NW; ++i)
-                if (wl.pdf[size_t(i)] != 0 && isDispersive(it, makeInterface(hit, wl.lambda[size_t(i)]))) {
+                if (wl.pdf[size_t(i)] != 0 && isDispersive(it, atWavelength(it, world_, hit, wl.lambda[size_t(i)]))) {
                     wl.terminateSecondary();
                     maskTerminated(wl, beta);
                     break;
@@ -610,7 +628,8 @@ void Tracer::traceParticle(const Detector& det, Wavelengths wl, Rng& rng, Film& 
         beta[0] *= s.weight;
         for (int i = 1; i < NW; ++i)
             if (wl.pdf[size_t(i)] != 0)
-                beta[i] *= secondaryScatterWeight(makeInterface(hit, wl.lambda[size_t(i)]), ray.d, s, TransportMode::Importance);
+                beta[i] *= secondaryScatterWeight(atWavelength(it, w, hit, wl.lambda[size_t(i)]), ray.d, s,
+                                                  TransportMode::Importance);
         if (s.delta) ++deltaEvents;
         if (s.transmitted) region = other;
         ray = Ray{offsetOrigin(hit.p, hit.n, s.wi), s.wi};

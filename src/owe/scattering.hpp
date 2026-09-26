@@ -37,7 +37,12 @@ struct Interface {
     // Sampling knob (not physics): smooth-dielectric branches are chosen with probability
     // max(R, floor) / max(T, floor) and reweighted, so rare ghost reflections are explored.
     double fresnelFloor = 0;
+    // Texture mixing weights at the hit (wavelength independent), filled once per hit.
+    bool texReady = false;
+    double tex[3] = {1, 0, 0};
 };
+// Albedo of a (possibly textured) surface at the interface's wavelength.
+double surfaceAlbedo(const Interface& it);
 
 struct ScatterSample {
     Vec3 wi;               // outgoing propagation direction (world)

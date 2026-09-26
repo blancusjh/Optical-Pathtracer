@@ -324,35 +324,113 @@ MeshData makeTerrain(const TerrainSpec& t) {
     return m;
 }
 
-namespace {
-// Closed surface of revolution about +z from a profile r(z) (z increasing; r > 0 except the apex),
-// with a flat bottom cap. Outward normals.
-MeshData revolve(const std::vector<std::pair<double, double>>& profile, int seg) {
+MeshData revolveProfile(std::vector<std::pair<double, double>> profile, int seg) {
+    // Close the profile on the axis so the surface is watertight. Traversing the profile from
+    // the bottom of the axis outward, up, and back to the axis keeps normals outward, including
+    // overhangs and ledges (the normal of a segment is Δz·r̂ − Δr·ẑ).
+    if (profile.size() < 2) throw std::runtime_error("lathe profile needs at least two points");
+    if (profile.front().first > 0) profile.insert(profile.begin(), {0.0, profile.front().second});
+    if (profile.back().first > 0) profile.push_back({0.0, profile.back().second});
     MeshData m;
     auto ring = [&](double r, double z, int s) {
         double a = 2 * Pi * s / seg;
         return Vec3(r * std::cos(a), r * std::sin(a), z);
     };
-    for (int s = 0; s < seg; ++s) {
+    for (int s = 0; s < seg; ++s)
         for (size_t k = 0; k + 1 < profile.size(); ++k) {
             auto [r0, z0] = profile[k];
             auto [r1, z1] = profile[k + 1];
+            if (r0 <= 0 && r1 <= 0) continue;
             Vec3 a = ring(r0, z0, s), b = ring(r0, z0, s + 1), c = ring(r1, z1, s + 1), d = ring(r1, z1, s);
             if (r1 <= 0) m.addTriangle(a, b, c);
             else if (r0 <= 0) m.addTriangle(a, c, d);
             else m.addQuad(a, b, c, d);
         }
-        auto [rb, zb] = profile.front();
-        m.addTriangle(ring(rb, zb, s + 1), ring(rb, zb, s), Vec3(0, 0, zb));  // bottom cap, facing −z
+    return m;
+}
+
+MeshData makeTorus(double R, double r, int segU, int segV) {
+    MeshData m;
+    auto P = [&](int i, int j) {
+        double u = 2 * Pi * i / segU, v = 2 * Pi * j / segV;
+        return Vec3((R + r * std::cos(v)) * std::cos(u), (R + r * std::cos(v)) * std::sin(u), r * std::sin(v));
+    };
+    for (int i = 0; i < segU; ++i)
+        for (int j = 0; j < segV; ++j) m.addQuad(P(i, j), P(i + 1, j), P(i + 1, j + 1), P(i, j + 1));
+    return m;
+}
+
+MeshData makeFlutedShaft(double height, double r0, double r1, double entasis, int flutes, double fluteDepth,
+                         int segPerFlute, int segZ) {
+    MeshData m;
+    int segT = flutes * segPerFlute;
+    auto radius = [&](double theta, double z) {
+        double t = z / height;
+        double rz = r0 + (r1 - r0) * t + entasis * r0 * std::sin(Pi * t);
+        // Shallow concave flutes meeting in sharp arrises (Doric).
+        double f = std::fmod(theta * flutes / (2 * Pi), 1.0);
+        double x = 2 * f - 1;  // −1 … 1 across one flute
+        return rz * (1 - fluteDepth * (1 - x * x));
+    };
+    auto P = [&](int i, int j) {
+        double th = 2 * Pi * i / segT, z = height * j / segZ;
+        double r = radius(th, z);
+        return Vec3(r * std::cos(th), r * std::sin(th), z);
+    };
+    for (int i = 0; i < segT; ++i) {
+        for (int j = 0; j < segZ; ++j) m.addQuad(P(i, j), P(i + 1, j), P(i + 1, j + 1), P(i, j + 1));
+        m.addTriangle(Vec3(0, 0, height), P(i, segZ), P(i + 1, segZ));  // top cap
+        m.addTriangle(Vec3(0, 0, 0), P(i + 1, 0), P(i, 0));             // bottom cap
     }
     return m;
 }
-}  // namespace
+
+MeshData makeRoundWall(double R, double H, int segAz, int segZ, const std::vector<WallOpening>& openings) {
+    MeshData m;
+    auto P = [&](int i, int j) {
+        double az = 2 * Pi * i / segAz;
+        return Vec3(R * std::sin(az), R * std::cos(az), H * j / segZ);
+    };
+    for (int i = 0; i < segAz; ++i)
+        for (int j = 0; j < segZ; ++j) {
+            double azMid = 2 * Pi * (i + 0.5) / segAz, zMid = H * (j + 0.5) / segZ;
+            bool open = false;
+            for (const auto& o : openings) {
+                double dAz = std::remainder(azMid - o.azimuth, 2 * Pi);
+                if (std::abs(dAz) * R < 0.5 * o.width && zMid > o.sill && zMid < o.top) open = true;
+            }
+            if (!open) m.addQuad(P(i, j), P(i, j + 1), P(i + 1, j + 1), P(i + 1, j));
+        }
+    return m;
+}
+
+MeshData makeDome(double R, int segAz, int segEl, double slitAz, double slitWidth, double slitTop) {
+    MeshData m;
+    auto P = [&](int i, int j) {
+        double az = 2 * Pi * i / segAz, el = 0.5 * Pi * j / segEl;
+        return Vec3(R * std::cos(el) * std::sin(az), R * std::cos(el) * std::cos(az), R * std::sin(el));
+    };
+    for (int i = 0; i < segAz; ++i)
+        for (int j = 0; j < segEl; ++j) {
+            if (slitWidth > 0) {
+                double azMid = 2 * Pi * (i + 0.5) / segAz;
+                double dAz = std::remainder(azMid - slitAz, 2 * Pi);
+                double elMid = 0.5 * Pi * (j + 0.5) / segEl;
+                // The slit keeps a constant linear width, so its angular width grows toward the zenith.
+                double halfW = std::asin(std::min(1.0, 0.5 * slitWidth / std::max(1e-9, R * std::cos(elMid))));
+                if (std::abs(dAz) < halfW && elMid < slitTop) continue;
+            }
+            Vec3 a = P(i, j), b = P(i + 1, j), c = P(i + 1, j + 1), d = P(i, j + 1);
+            if (j + 1 == segEl) m.addTriangle(a, b, c);  // c == d at the zenith
+            else m.addQuad(a, b, c, d);
+        }
+    return m;
+}
 
 MeshData makeTreeFoliage(double height, double radius, int seg) {
     // A conifer silhouette: three tiers with downward-facing ledges; base at z = 0.
     const double H = height, R = radius;
-    return revolve({{R, 0.0},
+    return revolveProfile({{R, 0.0},
                     {0.42 * R, 0.36 * H},
                     {0.78 * R, 0.36 * H},
                     {0.30 * R, 0.68 * H},
@@ -363,7 +441,7 @@ MeshData makeTreeFoliage(double height, double radius, int seg) {
 
 MeshData makeTreeTrunk(double height, double radius, int seg) {
     // Closed cylinder: side, top and bottom caps.
-    return revolve({{radius, 0.0}, {radius, height}, {0.0, height}}, seg);
+    return revolveProfile({{radius, 0.0}, {radius, height}, {0.0, height}}, seg);
 }
 
 int buildForest(World& w, const std::string& name, const TerrainSpec& terrain, int count, double r0, double r1,
@@ -396,6 +474,34 @@ int buildForest(World& w, const std::string& name, const TerrainSpec& terrain, i
         w.addBoundary(body, "tree" + std::to_string(i) + ".trunk", trunks[v], place * Transform::translate({0, 0, -0.4}),
                       kOutside, inside, trunkOptics);
     }
+    return body;
+}
+
+int buildStarfield(World& w, const std::string& name, int count, uint64_t seed, double distance, double angularRadius,
+                   double brightest, double minElevation, int assembly, const Transform& xf) {
+    int body = w.addBody(name, "starfield", assembly, xf);
+    uint32_t inside = w.addRegion(name + ".stellar", w.medium("opaque"), body);
+    auto shape = std::make_shared<SphereShape>(distance * std::tan(angularRadius));
+    SurfaceOptics black;
+    black.type = SurfaceType::Absorber;
+    black.name = name;
+    uint32_t oi = w.addOptics(black);
+    Rng rng(seed, 1234);
+    double zMin = std::sin(minElevation);
+    for (int i = 0; i < count; ++i) {
+        double z = zMin + (1 - zMin) * rng.uniform(), phi = 2 * Pi * rng.uniform();
+        double r = safeSqrt(1 - z * z);
+        Vec3 dir{r * std::cos(phi), r * std::sin(phi), z};
+        // Most stars are faint: luminance ∝ u⁴ spans several magnitudes.
+        double y = brightest * std::pow(rng.uniform(), 4.0) + brightest * 1e-3;
+        double T = 3000 + 9000 * std::pow(rng.uniform(), 1.6);
+        Emission e;
+        e.radiance = Spectrum::blackbody(T, y);
+        e.nee = false;
+        w.addBoundary(body, "star" + std::to_string(i), shape, Transform::translate(dir * distance), kOutside, inside, oi,
+                      w.addEmission(e));
+    }
+    w.bodies()[body].params["stars"] = count;
     return body;
 }
 

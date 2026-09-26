@@ -13,18 +13,18 @@ are missing), **planned** (not started; the design accommodates it).
 | `src/owe/spectrum.*`, `wavelengths.hpp` | CIE 1931 fit, Planck, spectra, hero-wavelength sampling |
 | `src/owe/medium.*` | n(λ) models, glass/metal catalogs, media |
 | `src/owe/optics.hpp` | Snell, Fresnel (dielectric, conductor), GGX — scene-free kernels |
-| `src/owe/geometry.*`, `bvh.*` | Sag surfaces (conic + even asphere), planes with apertures, spheres, cylinders, meshes |
+| `src/owe/geometry.*`, `bvh.*` | Sag surfaces (conic + even asphere), planes with apertures, spheres, cylinders, meshes, dome with slit, round wall with openings |
 | `src/owe/world.*` | The ontology: media, regions, boundaries, bodies, assemblies, environment, lights |
 | `src/owe/scattering.*` | Boundary scattering (sample/eval), secondary-wavelength weights |
 | `src/owe/transport.*` | The one transport engine: camera paths, particles, diagnostic walks |
 | `src/owe/detector.*` | Films, ideal observer (virtual eye), surface sensors |
 | `src/owe/render.*` | Progressive renderer, image output, reproducibility records |
-| `src/owe/builders.*` | Lenses, mirrors, stops, tubes, solids, cup, terrain, forest, fractal statue |
+| `src/owe/builders.*` | Lenses, mirrors, stops, tubes, solids, cup, terrain, forest, fractal statue, lathe profiles, tori, fluted columns, starfields |
 | `src/owe/prescription.*` | Sequential tables as a view; paraxial analysis; afocal solve |
 | `src/owe/analysis.*` | Real-ray lens diagnostics through the world representation |
 | `src/owe/inspect.*` | Pixel interrogation, emission probes, SVG/JSON path export |
-| `src/owe/scene_parser.*`, `scene_loader.*` | The `.owe` language; physical cameras |
-| `apps/owe.cpp` | Command-line front end |
+| `src/owe/scene_parser.*`, `scene_loader.*` | The `.owe` language, scene edits (`Block.key=value`); physical cameras (f-number, real focus, depth of field) |
+| `apps/owe.cpp` | Command-line front end, including the `studio` session |
 
 ## Section by section
 
@@ -66,12 +66,26 @@ surface list with media (cemented groups), plus `focal =` design helpers. Sequen
 data.
 
 **VII. Natural scenes — partial.** Meshes coexist with analytic optics; procedural terrain
-with slope/altitude texturing, conifer forests, solid textures (checker, noise, wood). Not yet:
-image textures, smooth shading normals, clouds, participating atmosphere over large scenes.
+with slope/altitude texturing, conifer forests, solid textures (checker, noise, wood, marble,
+latitude bands, radial rings). Architecture is built from lathe profiles, tori, fluted Doric
+columns (entasis, echinus, abacus), boxes and prisms, placed in rows with `repeat`. Imported
+scans (OBJ) are reoriented (`model_up`, including a measured up vector), scaled to a physical
+height and stood on the ground; opaque imported meshes are shells with air on both sides, so
+museum scans with holes and mixed winding cause no region inconsistencies. `the_temple.owe`
+and `the_observatory.owe` are built this way. Not yet: image textures, smooth shading normals,
+clouds, participating atmosphere over large scenes (`the_temple.owe` fakes distant haze with
+the sky's below-horizon colour).
 
 **VIII. Instruments inside the world — done.** A camera is lens + housing + mounts + stop +
-sensor (`addPhysicalCamera`); a telescope is an assembly built from its prescription;
-observers are placed with `exit_pupil("Name")`. `the_telescope.owe` shows the world naked,
+sensor (`addPhysicalCamera`); `f_number` rescales the physical stop through the paraxial
+entrance pupil, and the sensor sits at the real best focus for the requested object distance.
+Sensor samples are drawn from a mixture: 85% aimed at the paraxial exit pupil (×1.3 margin),
+15% at the whole rear opening, weighted by the mixture density. Aiming at the pupil alone was
+measured to lose ~1.8% of the light at f/11 in `the_temple.owe` — the ghost and veiling light
+of the uncoated lens leaves the rear element outside the pupil — so the mixture keeps it. A
+telescope is an assembly built from its prescription; observers are placed with
+`exit_pupil("Name")`; `the_observatory.owe` has three telescopes aimed at the Moon, Jupiter
+and Saturn, each with an eye at its exit pupil. `the_telescope.owe` shows the world naked,
 through the eyepiece, and from beside the instrument, with no change of physics. Planned: a
 physical eye model (cornea, lens, curved retina) replacing the ideal observer.
 
@@ -87,7 +101,10 @@ Tier III VCM (the camera obscura's inside view is the motivating hard case), Tie
 guiding, ReSTIR, manifold NEE.
 
 **XI. Interactive convergence — partial.** `--passes` refines an unbiased accumulation;
-display processing never touches the raw data. There is no interactive viewer or denoiser.
+display processing (exposure, white balance) never touches the raw data. `owe studio` is a
+command-line session that edits any scene value (aperture, focus, placement, glass), rebuilds
+the world and refines the image pass by pass, writing it after each pass. There is no
+graphical viewer or denoiser.
 
 **XII. Performance — planned.** The CPU reference traces ~2–3 M paths/s on four cores. The
 real-time targets belong to the GPU backend.
@@ -99,7 +116,9 @@ closed-form or bracketed intersectors suited to intersection shaders; the world 
 into arrays at `build()`; randomness is counter-based per pixel and pass. The CPU tracer is the
 oracle: the plan is to compare GPU and CPU on every scene in `tests/` and `scenes/`.
 
-**XIV. Extreme spatial scale — partial.** Double precision everywhere; rigid hierarchical
+**XIV. Extreme spatial scale — partial.** `the_observatory.owe` puts a 16 mm eyepiece and
+Saturn (1.28·10¹² m away) in one world, with the Moon, Jupiter and an Earth sphere of radius
+6371 km beneath the terrain; stars are emitters at 10¹³ m. Double precision everywhere; rigid hierarchical
 transforms; the ray-origin displacement scales as 1e-11 × coordinate magnitude (10 pm at the
 origin, 1 nm at 100 m) and moves along the new ray, so there is no lateral error. Quadric
 intersections (spheres, cylinders, conic sags) re-solve from the approximate hit point, so a
@@ -121,7 +140,8 @@ contribution, representative path) and `owe emit` (fates of an emission ensemble
 **XVIII. Design from inside the world — partial.** Spot size, best focus, LSA, chromatic
 focal shift, distortion, afocal beam spread, pupils, all traced through the world's bodies.
 Editing R, spacing, glass, tilt (`tilt`), decenter (`decenter`) and apertures is done in the
-scene file. Planned: live editing, ray fans, pupil maps.
+scene file, with `--set Block.key=value`, or live in `owe studio`. Planned: ray fans, pupil
+maps.
 
 **XIX. Inverse design — planned.** Paraxial and real-ray merit functions exist; an optimiser
 and differentiable transport do not. Nothing in the representation precludes them.
@@ -153,7 +173,8 @@ External comparisons with PBRT/Mitsuba/LuxCore are planned.
 
 **XXVII. Canonical demonstrations.** Implemented: The Lens, The Statue, The Telescope/The
 Mountain Observatory, The Camera Obscura, The Prism, The Glass of Water, The Optical Bench,
-The Ghost. For the uncoated Petzval objective in `the_ghost.owe`, double-reflection ghosts
+The Ghost; plus The Temple (a physical 85 mm camera with tunable aperture and focus) and The
+Observatory at night (planets and the Moon through refractors). For the uncoated Petzval objective in `the_ghost.owe`, double-reflection ghosts
 are present (an emission probe finds ~0.4% of the lantern's flux in them) but spread over the
 whole frame as a veil; a sharper demonstration needs a design with compact ghosts plus
 BDPT. Not yet: The City Through Glass.
@@ -170,3 +191,9 @@ to rendering, inspection and design. The interactive application is future work.
   to surface sensors behind lenses (those receive particles directly).
 * The holed-disk aperture cannot be sampled by next-event estimation.
 * Mesh normals are geometric (faceted shading).
+* The sun is a directional source with its irradiance at Earth, so the albedos of Jupiter and
+  Saturn in `the_observatory.owe` carry the (1 AU / r)² factor explicitly.
+* Diffraction is not modelled: a telescope's resolution is set by its geometric aberrations
+  (for the 150 mm refractor, ~0.8″ at d-light — close to its real Airy limit by coincidence).
+* Transport through dispersive lenses carries one wavelength per path, so camera and eyepiece
+  views need many samples per pixel for smooth colour.

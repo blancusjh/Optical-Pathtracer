@@ -48,8 +48,9 @@ public:
             t.line = line_;
             if (i_ >= s_.size()) { t.t = Token::T::End; out.push_back(t); break; }
             char c = s_[i_];
-            if (std::isalpha((unsigned char)c) || c == '_' || (unsigned char)c >= 0x80) {
-                size_t j = i_;
+            bool negIdent = c == '-' && i_ + 1 < s_.size() && std::isalpha((unsigned char)s_[i_ + 1]);
+            if (std::isalpha((unsigned char)c) || c == '_' || (unsigned char)c >= 0x80 || negIdent) {
+                size_t j = negIdent ? i_ + 1 : i_;
                 while (j < s_.size() && (std::isalnum((unsigned char)s_[j]) || s_[j] == '_' || s_[j] == '-' ||
                                          s_[j] == '.' || (unsigned char)s_[j] >= 0x80))
                     ++j;
