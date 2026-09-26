@@ -1,0 +1,5 @@
+# Biconvex N-BK7 singlet, f ≈ 50 mm: spherical and chromatic aberration left uncorrected.
+name Biconvex singlet f=50 mm
+units mm
+S1     50.4      6.0     N-BK7   12.5
+S2    -50.4     47.0     air     12.5

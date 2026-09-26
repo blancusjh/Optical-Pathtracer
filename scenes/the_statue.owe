@@ -1,0 +1,42 @@
+# THE STATUE — nested geometric detail becoming visible under increasing magnification.
+# The statue is a sphere carrying ever smaller copies of itself (781 exact spheres,
+# radii from 30 cm down to 6 mm). It is observed:
+#   Direct       — from 2.2 m, as a person would
+#   Close        — from 0.5 m on the mirror-symmetric side, without optics
+#   Magnifier    — from the same place, through a hand lens held in the world
+#   Telescope    — from 60 m, through a real Keplerian telescope (image inverted)
+# Visible detail is limited only by geometry, pupils, aberrations and sampling.
+units = m
+
+world {
+    sky = gradient(zenith = rgb(0.3, 0.5, 1.0, luminance = 0.6), horizon = rgb(0.9, 0.92, 1.0, luminance = 1.2),
+                   ground = rgb(0.25, 0.25, 0.25, luminance = 0.2))
+    sun { elevation = 42deg  azimuth = 210deg  luminance = 1.5e5 }
+}
+
+material marble  { type = diffuse  texture = noise(a = rgb(0.86, 0.84, 0.80), b = rgb(0.70, 0.68, 0.66), scale = 30mm) }
+material granite { type = diffuse  texture = noise(a = rgb(0.30, 0.29, 0.30), b = rgb(0.45, 0.43, 0.42), scale = 8mm) }
+material paving  { type = diffuse  texture = checker(a = rgb(0.55, 0.52, 0.48), b = rgb(0.45, 0.42, 0.40), scale = 0.5) }
+
+body Plaza  { type = sheet  size = (300, 300)  material = paving }
+body Statue { type = fractal_statue  radius = 0.3  depth = 4  ratio = 0.38  material = marble  pedestal = granite
+              position = (0, 0, 0.24) }
+
+# A hand magnifier (f = 250 mm) held 0.2 m from the statue's outer branch.
+body HandLens { type = lens  medium = N-BK7  focal = 250mm  form = bi  diameter = 120mm  thickness = 16mm  rim = black
+                position = (0.78, -0.13, 0.62)  look_at = (0.60, 0.0, 0.54) }
+
+# The same telescope design as on the mountain, 60 m away, with the sun raking from the left.
+body Scope { type = prescription  file = "../lenses/kepler_16x.lens"  afocal = true  tube = true
+             position = (52, -30, 1.5)  point_at = (0.0, 0, 0.54) }
+
+observer Direct    { position = (0.9, -2.0, 1.55)  look_at = (0.1, 0, 0.5)  fov = 32deg  pupil = 3mm  focus = 2.3
+                     resolution = (480, 480) }
+observer Close     { position = (1.02, 0.29, 0.73)  look_at = (0.60, 0.0, 0.54)  fov = 26deg  pupil = 3mm  focus = 0.52
+                     resolution = (480, 480) }
+observer Magnifier { position = (1.02, -0.29, 0.73)  look_at = (0.60, 0.0, 0.54)  fov = 26deg  pupil = 3mm  focus = 1.3
+                     resolution = (480, 480) }
+observer Telescope { position = exit_pupil("Scope")  look_at = (0.0, 0, 0.54)  fov = 36deg  pupil = 3mm  focus = 0.23
+                     resolution = (480, 480) }
+
+render { detector = Direct  spp = 128 }
