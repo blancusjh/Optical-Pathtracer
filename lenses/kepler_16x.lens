@@ -1,0 +1,11 @@
+# Keplerian telescope ≈16×: achromatic objective (f≈400 mm, D=50 mm) and an
+# achromatic eyepiece (f≈25 mm). Use `afocal = true` (or `owe lens --afocal`) to
+# solve the tube length so that the instrument is exactly afocal.
+name Keplerian telescope 16x
+units mm
+O1     179.12     8.0    N-BK7   25
+O2    -179.12     4.0    F2      25
+O3   -3243.0    420.0    air     25
+E1      11.195    5.0    N-BK7    6
+E2     -11.195    2.0    F2       6
+E3    -202.7     20.0    air      6

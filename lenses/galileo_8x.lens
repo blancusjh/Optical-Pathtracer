@@ -1,0 +1,8 @@
+# Galilean telescope ≈8×: plano-convex objective (f≈400 mm) and a biconcave
+# eyepiece (f≈−50 mm). The image is upright; the exit pupil is virtual.
+name Galilean telescope 8x
+units mm
+O1     206.72     5.0    N-BK7   20
+O2     inf      345.0    air     20
+E1     -52.02     2.0    N-BK7    8
+E2      52.02    15.0    air      8
