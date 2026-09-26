@@ -30,7 +30,7 @@ canonical demonstrations, to analyse lenses, and to interrogate every pixel.
 | ![Saturn](docs/gallery/observatory_saturn.png) | ![Jupiter](docs/gallery/observatory_jupiter.png) |
 | **Saturn at 126×** through the 150 mm f/15 achromat: the planet and its rings are bodies at 1.28·10¹² m; the Cassini division and the globe's shadow on the rings follow from geometry, the violet halo from the achromat's secondary spectrum. | **Jupiter** through the second refractor. |
 | ![The Moon](docs/gallery/observatory_moon.png) | ![The slit](docs/gallery/observatory_slit.png) |
-| **The Moon at 16×** through the small telescope at the window, with the eyepiece field stop; its phase follows from where the sun is below the horizon. | The dome slit with the night sky, seen by the naked eye. |
+| **The Moon at 16×** through the small telescope at the window; its phase follows from where the sun is below the horizon. | The dome slit with the night sky, seen by the naked eye. |
 
 More in [`docs/gallery`](docs/gallery) (each PNG has a JSON record for reproduction).
 
