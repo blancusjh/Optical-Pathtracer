@@ -22,3 +22,7 @@ jobs:
           for s in scenes/*.owe; do
             build/owe render "$s" --spp 1 --resolution 64x48 --out "build/$(basename "$s" .owe)"
           done
+      - name: Smoke-test the studio (aperture and focus edits)
+        run: |
+          printf 'render 1 1\nset Cam.f_number=8\nset Cam.focus=25 m\nrender 1 1\nquit\n' |
+            build/owe studio scenes/the_temple.owe --detector Cam --resolution 48x32 --out build/studio

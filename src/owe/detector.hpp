@@ -116,6 +116,12 @@ public:
     bool hasAim = false;
     Vec3 aimCenter, aimNormal{0, 0, 1};
     double aimRadius = 0;
+    // Optional focus disk (parallel to the aim disk) sampled with probability focusShare: a
+    // camera aims most samples at its exit pupil, where image-forming light comes from, and the
+    // rest at the whole rear opening, which also carries ghosts and veiling glare. Directions are
+    // weighted by the mixture density, so the estimate stays unbiased.
+    Vec3 focusCenter;
+    double focusRadius = 0, focusShare = 0;
 
     Quantity quantity() const override { return Quantity::Irradiance; }
     std::string describe() const override;

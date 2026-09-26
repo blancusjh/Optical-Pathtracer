@@ -52,39 +52,68 @@ double fbm3(const Vec3& p, int octaves) {
     return sum / norm;
 }
 
-double Texture::eval(const Vec3& p, const Vec3& n, double l) const {
+void Texture::weights(const Vec3& p, const Vec3& n, double w[3]) const {
+    // The spatial pattern is independent of wavelength: it is computed once per hit as mixing
+    // weights of the spectra a, b, c.
+    w[0] = 1; w[1] = 0; w[2] = 0;
     switch (kind) {
-        case Kind::None: return a.eval(l);
+        case Kind::None: return;
         case Kind::Checker: {
             Vec3 q = p / scale;
             long s = long(std::floor(q.x + 1e-9)) + long(std::floor(q.y + 1e-9)) + long(std::floor(q.z + 1e-9));
-            return (s & 1) ? b.eval(l) : a.eval(l);
+            if (s & 1) { w[0] = 0; w[1] = 1; }
+            return;
         }
         case Kind::Noise: {
-            double t = fbm3(p / scale, 6);
-            t = clampd((t - 0.25) * 2.0, 0, 1);
-            return a.eval(l) * (1 - t) + b.eval(l) * t;
+            double t = clampd((fbm3(p / scale, 6) - 0.25) * 2.0, 0, 1);
+            w[0] = 1 - t; w[1] = t;
+            return;
         }
         case Kind::Rings: {
             double r = std::sqrt(p.x * p.x + p.z * p.z) / scale + param * fbm3(p / scale, 4);
             double t = 0.5 + 0.5 * std::sin(2 * Pi * r);
             t = t * t;
-            return a.eval(l) * (1 - t) + b.eval(l) * t;
+            w[0] = 1 - t; w[1] = t;
+            return;
+        }
+        case Kind::Bands: {
+            double z = p.z / scale + param * (fbm3(Vec3(p.x, p.y, p.z * 4) / scale, 5) - 0.5);
+            double t = 0.5 + 0.5 * std::sin(2 * Pi * z) * (0.6 + 0.4 * std::sin(2 * Pi * z * 0.37 + 1.3));
+            double mix = clampd(fbm3(Vec3(0, 0, z * 3.1), 3) * 1.4 - 0.2, 0, 1);
+            w[0] = (1 - t) * (1 - 0.35 * mix); w[1] = t * (1 - 0.35 * mix); w[2] = 0.35 * mix;
+            return;
+        }
+        case Kind::Radial: {
+            double r = std::sqrt(p.x * p.x + p.y * p.y) / scale;
+            double t = clampd(fbm3(Vec3(r * 3.0, 0.5, 0.5), 6) * 1.6 - 0.3, 0, 1);
+            w[0] = 1 - t; w[1] = t;
+            return;
+        }
+        case Kind::Marble: {
+            Vec3 q = p / scale;
+            double v = std::abs(std::sin(q.x * 0.9 + q.y * 0.5 + q.z * 0.3 + param * 6 * fbm3(q * 0.7, 6)));
+            double t = std::pow(1 - v, 6);  // thin dark veins
+            double base = 0.94 + 0.06 * fbm3(q * 3.0, 4);
+            w[0] = base * (1 - t); w[1] = t;
+            return;
         }
         case Kind::Terrain: {
             // Grass on gentle slopes, rock on steep ones, snow above the snow line.
             double jitter = (fbm3(p / scale, 5) - 0.5);
             double slope = 1 - std::abs(n.z);
             double rock = clampd((slope + 0.3 * jitter - 0.25) * 6, 0, 1);
-            double base = a.eval(l) * (1 - rock) + b.eval(l) * rock;
-            if (param > 0) {
-                double snow = clampd((p.z - param + 40 * jitter) / 30.0, 0, 1) * clampd(1 - slope * 1.6, 0, 1);
-                base = base * (1 - snow) + c.eval(l) * snow;
-            }
-            return base;
+            double snow = 0;
+            if (param > 0) snow = clampd((p.z - param + 40 * jitter) / 30.0, 0, 1) * clampd(1 - slope * 1.6, 0, 1);
+            w[0] = (1 - rock) * (1 - snow); w[1] = rock * (1 - snow); w[2] = snow;
+            return;
         }
     }
-    return 0;
+}
+
+double Texture::eval(const Vec3& p, const Vec3& n, double l) const {
+    double w[3];
+    weights(p, n, w);
+    return mix(w, l);
 }
 
 // ---------------------------------------------------------------- environment
@@ -245,7 +274,7 @@ void World::build() {
     double radius = sceneRadius();
     for (size_t i = 0; i < boundaries_.size(); ++i) {
         const Boundary& b = boundaries_[i];
-        if (b.emission < 0 || !b.shape->canSample()) continue;
+        if (b.emission < 0 || !b.shape->canSample() || !emissions_[b.emission].nee) continue;
         const Emission& e = emissions_[b.emission];
         double sides = (e.front ? 1 : 0) + (e.back ? 1 : 0);
         double p = std::max(1e-12, e.radiance.luminance()) * b.shape->area() * Pi * sides;
@@ -256,15 +285,21 @@ void World::build() {
         double p = std::max(1e-12, env.sunRadiance.luminance()) * env.sunSolidAngle() * Pi * radius * radius;
         lights_.push_back(LightEntry{LightEntry::Kind::Sun, kNone, p});
     }
-    double total = 0;
-    for (auto& l : lights_) total += l.power;
+    double total = 0, boundaryPower = 0;
+    for (auto& l : lights_) {
+        total += l.power;
+        if (l.kind == LightEntry::Kind::Boundary) boundaryPower += l.power;
+    }
     totalLightPower_ = total;
     lightCdf_.clear();
     lightPdf_.clear();
+    double share = env.hasSun && boundaryPower > 0 ? clampd(env.sunNeeShare, 0, 0.999) : 0;
     double acc = 0;
     for (auto& l : lights_) {
-        lightPdf_.push_back(l.power / total);
-        acc += l.power / total;
+        double p = l.power / total;
+        if (share > 0) p = l.kind == LightEntry::Kind::Sun ? share : (1 - share) * l.power / boundaryPower;
+        lightPdf_.push_back(p);
+        acc += p;
         lightCdf_.push_back(acc);
     }
     if (!lightCdf_.empty()) lightCdf_.back() = 1.0;

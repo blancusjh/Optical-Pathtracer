@@ -1,4 +1,6 @@
 // Scene language and prescription views.
+#include <fstream>
+
 #include "check.hpp"
 #include "owe/prescription.hpp"
 #include "owe/scene_loader.hpp"
@@ -87,4 +89,30 @@ TEST(exit_pupil_placement_for_observers) {
     // so the exit pupil lies beyond the eyepiece at positive y.
     CHECK(eye->position.y > 0.3);
     CHECK_NEAR(eye->position.x, 0.0, 1e-12);
+}
+
+TEST(scene_edits_override_named_and_unnamed_blocks) {
+    const std::string path = "build/test_edits.owe";
+    std::ofstream(path) << R"(
+units = m
+world { sky = uniform(0.1)  sun { elevation = 30deg  azimuth = 0  luminance = 100  nee_share = 0.2 } }
+body Box { type = box  size = (1, 1, 1)  position = (0, 5, 0)  material = white }
+observer Eye { position = (0, 0, 0)  look_at = (0, 1, 0)  resolution = (8, 8)
+               exposure = 3  white_balance = none  sun_share = 0.9 }
+)";
+    Scene a = loadSceneWithEdits(path, {"Box.position=(0, 7, 0)", "sun.nee_share=0.5", "render.spp=3"});
+    CHECK(a.render.spp == 3);
+    CHECK_NEAR(a.world.env.sunNeeShare, 0.5, 1e-15);
+    CHECK(a.world.findBody("Box") >= 0);
+    CHECK_NEAR(a.world.bodies()[size_t(a.world.findBody("Box"))].xf.point({0, 0, 0}).y, 7.0, 1e-12);
+    // The observer carries its own display and sampling settings.
+    RenderSettings rs = a.settingsFor(0);
+    CHECK(!rs.autoExposure && rs.exposure == 3 && rs.whiteBalance == 0);
+    a.useDetector(0);
+    CHECK_NEAR(a.world.env.sunNeeShare, 0.9, 1e-15);
+    bool threw = false;
+    try {
+        loadSceneWithEdits(path, {"Nothing.key=1"});
+    } catch (const std::exception&) { threw = true; }
+    CHECK(threw);
 }

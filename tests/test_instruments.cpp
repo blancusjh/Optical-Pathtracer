@@ -240,3 +240,40 @@ camera Cam { lens = "lenses/achromat_100mm.lens" sensor = (24mm, 16mm) resolutio
     // quad[top][right]
     CHECK(quad[1][1] > 5 * (quad[0][0] + quad[0][1] + quad[1][0]));
 }
+
+TEST(camera_f_number_and_pupil_aim) {
+    // f_number resizes the physical stop: the paraxial f-number of the built camera matches it.
+    // Aiming sensor samples at the exit pupil (mixed with the whole rear opening) agrees with the
+    // unaimed estimate within its noise. (A pupil-only aim is biased low by the ghost and veiling
+    // light that leaves the rear element outside the pupil: ~1.8% at f/11 in the_temple.owe.)
+    const char* scene = R"(
+units = m
+world { sky = uniform(rgb(0.5, 0.5, 0.5)) }
+body Card { type = sheet size = (3, 3) position = (0.4, 5, 0.3) axis = (0, -1, 0) material = white
+            emission = blackbody(5000K, 30) }
+camera Cam { lens = "lenses/portrait_85mm.lens" sensor = (36mm, 24mm) resolution = (18, 12)
+             position = (0, 0, 0) look_at = (0, 5, 0) focus = 5 m  f_number = 8 }
+)";
+    Scene sc = loadSceneFromString(scene, ".");
+    CHECK(sc.notes["Cam"].find("f/8.00") != std::string::npos);
+    auto* sensor = dynamic_cast<SurfaceSensor*>(sc.detectors[0].get());
+    CHECK(sensor && sensor->focusShare > 0 && sensor->focusRadius < sensor->aimRadius);
+    auto meanY = [&](double share, int spp, uint64_t seed) {
+        sensor->focusShare = share;
+        RenderSettings rs;
+        rs.spp = spp;
+        rs.seed = seed;
+        ProgressiveRenderer R(sc, 0, rs);
+        R.runPass(spp);
+        return R.resolve().meanY();
+    };
+    double share = sensor->focusShare;
+    // Independent estimates give the standard error of the unaimed (high-variance) sampler.
+    std::vector<double> ref;
+    for (uint64_t s = 1; s <= 4; ++s) ref.push_back(meanY(0, 1024, s));
+    double m = 0, v = 0;
+    for (double x : ref) m += x / ref.size();
+    for (double x : ref) v += (x - m) * (x - m) / (ref.size() - 1);
+    double aimed = meanY(share, 1024, 9);
+    CHECK_NEAR(aimed, m, 5 * std::sqrt(v / ref.size()) + 1e-3 * m);
+}

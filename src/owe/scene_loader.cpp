@@ -1,11 +1,13 @@
 #include "scene_loader.hpp"
 
+#include <cstdio>
 #include <fstream>
 #include <functional>
 #include <set>
 #include <sstream>
 #include <stdexcept>
 
+#include "analysis.hpp"
 #include "builders.hpp"
 
 namespace owe {
@@ -21,6 +23,29 @@ int addPhysicalCamera(Scene& scene, const std::string& name, const Prescription&
     Prescription lens = lensIn;
     lens.objectDistance = c.focusDistance;
     IndexFn index = catalogIndex();
+    if (c.fNumber > 0) {
+        // Resize the physical aperture stop so that the entrance pupil gives EFL / (2N). The
+        // entrance pupil scales linearly with the stop, paraxially. Lenses without a stop get
+        // an iris 2 mm in front of their first surface.
+        Prescription inf = lens;
+        inf.objectDistance = Inf;
+        int stop = -1;
+        for (size_t i = 0; i < lens.surfaces.size(); ++i)
+            if (lens.surfaces[i].stop) stop = int(i);
+        if (stop < 0) {
+            PrescriptionSurface iris;
+            iris.label = "IRIS";
+            iris.t = 2e-3;
+            iris.stop = true;
+            iris.sd = lens.surfaces[0].sd;
+            lens.surfaces.insert(lens.surfaces.begin(), iris);
+            inf.surfaces = lens.surfaces;
+            stop = 0;
+        }
+        Paraxial p0 = paraxialAnalysis(inf, inf.wavelength, index);
+        double target = std::abs(p0.efl) / (2 * c.fNumber);
+        lens.surfaces[size_t(stop)].sd *= target / p0.entrancePupilRadius;
+    }
     Paraxial px = paraxialAnalysis(lens, lens.wavelength, index);
     if (px.afocal || std::isinf(px.imageDistance) || px.imageDistance <= 0)
         throw std::runtime_error("camera '" + name + "': lens does not form a real image for the requested focus");
@@ -31,7 +56,18 @@ int addPhysicalCamera(Scene& scene, const std::string& name, const Prescription&
     double tubeR = c.housing ? std::max(maxR * 1.08 + 1e-3, halfDiag * 1.05) : 0.0;
     int cam = w.addAssembly(name, parentAssembly, placement);
     BuiltInstrument bi = buildPrescription(w, lens, name + ".lens", cam, Transform{}, tubeR, index);
-    double zSensor = bi.lastVertexZ + px.imageDistance + c.sensorShift;
+    // Focus like a real camera: at the plane of least blur for this aperture (traced with real
+    // rays through the lens bodies), not at the paraxial image. The correction is the on-axis
+    // best-focus shift measured for a distant object.
+    double focusShift = 0;
+    if (c.realFocus) {
+        Prescription probe = lens;
+        probe.objectDistance = Inf;
+        LensReport rep = analyzeLens(probe, {0}, {probe.wavelength}, 6);
+        if (!rep.spots.empty() && rep.spots[0].arrived >= 3 && !std::isinf(rep.paraxial.imageDistance))
+            focusShift = rep.spots[0].bestFocusZ - rep.paraxial.imageDistance;
+    }
+    double zSensor = bi.lastVertexZ + px.imageDistance + focusShift + c.sensorShift;
     if (c.housing) {
         uint32_t black = w.absorberOptics();
         double zFront = -1e-3;
@@ -60,11 +96,41 @@ int addPhysicalCamera(Scene& scene, const std::string& name, const Prescription&
     det->flipY = true;
     det->hasAim = true;
     Transform camToWorld = w.assemblyToWorld(cam);
-    det->aimCenter = camToWorld.point({0, 0, bi.rearNearestZ});
     det->aimNormal = normalize(camToWorld.vector({0, 0, 1}));
+    det->aimCenter = camToWorld.point({0, 0, bi.rearNearestZ});
     det->aimRadius = std::max(halfDiag, bi.rearEdgeRadius) * 1.0001;
+    // Image-forming light reaches the sensor from the exit pupil (the stop imaged by the rear
+    // group), so 85% of samples aim there; at f/11 that wastes ~30× fewer rays on the iris. The
+    // rest cover the whole rear opening, which also carries ghost reflections and veiling glare.
+    double zExit = bi.vertexZ.empty() ? 0 : bi.vertexZ[0] + px.exitPupilZ;
+    if (px.exitPupilRadius > 0 && zExit < zSensor - 1e-3) {
+        det->focusCenter = camToWorld.point({0, 0, zExit});
+        det->focusRadius = px.exitPupilRadius * 1.3;
+        det->focusShare = 0.85;
+    }
     scene.detectors.push_back(std::move(det));
     w.bodies()[sensorBody].params["z"] = zSensor;
+    {
+        // Depth of field from thin-lens relations with a circle of confusion of 1/1500 of the diagonal.
+        Prescription inf = lens;
+        inf.objectDistance = Inf;
+        Paraxial pi = paraxialAnalysis(inf, inf.wavelength, index);
+        double f = std::abs(pi.efl), N = pi.fNumber, coc = 2 * halfDiag / 1500;
+        double Hf = f * f / (N * coc) + f;
+        char buf[512];
+        double s = c.focusDistance;
+        if (std::isinf(s)) {
+            std::snprintf(buf, sizeof buf, "EFL %.1f mm, f/%.2f, focus infinity; sharp beyond %.2f m (hyperfocal)", f * 1e3, N, Hf);
+        } else {
+            double nearD = s * (Hf - f) / (Hf + s - 2 * f);
+            double farD = s < Hf ? s * (Hf - f) / (Hf - s) : Inf;
+            char far[32] = "infinity";
+            if (!std::isinf(farD)) std::snprintf(far, sizeof far, "%.3f m", farD);
+            std::snprintf(buf, sizeof buf, "EFL %.1f mm, f/%.2f, focus %.3f m; depth of field %.3f m to %s (CoC %.0f µm)",
+                          f * 1e3, N, s, nearD, far, coc * 1e6);
+        }
+        scene.notes[name] = buf;
+    }
     return detIndex;
 }
 
@@ -139,6 +205,12 @@ private:
     Vec3 vecLen(const Value& v) {
         if (v.kind == Value::Kind::Call && v.str == "exit_pupil") return exitPupil(v);
         if (v.kind == Value::Kind::Call && v.str == "on_terrain") return onTerrain(v);
+        if (v.kind == Value::Kind::Call && v.str == "sky") {
+            // sky(azimuth, elevation, distance): azimuth from +y toward +x, as for the sun.
+            if (v.items.size() != 3) fail(v, "sky(azimuth, elevation, distance)");
+            double az = ang(*v.items[0]), el = ang(*v.items[1]), d = len(*v.items[2]);
+            return Vec3(std::cos(el) * std::sin(az), std::cos(el) * std::cos(az), std::sin(el)) * d;
+        }
         auto s = seq(v, 3);
         return {len(*s[0]), len(*s[1]), len(*s[2])};
     }
@@ -222,6 +294,9 @@ private:
         else if (v.str == "noise") t.kind = Texture::Kind::Noise;
         else if (v.str == "rings" || v.str == "wood") t.kind = Texture::Kind::Rings;
         else if (v.str == "terrain") t.kind = Texture::Kind::Terrain;
+        else if (v.str == "bands") t.kind = Texture::Kind::Bands;
+        else if (v.str == "radial") t.kind = Texture::Kind::Radial;
+        else if (v.str == "marble") t.kind = Texture::Kind::Marble;
         else fail(v, "unknown texture '" + v.str + "'");
         if (auto a = v.get("a")) t.a = spectrum(*a, false);
         if (auto b = v.get("b")) t.b = spectrum(*b, false);
@@ -484,6 +559,7 @@ private:
                 e.sunDir = normalize(Vec3(std::cos(el) * std::sin(az), std::cos(el) * std::cos(az), std::sin(el)));
             }
             e.sunAngularRadius = getAng(*c, "angular_diameter", radians(0.533)) / 2;
+            e.sunNeeShare = getNum(*c, "nee_share", 0);
             if (auto r = c->get("radiance")) e.sunRadiance = spectrum(*r, true);
             else e.sunRadiance = Spectrum::blackbody(getNum(*c, "temperature", 5778), getNum(*c, "luminance", 1e5));
         }
@@ -495,13 +571,26 @@ private:
     }
 
     void body(const Value& b, int assembly) {
+        if (b.name.empty()) fail(b, "bodies need a name");
+        // repeat = (count, (dx, dy, dz)): identical copies Name_0 … Name_{n−1} offset in the parent frame.
+        if (auto r = b.get("repeat")) {
+            auto q = seq(*r, 2);
+            int n = int(num(*q[0]));
+            Vec3 step = vecLen(*q[1]);
+            if (n < 1) fail(*r, "repeat count must be positive");
+            for (int i = 0; i < n; ++i)
+                bodyImpl(b, assembly, b.name + "_" + std::to_string(i), Transform::translate(step * double(i)));
+            return;
+        }
+        bodyImpl(b, assembly, b.name, Transform{});
+    }
+
+    void bodyImpl(const Value& b, int assembly, const std::string& name, const Transform& pre) {
         std::string type = getStr(b, "type", "");
-        const std::string& name = b.name;
-        if (name.empty()) fail(b, "bodies need a name");
         if (!names_.insert(name).second) fail(b, "duplicate body name '" + name + "'");
-        Transform xf = placement(b);
-        if (type == "lens") lensBody(b, assembly, xf);
-        else if (type == "prescription") prescriptionBody(b, assembly, xf);
+        Transform xf = pre * placement(b);
+        if (type == "lens") lensBody(b, name, assembly, xf);
+        else if (type == "prescription") prescriptionBody(b, name, assembly, xf);
         else if (type == "mirror") {
             SurfaceSpec s = surface(need(b, "surface"), getRadius(b, "", 0.05));
             uint32_t o = b.has("material") ? materialRef(need(b, "material")) : materials_.at("aluminium");
@@ -532,9 +621,51 @@ private:
         } else if (type == "prism") {
             buildPrism(w_, name, getAng(b, "apex", radians(60)), len(need(b, "side")), len(need(b, "length")),
                        solidMaterial(b), assembly, xf);
+        } else if (type == "lathe") {
+            std::vector<std::pair<double, double>> prof;
+            for (auto& pt : need(b, "profile").items) {
+                auto q = seq(*pt, 2);
+                prof.push_back({len(*q[0]), len(*q[1])});
+            }
+            int id = buildMesh(w_, name, revolveProfile(prof, int(getNum(b, "segments", 64))), solidMaterial(b), assembly, xf);
+            w_.bodies()[id].kind = "lathe";
+        } else if (type == "torus" || type == "ring") {
+            double R = getRadius(b, "", 0.1), r = getRadius(b, "tube_", R * 0.05);
+            int id = buildMesh(w_, name, makeTorus(R, r, int(getNum(b, "segments", 96)), int(getNum(b, "tube_segments", 16))),
+                               solidMaterial(b), assembly, xf);
+            w_.bodies()[id].kind = "torus";
+        } else if (type == "column") {
+            columnBody(b, name, assembly, xf);
+        } else if (type == "dome") {
+            // Exact hemisphere with an observing slit (open surface, same finish both sides).
+            double R = getRadius(b, "", 3);
+            auto shape = std::make_shared<DomeShape>(R, getAng(b, "slit_azimuth", 0), getLen(b, "slit_width", 0),
+                                                     getAng(b, "slit_top", radians(90)));
+            uint32_t o = b.has("material") ? materialRef(need(b, "material")) : materials_.at("white");
+            int id = w_.addBody(name, "dome", assembly, xf);
+            w_.addBoundary(id, "shell", shape, Transform{}, kOutside, kOutside, o);
+        } else if (type == "round_wall") {
+            std::vector<RoundWallShape::Opening> ops;
+            if (auto list = b.get("openings"))
+                for (auto& o : list->items) {
+                    auto q = seq(*o, 4);
+                    ops.push_back({ang(*q[0]), len(*q[1]), len(*q[2]), len(*q[3])});
+                }
+            auto shape = std::make_shared<RoundWallShape>(getRadius(b, "", 3), len(need(b, "height")), ops);
+            uint32_t o = b.has("material") ? materialRef(need(b, "material")) : materials_.at("white");
+            int id = w_.addBody(name, "round-wall", assembly, xf);
+            w_.addBoundary(id, "wall", shape, Transform{}, kOutside, kOutside, o);
+        } else if (type == "starfield") {
+            buildStarfield(w_, name, int(getNum(b, "count", 2000)), uint64_t(getNum(b, "seed", 1)), getLen(b, "distance", 1e13),
+                           getAng(b, "angular_radius", radians(0.02)), getNum(b, "brightest", 5.0),
+                           getAng(b, "min_elevation", radians(-5)), assembly, xf);
         } else if (type == "sheet" || type == "screen" || type == "disk") {
             BodyMaterial m = solidMaterial(b);
-            if (type == "disk" || b.has("radius") || b.has("diameter")) {
+            if (b.has("inner_radius") || b.has("inner_diameter")) {
+                double r = getRadius(b, "", 0.1), ri = getRadius(b, "inner_", 0);
+                int id = w_.addBody(name, "sheet", assembly, xf);
+                w_.addBoundary(id, "face", PlaneShape::disk(r, ri), Transform{}, kOutside, kOutside, m.optics, m.emission);
+            } else if (type == "disk" || b.has("radius") || b.has("diameter")) {
                 double r = getRadius(b, "", 0.1);
                 buildSheet(w_, name, r, r, m.optics, m.emission, assembly, xf, true);
             } else {
@@ -542,8 +673,25 @@ private:
                 buildSheet(w_, name, len(*s[0]) / 2, len(*s[1]) / 2, m.optics, m.emission, assembly, xf, false);
             }
         } else if (type == "mesh") {
-            MeshData md = loadObj(path(str(need(b, "file"))), getNum(b, "scale", 1.0) * unit_);
-            buildMesh(w_, name, md, solidMaterial(b), assembly, xf);
+            std::string file = path(str(need(b, "file")));
+            if (auto opt = b.get("optional"); opt && boolean(*opt) && !std::ifstream(file)) {
+                std::fprintf(stderr, "warning: optional mesh '%s' not found (%s); body skipped\n", name.c_str(), file.c_str());
+                return;
+            }
+            MeshData md = loadObj(file, getNum(b, "scale", 1.0) * unit_);
+            prepareImportedMesh(b, md);
+            BodyMaterial m = solidMaterial(b);
+            bool closed = m.transparent;
+            if (auto c = b.get("closed")) closed = boolean(*c);
+            if (closed) {
+                buildMesh(w_, name, md, m, assembly, xf);
+            } else {
+                // Scanned models are rarely watertight or consistently wound: represent an opaque
+                // model as a shell with air on both sides, so orientation and holes cannot matter.
+                int id = w_.addBody(name, "mesh", assembly, xf);
+                w_.addBoundary(id, "surface", std::make_shared<MeshShape>(md.positions, md.triangles, name), Transform{},
+                               kOutside, kOutside, m.optics, m.emission);
+            }
         } else if (type == "cup") {
             CupRod rod;
             if (auto r = b.get("rod")) {
@@ -582,6 +730,73 @@ private:
         }
     }
 
+    // Imported models arrive in arbitrary frames: `model_up` names the model axis that points up,
+    // `fit_height` rescales to a physical height, and the result stands on the body origin.
+    void prepareImportedMesh(const Value& b, MeshData& md) {
+        if (auto u = b.get("model_up"); u && u->kind == Value::Kind::Tuple) {
+            // A measured up vector: apply the minimal rotation taking it to +z (keeps the facing).
+            Vec3 up = normalize(vecNum(*u)), z{0, 0, 1};
+            Vec3 axis = cross(up, z);
+            Transform R;
+            if (length(axis) > 1e-12) R = Transform::rotate(axis, std::acos(clampd(dot(up, z), -1, 1)));
+            else if (up.z < 0) R = Transform::rotate({1, 0, 0}, Pi);
+            for (auto& p : md.positions) p = R.point(p);
+        } else if (auto u = b.get("model_up")) {
+            std::string a = str(*u);
+            Transform R;
+            if (a == "y") R = Transform::rotate({1, 0, 0}, Pi / 2);
+            else if (a == "-y") R = Transform::rotate({1, 0, 0}, -Pi / 2);
+            else if (a == "-z") R = Transform::rotate({1, 0, 0}, Pi);
+            else if (a == "x") R = Transform::rotate({0, 1, 0}, -Pi / 2);
+            else if (a == "-x") R = Transform::rotate({0, 1, 0}, Pi / 2);
+            else if (a != "z") fail(*u, "model_up must be one of x, -x, y, -y, z, -z");
+            for (auto& p : md.positions) p = R.point(p);
+        }
+        if (b.has("fit_height") || b.has("ground")) {
+            AABB box;
+            for (auto& p : md.positions) box.expand(p);
+            double s = b.has("fit_height") ? len(need(b, "fit_height")) / box.extent().z : 1.0;
+            Vec3 foot{box.centroid().x, box.centroid().y, box.lo.z};
+            for (auto& p : md.positions) p = (p - foot) * s;
+        }
+    }
+
+    void columnBody(const Value& b, const std::string& name, int assembly, const Transform& xf) {
+        // Doric column: fluted shaft with entasis, echinus (lathe) and square abacus, stacked
+        // with 10 µm clearances so the three solids never share a face.
+        double H = len(need(b, "height"));
+        double r0 = getRadius(b, "", H / 14);
+        double capH = getLen(b, "capital_height", 2 * r0 * 0.5);
+        double shaftH = H - capH;
+        double r1 = r0 * getNum(b, "taper", 0.78);
+        uint32_t o = b.has("material") ? materialRef(need(b, "material")) : materials_.at("white");
+        int body = w_.addBody(name, "column", assembly, xf);
+        uint32_t inside = w_.addRegion(name + ".stone", w_.medium("opaque"), body);
+        MeshData shaft = makeFlutedShaft(shaftH, r0, r1, getNum(b, "entasis", 0.02), int(getNum(b, "flutes", 20)),
+                                         getNum(b, "flute_depth", 0.035), 8, 24);
+        w_.addBoundary(body, "shaft", std::make_shared<MeshShape>(shaft.positions, shaft.triangles, "shaft"), Transform{},
+                       kOutside, inside, o);
+        double gap = 1e-5, eH = capH * 0.45, aH = capH * 0.55 - 2 * gap;
+        double a = r0 * 1.22;  // half-width of the abacus
+        MeshData ech = revolveProfile({{r1 * 0.98, 0}, {r1 * 1.02, eH * 0.15}, {a * 0.98, eH * 0.8}, {a * 0.99, eH}}, 64);
+        w_.addBoundary(body, "echinus", std::make_shared<MeshShape>(ech.positions, ech.triangles, "echinus"),
+                       Transform::translate({0, 0, shaftH + gap}), kOutside, inside, o);
+        MeshData ab;
+        {
+            Vec3 c[8];
+            for (int i = 0; i < 8; ++i) c[i] = {(i & 1) ? a : -a, (i & 2) ? a : -a, (i & 4) ? aH : 0.0};
+            ab.addQuad(c[0], c[2], c[3], c[1]);
+            ab.addQuad(c[4], c[5], c[7], c[6]);
+            ab.addQuad(c[0], c[1], c[5], c[4]);
+            ab.addQuad(c[2], c[6], c[7], c[3]);
+            ab.addQuad(c[0], c[4], c[6], c[2]);
+            ab.addQuad(c[1], c[3], c[7], c[5]);
+            orientOutward(ab);
+        }
+        w_.addBoundary(body, "abacus", std::make_shared<MeshShape>(ab.positions, ab.triangles, "abacus"),
+                       Transform::translate({0, 0, shaftH + eH + 2 * gap}), kOutside, inside, o);
+    }
+
     TerrainSpec terrainSpec(const Value& b) const {
         TerrainSpec t;
         if (auto s = b.get("size")) {
@@ -598,7 +813,7 @@ private:
         return t;
     }
 
-    void lensBody(const Value& b, int assembly, const Transform& xf) {
+    void lensBody(const Value& b, const std::string& name, int assembly, const Transform& xf) {
         LensSpec spec;
         std::string rim = getStr(b, "rim", "ground");
         spec.rim = rim == "black" ? LensSpec::Rim::Black : rim == "polished" ? LensSpec::Rim::Polished : LensSpec::Rim::Ground;
@@ -619,10 +834,10 @@ private:
         }
         spec.edgeRadius = getRadius(b, "edge_", 0);
         for (auto& m : spec.media) w_.medium(m);
-        buildLens(w_, b.name, spec, assembly, xf);
+        buildLens(w_, name, spec, assembly, xf);
     }
 
-    void prescriptionBody(const Value& b, int assembly, const Transform& xf) {
+    void prescriptionBody(const Value& b, const std::string& name, int assembly, const Transform& xf) {
         Prescription p = loadPrescription(path(str(need(b, "file"))));
         IndexFn index = catalogIndex();
         if (auto a = b.get("afocal"); a && boolean(*a)) solveAfocal(p, p.wavelength, index);
@@ -637,14 +852,18 @@ private:
             tube = len(*tr);
         }
         std::string rim = getStr(b, "rim", "black");
-        BuiltInstrument bi = buildPrescription(w_, p, b.name, assembly, xf, tube, index,
+        BuiltInstrument bi = buildPrescription(w_, p, name, assembly, xf, tube, index,
                                                rim == "ground" ? LensSpec::Rim::Ground
                                                : rim == "polished" ? LensSpec::Rim::Polished : LensSpec::Rim::Black);
         if (tube > 0) {
             double z0 = -0.01 * bi.lastVertexZ - 1e-3, z1 = bi.lastVertexZ + 1e-3;
-            buildTube(w_, b.name + ".tube", tube, z0, z1, bi.assembly, Transform{}, materials_.at("black"));
+            // Blackened inside; an optional finish (brass, paint) on a slightly larger outer shell.
+            buildTube(w_, name + ".tube", tube, z0, z1, bi.assembly, Transform{}, materials_.at("black"));
+            if (b.has("tube_material"))
+                buildTube(w_, name + ".tube-finish", tube * 1.03, z0, z1, bi.assembly, Transform{},
+                          materialRef(need(b, "tube_material")));
         }
-        instruments_[b.name] = Instrument{bi.assembly, bi.paraxial};
+        instruments_[name] = Instrument{bi.assembly, bi.paraxial};
     }
 
     // ------------------------------------------------------------ detectors
@@ -655,7 +874,21 @@ private:
         return {int(num(*s[0])), int(num(*s[1]))};
     }
 
+    // Detector keys: `exposure = EV` (fixed, replaces auto exposure), `white_balance = K | none`,
+    // `sun_share = s` (the sun's share of light samples while this detector renders).
+    void detectorDisplay(const Value& b) {
+        DetectorSettings d;
+        if (auto e = b.get("exposure")) { d.hasExposure = true; d.exposure = num(*e); }
+        if (auto wb = b.get("white_balance")) {
+            d.hasWhiteBalance = true;
+            d.whiteBalance = (wb->kind == Value::Kind::Ident && wb->str == "none") ? 0 : num(*wb);
+        }
+        if (auto ss = b.get("sun_share")) { d.hasSunShare = true; d.sunShare = num(*ss); }
+        if (d.hasExposure || d.hasWhiteBalance || d.hasSunShare) scene_.display[b.name] = d;
+    }
+
     void observer(const Value& b) {
+        detectorDisplay(b);
         auto o = std::make_unique<IdealObserver>();
         o->name = b.name;
         auto [w, h] = resolution(b);
@@ -674,6 +907,7 @@ private:
     }
 
     void camera(const Value& b, int assembly) {
+        detectorDisplay(b);
         Prescription p = loadPrescription(path(str(need(b, "lens"))));
         CameraParams c;
         if (auto s = b.get("sensor")) {
@@ -686,6 +920,8 @@ private:
         c.height = h;
         if (auto f = b.get("focus")) c.focusDistance = (f->kind == Value::Kind::Number && std::isinf(f->num)) ? Inf : len(*f);
         c.sensorShift = getLen(b, "sensor_shift", 0);
+        c.fNumber = getNum(b, "f_number", 0);
+        if (auto rf = b.get("real_focus")) c.realFocus = boolean(*rf);
         if (auto hs = b.get("housing")) c.housing = boolean(*hs);
         Vec3 pos = vecLen(need(b, "position"));
         Vec3 la = vecLen(need(b, "look_at"));
@@ -729,6 +965,7 @@ private:
         r.maxDepth = int(getNum(b, "max_depth", r.maxDepth));
         r.exposure = getNum(b, "exposure", r.exposure);
         r.fresnelFloor = getNum(b, "fresnel_floor", r.fresnelFloor);
+        if (auto wbv = b.get("white_balance")) r.whiteBalance = (wbv->kind == Value::Kind::Ident && wbv->str == "none") ? 0 : num(*wbv);
         if (auto a = b.get("auto_exposure")) r.autoExposure = boolean(*a);
     }
 
@@ -756,7 +993,42 @@ Scene loadSceneFromString(const std::string& text, const std::string& baseDir, c
     return scene;
 }
 
-Scene loadScene(const std::string& p) {
+void applySceneEdit(Value& doc, const std::string& edit) {
+    auto dot = edit.find('.');
+    auto eq = edit.find('=');
+    if (dot == std::string::npos || eq == std::string::npos || dot > eq)
+        throw std::runtime_error("scene edit must look like Block.key=value: '" + edit + "'");
+    std::string block = edit.substr(0, dot);
+    std::string assignment = edit.substr(dot + 1);
+    ValuePtr parsed = parseSceneText(assignment, "edit '" + edit + "'");
+    if (parsed->named.size() != 1) throw std::runtime_error("scene edit must assign exactly one key: '" + edit + "'");
+    std::function<bool(Value&)> visit = [&](Value& v) {
+        bool hit = false;
+        for (auto& c : v.items)
+            if (c->kind == Value::Kind::Block) {
+                // Named blocks match by name; unnamed ones (sun) by keyword.
+                if (c->name == block || (c->name.empty() && c->str == block)) {
+                    c->named.push_back(parsed->named[0]);
+                    hit = true;
+                }
+                hit = visit(*c) || hit;
+            }
+        return hit;
+    };
+    if (block == "render" || block == "world") {
+        for (auto& c : doc.items)
+            if (c->str == block) { c->named.push_back(parsed->named[0]); return; }
+        auto blk = std::make_shared<Value>();
+        blk->kind = Value::Kind::Block;
+        blk->str = block;
+        blk->named.push_back(parsed->named[0]);
+        doc.items.push_back(blk);
+        return;
+    }
+    if (!visit(doc)) throw std::runtime_error("scene edit: no block named '" + block + "'");
+}
+
+Scene loadSceneWithEdits(const std::string& p, const std::vector<std::string>& edits) {
     std::ifstream in(p);
     if (!in) throw std::runtime_error("cannot open scene: " + p);
     std::stringstream ss;
@@ -764,7 +1036,19 @@ Scene loadScene(const std::string& p) {
     std::string dir = ".";
     auto slash = p.find_last_of('/');
     if (slash != std::string::npos) dir = p.substr(0, slash);
-    return loadSceneFromString(ss.str(), dir, p);
+    Scene scene;
+    scene.sourcePath = p;
+    scene.sourceText = ss.str();
+    scene.edits = edits;
+    ValuePtr doc = parseSceneText(scene.sourceText, p);
+    for (auto& e : edits) applySceneEdit(*doc, e);
+    Loader ld(scene, dir);
+    ld.run(*doc);
+    scene.build();
+    if (scene.detectors.empty()) throw std::runtime_error(p + ": scene defines no observer, camera or sensor");
+    return scene;
 }
+
+Scene loadScene(const std::string& p) { return loadSceneWithEdits(p, {}); }
 
 }  // namespace owe

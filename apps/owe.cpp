@@ -1,5 +1,7 @@
 // owe — command-line front end of the Optical World Engine (CPU reference backend).
+#include <algorithm>
 #include <cstdio>
+#include <unistd.h>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -39,7 +41,7 @@ const std::map<std::string, int> kArity = {
     {"--max-depth", 1}, {"--out", 1},    {"--exposure", 1}, {"--pixel", 2},    {"--samples", 1},    {"--svg", 1},
     {"--json", 1},     {"--from", 1},    {"--dir", 1},      {"--toward", 1},   {"--cone", 1},       {"--rays", 1},
     {"--lambda", 1},   {"--plane", 1},   {"--origin", 1},   {"--fields", 1},   {"--resolution", 1}, {"--field", 1},
-    {"--bounds", 1},   {"--title", 1},      {"--fresnel-floor", 1}};
+    {"--bounds", 1},   {"--title", 1},      {"--fresnel-floor", 1}, {"--set", 1}, {"--white-balance", 1}};
 
 Args parse(int argc, char** argv, int start) {
     Args a;
@@ -94,6 +96,16 @@ ViewPlane plane(const Args& a, const ViewPlane& def) {
     return p;
 }
 
+void applyResolution(Scene& scene, int di, const Args& a) {
+    if (!a.has("--resolution")) return;
+    std::string r = a.get("--resolution");
+    auto x = r.find('x');
+    if (x == std::string::npos) throw std::runtime_error("--resolution expects WxH");
+    scene.detectors[size_t(di)]->width = std::stoi(r.substr(0, x));
+    scene.detectors[size_t(di)]->height = std::stoi(r.substr(x + 1));
+    scene.build();
+}
+
 int detectorIndex(const Scene& s, const Args& a) {
     std::string name = a.get("--detector", s.render.detector);
     if (name.empty()) return 0;
@@ -109,6 +121,7 @@ void usage() {
         "  owe render <scene.owe> [--detector NAME] [--spp N] [--passes K] [--integrator path|light]\n"
         "                         [--seed S] [--threads T] [--max-depth D] [--resolution WxH]\n"
         "                         [--out PREFIX] [--exposure EV] [--no-auto-exposure] [--fresnel-floor P]\n"
+        "                         [--white-balance KELVIN]\n"
         "      Progressive spectral render. Writes PREFIX.png (display), PREFIX.pfm (raw linear) and\n"
         "      PREFIX.json (reproducibility record) after every pass.\n"
         "\n"
@@ -122,14 +135,23 @@ void usage() {
         "  owe lens <file.lens> [--fields 0,5,10] [--afocal] [--svg F] [--field DEG] [--rays N]\n"
         "      Paraxial and real-ray analysis of a lens prescription built as physical bodies.\n"
         "\n"
+        "  owe studio <scene.owe> [--detector NAME] [--resolution WxH] [--out PREFIX] [--set Block.key=value ...]\n"
+        "      Interactive session: tune aperture, focus, placement or any scene value and refine the\n"
+        "      image pass by pass (reads commands from stdin; type help).\n"
+        "\n"
+        "  Every command accepts --set Block.key=value to edit the scene without rewriting it,\n"
+        "  e.g. --set Cam.f_number=2.8 --set \"Cam.focus=3.5 m\".\n"
+        "\n"
         "  owe glass [NAME]    Refractive index model, n at spectral lines, Abbe number.\n"
         "  owe info <scene.owe>  The world's ontology: media, regions, boundaries, bodies, detectors.\n");
 }
 
 int cmdRender(const Args& a) {
     if (a.positional.empty()) throw std::runtime_error("render: missing scene file");
-    Scene scene = loadScene(a.positional[0]);
-    RenderSettings rs = scene.render;
+    Scene scene = loadSceneWithEdits(a.positional[0], a.all("--set"));
+    int di = detectorIndex(scene, a);
+    scene.useDetector(di);
+    RenderSettings rs = scene.settingsFor(di);
     if (a.has("--spp")) rs.spp = std::stoi(a.get("--spp"));
     if (a.has("--seed")) rs.seed = std::stoull(a.get("--seed"));
     if (a.has("--integrator")) rs.integrator = a.get("--integrator");
@@ -137,20 +159,14 @@ int cmdRender(const Args& a) {
     if (a.has("--max-depth")) rs.maxDepth = std::stoi(a.get("--max-depth"));
     if (a.has("--exposure")) rs.exposure = std::stod(a.get("--exposure"));
     if (a.has("--fresnel-floor")) rs.fresnelFloor = std::stod(a.get("--fresnel-floor"));
+    if (a.has("--white-balance")) rs.whiteBalance = std::stod(a.get("--white-balance"));
     if (a.has("--no-auto-exposure")) rs.autoExposure = false;
-    int di = detectorIndex(scene, a);
-    if (a.has("--resolution")) {
-        std::string r = a.get("--resolution");
-        auto x = r.find('x');
-        if (x == std::string::npos) throw std::runtime_error("--resolution expects WxH");
-        scene.detectors[di]->width = std::stoi(r.substr(0, x));
-        scene.detectors[di]->height = std::stoi(r.substr(x + 1));
-        scene.build();
-    }
+    applyResolution(scene, di, a);
     int passes = std::max(1, std::stoi(a.get("--passes", "1")));
     std::string out = a.get("--out", "render");
     ProgressiveRenderer R(scene, di, rs);
     std::fprintf(stderr, "%s\n", scene.detectors[di]->describe().c_str());
+    if (scene.notes.count(scene.detectors[di]->name)) std::fprintf(stderr, "%s\n", scene.notes[scene.detectors[di]->name].c_str());
     int done = 0;
     for (int p = 0; p < passes; ++p) {
         int spp = rs.spp * (p + 1) / passes - done;
@@ -158,7 +174,7 @@ int cmdRender(const Args& a) {
         if (spp <= 0) continue;
         R.runPass(spp);
         Image img = R.resolve();
-        writePNG(out + ".png", img, rs.exposure, rs.autoExposure);
+        writePNG(out + ".png", img, rs.exposure, rs.autoExposure, rs.whiteBalance);
         writePFM(out + ".pfm", img);
         std::ofstream(out + ".json") << renderMetadataJSON(scene, R, rs);
         std::fprintf(stderr, "pass %d/%d: %lld spp, %.2f s, mean Y %.5g\n", p + 1, passes, R.samplesPerPixel(),
@@ -183,8 +199,10 @@ int cmdRender(const Args& a) {
 
 int cmdProbe(const Args& a) {
     if (a.positional.empty() || a.all("--pixel").size() != 2) throw std::runtime_error("probe: need scene and --pixel X Y");
-    Scene scene = loadScene(a.positional[0]);
+    Scene scene = loadSceneWithEdits(a.positional[0], a.all("--set"));
     int di = detectorIndex(scene, a);
+    scene.useDetector(di);
+    applyResolution(scene, di, a);
     int px = std::stoi(a.all("--pixel")[0]), py = std::stoi(a.all("--pixel")[1]);
     PixelProbe pr = probePixel(scene, di, px, py, std::stoi(a.get("--samples", "2000")), scene.render.seed);
     std::cout << pr.text(scene.world);
@@ -206,7 +224,7 @@ int cmdProbe(const Args& a) {
 
 int cmdEmit(const Args& a) {
     if (a.positional.empty() || !a.has("--from")) throw std::runtime_error("emit: need scene and --from");
-    Scene scene = loadScene(a.positional[0]);
+    Scene scene = loadSceneWithEdits(a.positional[0], a.all("--set"));
     Vec3 from = vec(a.get("--from"));
     Vec3 dir;
     if (a.has("--dir")) dir = vec(a.get("--dir"));
@@ -298,7 +316,7 @@ int cmdGlass(const Args& a) {
 
 int cmdInfo(const Args& a) {
     if (a.positional.empty()) throw std::runtime_error("info: missing scene file");
-    Scene s = loadScene(a.positional[0]);
+    Scene s = loadSceneWithEdits(a.positional[0], a.all("--set"));
     const World& w = s.world;
     std::printf("media (%zu):\n", w.media().size());
     for (auto& m : w.media())
@@ -327,7 +345,162 @@ int cmdInfo(const Args& a) {
     }
     std::printf("lights for next-event estimation: %zu\n", w.lights().size());
     std::printf("detectors:\n");
-    for (auto& d : s.detectors) std::printf("  %s (starts in %s)\n", d->describe().c_str(), w.regionLabel(d->region).c_str());
+    for (auto& d : s.detectors) {
+        std::printf("  %s (starts in %s)\n", d->describe().c_str(), w.regionLabel(d->region).c_str());
+        if (s.notes.count(d->name)) std::printf("    %s\n", s.notes[d->name].c_str());
+    }
+    return 0;
+}
+
+// Interactive session: edit the scene (aperture, focus, placement, anything), watch the
+// estimate refine pass by pass. Reads commands from stdin, so it can also be scripted.
+int cmdStudio(const Args& a) {
+    if (a.positional.empty()) throw std::runtime_error("studio: missing scene file");
+    const std::string path = a.positional[0];
+    std::vector<std::string> edits = a.all("--set");
+    std::string detName = a.get("--detector");
+    std::string out = a.get("--out", "studio");
+    int width = 0, height = 0;
+    if (a.has("--resolution")) {
+        std::string r = a.get("--resolution");
+        auto x = r.find('x');
+        if (x == std::string::npos) throw std::runtime_error("--resolution expects WxH");
+        width = std::stoi(r.substr(0, x));
+        height = std::stoi(r.substr(x + 1));
+    }
+    double exposure = 0, whiteBalance = 0;
+    bool autoExp = true, userExposure = false;  // set by the exposure command; cleared by detector
+    std::unique_ptr<Scene> scene;
+    std::unique_ptr<ProgressiveRenderer> R;
+    bool interactive = isatty(0);
+    auto rebuild = [&] {
+        R.reset();
+        scene = std::make_unique<Scene>(loadSceneWithEdits(path, edits));
+        if (detName.empty()) detName = scene->render.detector.empty() ? scene->detectors[0]->name : scene->render.detector;
+        int di = scene->findDetector(detName);
+        if (di < 0) throw std::runtime_error("no detector named '" + detName + "'");
+        scene->useDetector(di);
+        if (width > 0) {
+            scene->detectors[size_t(di)]->width = width;
+            scene->detectors[size_t(di)]->height = height;
+            scene->build();
+        }
+        RenderSettings rs = scene->settingsFor(di);
+        whiteBalance = a.has("--white-balance") ? std::stod(a.get("--white-balance")) : rs.whiteBalance;
+        if (!userExposure) {
+            exposure = a.has("--exposure") ? std::stod(a.get("--exposure")) : rs.exposure;
+            autoExp = rs.autoExposure && !a.has("--no-auto-exposure");
+        }
+        R = std::make_unique<ProgressiveRenderer>(*scene, di, rs);
+        std::printf("%s\n", scene->detectors[size_t(di)]->describe().c_str());
+        if (scene->notes.count(detName)) std::printf("%s\n", scene->notes[detName].c_str());
+    };
+    auto help = [] {
+        std::puts("commands:\n"
+                  "  set Block.key=value     edit the scene (e.g. set Cam.f_number=2.8, set Cam.focus=3.2 m)\n"
+                  "  unset Block.key         drop edits of that key\n"
+                  "  edits                   list current edits\n"
+                  "  detector NAME           render another observer/camera/sensor\n"
+                  "  size WxH                image size\n"
+                  "  render [SPP] [PASSES]   refine the current estimate (edits restart it)\n"
+                  "  reset                   restart accumulation\n"
+                  "  exposure EV | auto      display exposure\n"
+                  "  info                    detector and camera state (EFL, f-number, depth of field)\n"
+                  "  probe X Y [N]           why is this pixel this colour?\n"
+                  "  quit");
+    };
+    try { rebuild(); } catch (const std::exception& e) { std::fprintf(stderr, "error: %s\n", e.what()); return 2; }
+    if (interactive) help();
+    std::string line;
+    while (true) {
+        if (interactive) { std::printf("owe> "); std::fflush(stdout); }
+        if (!std::getline(std::cin, line)) break;
+        std::istringstream ls(line);
+        std::string cmd;
+        ls >> cmd;
+        if (cmd.empty() || cmd[0] == '#') continue;
+        try {
+            if (cmd == "quit" || cmd == "exit") break;
+            else if (cmd == "help") help();
+            else if (cmd == "set") {
+                std::string rest;
+                std::getline(ls, rest);
+                rest.erase(0, rest.find_first_not_of(" \t"));
+                // Accept "Cam.f_number=2.8" and "Cam f_number 2.8".
+                if (rest.find('=') == std::string::npos) {
+                    std::istringstream rs(rest);
+                    std::string blk, key, val;
+                    rs >> blk >> key;
+                    std::getline(rs, val);
+                    rest = blk + "." + key + "=" + val;
+                }
+                edits.push_back(rest);
+                rebuild();
+            } else if (cmd == "unset") {
+                std::string key;
+                ls >> key;
+                edits.erase(std::remove_if(edits.begin(), edits.end(),
+                                           [&](const std::string& e) { return e.rfind(key + "=", 0) == 0 || e.rfind(key + " =", 0) == 0; }),
+                            edits.end());
+                rebuild();
+            } else if (cmd == "edits") {
+                for (auto& e : edits) std::printf("  %s\n", e.c_str());
+            } else if (cmd == "detector") {
+                ls >> detName;
+                userExposure = false;
+                rebuild();
+            } else if (cmd == "size") {
+                std::string wh;
+                ls >> wh;
+                auto x = wh.find('x');
+                width = std::stoi(wh.substr(0, x));
+                height = std::stoi(wh.substr(x + 1));
+                rebuild();
+            } else if (cmd == "reset") {
+                rebuild();
+            } else if (cmd == "exposure") {
+                std::string v;
+                ls >> v;
+                autoExp = v == "auto";
+                if (!autoExp) exposure = std::stod(v);
+                userExposure = true;
+                writePNG(out + ".png", R->resolve(), exposure, autoExp, whiteBalance);
+            } else if (cmd == "info") {
+                std::printf("%s\n", R->detector().describe().c_str());
+                if (scene->notes.count(detName)) std::printf("%s\n", scene->notes[detName].c_str());
+                std::printf("%lld spp accumulated, %.1f s\n", R->samplesPerPixel(), R->seconds());
+            } else if (cmd == "render") {
+                int spp = 16, passes = 1;
+                ls >> spp >> passes;
+                if (spp <= 0) spp = 16;
+                if (passes <= 0) passes = 1;
+                for (int p = 0; p < passes; ++p) {
+                    R->runPass(spp);
+                    Image img = R->resolve();
+                    writePNG(out + ".png", img, exposure, autoExp, whiteBalance);
+                    writePFM(out + ".pfm", img);
+                    std::ofstream(out + ".json") << renderMetadataJSON(*scene, *R, R->settings());
+                    std::printf("  %lld spp  %.1f s  mean Y %.5g  -> %s.png\n", R->samplesPerPixel(), R->seconds(), img.meanY(),
+                                out.c_str());
+                    std::fflush(stdout);
+                }
+            } else if (cmd == "probe") {
+                int x, y, n = 1000;
+                ls >> x >> y >> n;
+                if (n <= 0) n = 1000;
+                PixelProbe pr = probePixel(*scene, scene->findDetector(detName), x, y, n, scene->render.seed);
+                std::cout << pr.text(scene->world);
+            } else {
+                std::printf("unknown command '%s' (help lists commands)\n", cmd.c_str());
+            }
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, "error: %s\n", e.what());
+            if (cmd == "set" && !edits.empty()) {
+                edits.pop_back();  // keep the session usable after a bad edit
+                try { rebuild(); } catch (...) {}
+            }
+        }
+    }
     return 0;
 }
 
@@ -344,6 +517,7 @@ int main(int argc, char** argv) {
         if (cmd == "lens") return cmdLens(a);
         if (cmd == "glass") return cmdGlass(a);
         if (cmd == "info") return cmdInfo(a);
+        if (cmd == "studio") return cmdStudio(a);
         if (cmd == "help" || cmd == "--help" || cmd == "-h") { usage(); return 0; }
         std::fprintf(stderr, "unknown command '%s'\n\n", cmd.c_str());
         usage();

@@ -24,11 +24,18 @@ constexpr uint32_t kNone = 0xFFFFFFFEu;
 
 // Spatially varying reflectance (solid textures in boundary-local coordinates).
 struct Texture {
-    enum class Kind { None, Checker, Noise, Rings, Terrain } kind = Kind::None;
+    enum class Kind { None, Checker, Noise, Rings, Terrain, Bands, Radial, Marble } kind = Kind::None;
     Spectrum a = Spectrum::constant(0.8), b = Spectrum::constant(0.2), c = Spectrum::constant(0.9);
     double scale = 1.0;       // cell size / feature size in metres
-    double param = 0.0;       // terrain: snow line height; rings: noise amount
+    double param = 0.0;       // terrain: snow line height; rings/bands/marble: turbulence
     double eval(const Vec3& localP, const Vec3& localN, double lambdaNm) const;
+    void weights(const Vec3& localP, const Vec3& localN, double w[3]) const;
+    double mix(const double w[3], double lambdaNm) const {
+        double r = w[0] * a.eval(lambdaNm);
+        if (w[1] != 0) r += w[1] * b.eval(lambdaNm);
+        if (w[2] != 0) r += w[2] * c.eval(lambdaNm);
+        return r;
+    }
 };
 double valueNoise3(const Vec3& p);
 double fbm3(const Vec3& p, int octaves);
@@ -67,6 +74,9 @@ struct SurfaceOptics {
 struct Emission {
     Spectrum radiance;  // spectral radiance, Lambertian
     bool front = true, back = false;
+    // Sampling choice only: emitters whose light reaches the scene negligibly (e.g. stars) can
+    // be left out of next-event estimation; they are still seen when hit.
+    bool nee = true;
 };
 
 struct Region {
@@ -112,6 +122,10 @@ struct Environment {
     Vec3 sunDir{0, 0, 1};  // unit vector toward the sun
     double sunAngularRadius = radians(0.2665);
     Spectrum sunRadiance = Spectrum::constant(0);
+    // Sampling knob: fraction of next-event light selections given to the sun (0 = by power).
+    // Power estimates for a distant sun scale with the scene's extent, which is meaningless in
+    // scenes that also contain astronomical bodies.
+    double sunNeeShare = 0;
 
     double sky(const Vec3& dir, double lambdaNm) const;
     double sun(const Vec3& dir, double lambdaNm) const {

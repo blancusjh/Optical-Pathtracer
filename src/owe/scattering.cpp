@@ -146,7 +146,7 @@ bool sampleScatter(const Interface& it, const Vec3& d, double uc, double u1, dou
 
         case SurfaceType::Diffuse: {
             if (!fromFront && o.backAbsorbs) return false;
-            double albedo = o.albedo(it.pLocal, it.nLocal, it.lambda);
+            double albedo = surfaceAlbedo(it);
             if (albedo <= 0) return false;
             Vec3 w = sampleCosineHemisphere(u1, u2);
             if (!fromFront) w.z = -w.z;
@@ -223,7 +223,7 @@ double evalScatter(const Interface& it, const Vec3& d, const Vec3& wiWorld, Tran
             if (!fromFront && o.backAbsorbs) return 0;
             if (!sameHemisphere(wo, wi)) return 0;
             pdf = std::abs(wi.z) * InvPi;
-            return o.albedo(it.pLocal, it.nLocal, it.lambda) * InvPi;
+            return surfaceAlbedo(it) * InvPi;
         }
         case SurfaceType::Conductor: {
             if (!fromFront && o.backAbsorbs) return 0;
@@ -245,6 +245,13 @@ double evalScatter(const Interface& it, const Vec3& d, const Vec3& wiWorld, Tran
         }
         default: return 0;
     }
+}
+
+double surfaceAlbedo(const Interface& it) {
+    const SurfaceOptics& o = *it.optics;
+    if (o.texture.kind == Texture::Kind::None) return o.reflectance.eval(it.lambda);
+    if (it.texReady) return o.texture.mix(it.tex, it.lambda);
+    return o.texture.eval(it.pLocal, it.nLocal, it.lambda);
 }
 
 bool isDispersive(const Interface& hero, const Interface& other) {

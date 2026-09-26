@@ -133,6 +133,39 @@ private:
     double R_, z0_, z1_;
 };
 
+// Round wall: open cylinder of radius R from z = 0 to H with rectangular openings
+// (azimuth from +y toward +x, width along the wall, sill and top heights). Outward normal.
+class RoundWallShape : public Shape {
+public:
+    struct Opening {
+        double azimuth, width, sill, top;
+    };
+    RoundWallShape(double R, double H, std::vector<Opening> openings) : R_(R), H_(H), open_(std::move(openings)) {}
+    bool intersect(const Ray& r, double tmin, double tmax, LocalHit& h) const override;
+    AABB bounds() const override;
+    std::string describe() const override;
+
+private:
+    bool solid(const Vec3& p) const;
+    double R_, H_;
+    std::vector<Opening> open_;
+};
+
+// Observatory dome: hemisphere of radius R (z ≥ 0) with an observing slit of constant linear
+// width centred on an azimuth, open from the horizon up to elevation slitTop. Outward normal.
+class DomeShape : public Shape {
+public:
+    DomeShape(double R, double slitAz, double slitWidth, double slitTop)
+        : R_(R), az_(slitAz), w_(slitWidth), top_(slitTop) {}
+    bool intersect(const Ray& r, double tmin, double tmax, LocalHit& h) const override;
+    AABB bounds() const override;
+    std::string describe() const override;
+
+private:
+    bool solid(const Vec3& p) const;
+    double R_, az_, w_, top_;
+};
+
 // Triangle mesh; front side follows counter-clockwise winding.
 class MeshShape : public Shape {
 public:

@@ -198,8 +198,30 @@ double srgbEncode(double v) {
 }
 }  // namespace
 
-void writePNG(const std::string& path, const Image& img, double exposureEV, bool autoExposure) {
+namespace {
+// Bradford chromatic adaptation matrix from white (Xw, Yw, Zw) to D65.
+void bradfordToD65(const XYZ& w, double M[3][3]) {
+    const double B[3][3] = {{0.8951, 0.2664, -0.1614}, {-0.7502, 1.7135, 0.0367}, {0.0389, -0.0685, 1.0296}};
+    const double Bi[3][3] = {{0.9869929, -0.1470543, 0.1599627}, {0.4323053, 0.5183603, 0.0492912},
+                             {-0.0085287, 0.0400428, 0.9684867}};
+    const double d65[3] = {0.95047, 1.0, 1.08883};
+    double src[3], dst[3];
+    for (int i = 0; i < 3; ++i) {
+        src[i] = B[i][0] * w.x + B[i][1] * w.y + B[i][2] * w.z;
+        dst[i] = B[i][0] * d65[0] + B[i][1] * d65[1] + B[i][2] * d65[2];
+    }
+    double T[3][3];
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j) T[i][j] = dst[i] / src[i] * B[i][j];
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j) M[i][j] = Bi[i][0] * T[0][j] + Bi[i][1] * T[1][j] + Bi[i][2] * T[2][j];
+}
+}  // namespace
+
+void writePNG(const std::string& path, const Image& img, double exposureEV, bool autoExposure, double whiteKelvin) {
     double scale = std::pow(2.0, exposureEV);
+    double wb[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+    if (whiteKelvin > 0) bradfordToD65(Spectrum::blackbody(whiteKelvin, 1.0).toXYZ(), wb);
     if (autoExposure) {
         // Map the log-average luminance to middle grey.
         double s = 0;
@@ -217,8 +239,10 @@ void writePNG(const std::string& path, const Image& img, double exposureEV, bool
     for (int y = 0; y < img.height; ++y) {
         raw.push_back(0);
         for (int x = 0; x < img.width; ++x) {
-            XYZ c = img.at(x, y);
-            c.x *= scale; c.y *= scale; c.z *= scale;
+            XYZ c0 = img.at(x, y);
+            XYZ c{(wb[0][0] * c0.x + wb[0][1] * c0.y + wb[0][2] * c0.z) * scale,
+                  (wb[1][0] * c0.x + wb[1][1] * c0.y + wb[1][2] * c0.z) * scale,
+                  (wb[2][0] * c0.x + wb[2][1] * c0.y + wb[2][2] * c0.z) * scale};
             double rgb[3];
             xyzToLinearSRGB(c, rgb);
             // Gentle highlight roll-off (display only).
@@ -294,7 +318,11 @@ std::string renderMetadataJSON(const Scene& scene, const ProgressiveRenderer& r,
     os << "{\n";
     os << "  \"engine\": \"optical-world-engine " << OWE_VERSION << "\",\n";
     os << "  \"backend\": \"cpu-reference (IEEE-754 double)\",\n";
-    os << "  \"scene\": {\"path\": \"" << jsonEscape(scene.sourcePath) << "\", \"fnv1a64\": \"" << hash << "\"},\n";
+    os << "  \"scene\": {\"path\": \"" << jsonEscape(scene.sourcePath) << "\", \"fnv1a64\": \"" << hash << "\", \"edits\": [";
+    for (size_t i = 0; i < scene.edits.size(); ++i) os << (i ? ", " : "") << "\"" << jsonEscape(scene.edits[i]) << "\"";
+    os << "]},\n";
+    auto note = scene.notes.find(r.detector().name);
+    if (note != scene.notes.end()) os << "  \"camera\": \"" << jsonEscape(note->second) << "\",\n";
     os << "  \"detector\": {\"name\": \"" << jsonEscape(r.detector().name) << "\", \"description\": \""
        << jsonEscape(r.detector().describe()) << "\", \"quantity\": \""
        << (r.detector().quantity() == Detector::Quantity::Radiance ? "radiance [W m^-2 sr^-1] as CIE XYZ"
@@ -311,6 +339,8 @@ std::string renderMetadataJSON(const Scene& scene, const ProgressiveRenderer& r,
     os << "  \"samples_per_pixel\": " << r.samplesPerPixel() << ",\n";
     os << "  \"passes\": " << r.passes() << ",\n";
     os << "  \"max_depth\": " << s.maxDepth << ",\n";
+    os << "  \"display\": {\"exposure_ev\": " << s.exposure << ", \"auto_exposure\": " << (s.autoExposure ? "true" : "false")
+       << ", \"white_balance_kelvin\": " << s.whiteBalance << "},\n";
     os << "  \"render_seconds\": " << r.seconds() << ",\n";
     os << "  \"statistics\": {\"paths\": " << r.stats().paths << ", \"segments\": " << r.stats().segments
        << ", \"region_inconsistencies\": " << r.stats().inconsistencies << ", \"leaks\": " << r.stats().leaks;

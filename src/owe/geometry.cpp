@@ -1,7 +1,9 @@
 #include "geometry.hpp"
 
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
+#include <iterator>
 #include <sstream>
 #include <stdexcept>
 
@@ -492,6 +494,107 @@ void CylinderShape::sampleArea(double u1, double u2, double, Vec3& p, Vec3& n) c
     p = {R_ * n.x, R_ * n.y, z0_ + u2 * (z1_ - z0_)};
 }
 
+// ---------------------------------------------------------------- RoundWallShape
+
+bool RoundWallShape::solid(const Vec3& p) const {
+    if (p.z < 0 || p.z > H_) return false;
+    double az = std::atan2(p.x, p.y);
+    for (const auto& o : open_) {
+        double dAz = std::remainder(az - o.azimuth, 2 * Pi);
+        if (std::abs(dAz) * R_ < 0.5 * o.width && p.z > o.sill && p.z < o.top) return false;
+    }
+    return true;
+}
+
+bool RoundWallShape::intersect(const Ray& r, double tmin, double tmax, LocalHit& h) const {
+    double a = r.d.x * r.d.x + r.d.y * r.d.y;
+    if (a < 1e-300) return false;
+    double b = 2 * (r.o.x * r.d.x + r.o.y * r.d.y);
+    double c = r.o.x * r.o.x + r.o.y * r.o.y - R_ * R_;
+    double t0, t1;
+    if (solveQuadratic(a, b, c, t0, t1) == 0) return false;
+    auto coeffs = [&](const Vec3& o, double& A, double& B, double& C) {
+        A = a;
+        B = 2 * (o.x * r.d.x + o.y * r.d.y);
+        C = o.x * o.x + o.y * o.y - R_ * R_;
+    };
+    for (double t : {t0, t1}) {
+        t = refineRoot(r, t, coeffs);
+        if (t <= tmin || t >= tmax) continue;
+        Vec3 p = r.at(t);
+        if (!solid(p)) continue;
+        h.t = t;
+        h.p = p;
+        h.n = normalize(Vec3(p.x, p.y, 0));
+        h.prim = 0;
+        return true;
+    }
+    return false;
+}
+
+AABB RoundWallShape::bounds() const {
+    AABB b;
+    b.expand(Vec3(-R_, -R_, 0));
+    b.expand(Vec3(R_, R_, H_));
+    return b;
+}
+
+std::string RoundWallShape::describe() const {
+    return "round-wall(r=" + std::to_string(R_) + ", h=" + std::to_string(H_) + ", " + std::to_string(open_.size()) +
+           " openings)";
+}
+
+// ---------------------------------------------------------------- DomeShape
+
+bool DomeShape::solid(const Vec3& p) const {
+    if (p.z < 0) return false;
+    if (w_ <= 0) return true;
+    double el = std::asin(clampd(p.z / R_, -1, 1));
+    if (el >= top_) return true;
+    double dAz = std::remainder(std::atan2(p.x, p.y) - az_, 2 * Pi);
+    double horiz = R_ * std::cos(el);
+    // Constant linear width: the half-angle grows toward the zenith.
+    return std::abs(std::sin(dAz)) * horiz >= 0.5 * w_ || std::cos(dAz) < 0;
+}
+
+bool DomeShape::intersect(const Ray& r, double tmin, double tmax, LocalHit& h) const {
+    double b = dot(r.o, r.d);
+    Vec3 perp = r.o - r.d * b;
+    double disc = R_ * R_ - lengthSq(perp);
+    if (disc < 0) return false;
+    double sq = std::sqrt(disc);
+    double c = lengthSq(r.o) - R_ * R_;
+    double q = -b - std::copysign(sq, b);
+    double t0 = q, t1 = (q != 0) ? c / q : q;
+    if (t0 > t1) std::swap(t0, t1);
+    auto coeffs = [&](const Vec3& o, double& A, double& B, double& C) {
+        A = dot(r.d, r.d);
+        B = 2 * dot(o, r.d);
+        C = lengthSq(o) - R_ * R_;
+    };
+    for (double t : {t0, t1}) {
+        t = refineRoot(r, t, coeffs);
+        if (t <= tmin || t >= tmax) continue;
+        Vec3 p = r.at(t);
+        if (!solid(p)) continue;
+        h.t = t;
+        h.p = p;
+        h.n = normalize(p);
+        h.prim = 0;
+        return true;
+    }
+    return false;
+}
+
+AABB DomeShape::bounds() const {
+    AABB b;
+    b.expand(Vec3(-R_, -R_, 0));
+    b.expand(Vec3(R_, R_, R_));
+    return b;
+}
+
+std::string DomeShape::describe() const { return "dome(r=" + std::to_string(R_) + ", slit width " + std::to_string(w_) + ")"; }
+
 // ---------------------------------------------------------------- MeshShape
 
 MeshShape::MeshShape(std::vector<Vec3> positions, std::vector<std::array<uint32_t, 3>> triangles, std::string label)
@@ -585,29 +688,44 @@ void MeshData::append(const MeshData& o, const Transform& xf) {
 }
 
 MeshData loadObj(const std::string& path, double scale) {
-    std::ifstream in(path);
+    std::ifstream in(path, std::ios::binary);
     if (!in) throw std::runtime_error("cannot open OBJ file: " + path);
+    std::string buf((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    buf.push_back('\n');
     MeshData m;
-    std::string line;
-    while (std::getline(in, line)) {
-        std::istringstream ls(line);
-        std::string tag;
-        ls >> tag;
-        if (tag == "v") {
-            Vec3 p;
-            ls >> p.x >> p.y >> p.z;
-            m.positions.push_back(p * scale);
-        } else if (tag == "f") {
-            std::vector<long> idx;
-            std::string tok;
-            while (ls >> tok) {
-                long v = std::stol(tok.substr(0, tok.find('/')));
+    const char* p = buf.c_str();
+    const char* end = p + buf.size();
+    std::vector<long> idx;
+    while (p < end) {
+        while (p < end && (*p == ' ' || *p == '\t')) ++p;
+        if (p + 1 < end && p[0] == 'v' && (p[1] == ' ' || p[1] == '\t')) {
+            char* q;
+            Vec3 v;
+            v.x = std::strtod(p + 2, &q);
+            v.y = std::strtod(q, &q);
+            v.z = std::strtod(q, &q);
+            m.positions.push_back(v * scale);
+            p = q;
+        } else if (p + 1 < end && p[0] == 'f' && (p[1] == ' ' || p[1] == '\t')) {
+            idx.clear();
+            const char* q = p + 2;
+            while (true) {
+                while (*q == ' ' || *q == '\t') ++q;
+                if (*q == '\n' || *q == '\r' || *q == '\0') break;
+                char* e;
+                long v = std::strtol(q, &e, 10);
+                if (e == q) break;
                 if (v < 0) v = long(m.positions.size()) + v + 1;
                 idx.push_back(v - 1);
+                q = e;
+                while (*q && *q != ' ' && *q != '\t' && *q != '\n' && *q != '\r') ++q;  // skip /vt/vn
             }
             for (size_t i = 1; i + 1 < idx.size(); ++i)
                 m.triangles.push_back({uint32_t(idx[0]), uint32_t(idx[i]), uint32_t(idx[i + 1])});
+            p = q;
         }
+        while (p < end && *p != '\n') ++p;
+        ++p;
     }
     if (m.triangles.empty()) throw std::runtime_error("OBJ file has no faces: " + path);
     return m;
