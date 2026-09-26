@@ -1,0 +1,46 @@
+# THE TELESCOPE / THE MOUNTAIN OBSERVATORY
+# An alpine landscape with a real Keplerian telescope on a plateau. A statue stands on a
+# mountain shoulder 450 m away, 135 m higher. The same world is observed three ways, with no change of physics:
+#   Naked    — an eye at the eyepiece, looking past the instrument
+#   Eyepiece — an eye with its pupil placed at the telescope's exit pupil (Ramsden disc)
+#   Beside   — standing next to the telescope, which is just another object in the world
+units = m
+
+world {
+    sky = gradient(zenith = rgb(0.25, 0.45, 1.0, luminance = 0.7),
+                   horizon = rgb(0.85, 0.9, 1.0, luminance = 1.4),
+                   ground = rgb(0.2, 0.2, 0.2, luminance = 0.1))
+    sun { elevation = 40deg  azimuth = 235deg  luminance = 2e5 }
+}
+
+material alpine { type = diffuse
+                  texture = terrain(a = rgb(0.18, 0.32, 0.10), b = rgb(0.42, 0.40, 0.37), c = rgb(0.92, 0.93, 0.95),
+                                    scale = 60, snow_line = 190) }
+material needles { type = diffuse  reflectance = rgb(0.07, 0.20, 0.08) }
+material bark    { type = diffuse  reflectance = rgb(0.25, 0.16, 0.10) }
+material marble  { type = diffuse  reflectance = rgb(0.85, 0.83, 0.78) }
+material granite { type = diffuse  reflectance = rgb(0.35, 0.33, 0.33) }
+material paint   { type = diffuse  reflectance = rgb(0.82, 0.82, 0.80) }
+
+body Ground { type = terrain  size = (4000, 4000)  resolution = 768  amplitude = 240  feature = 900
+              ridge = 0.55  seed = 7  flat_radius = 40  material = alpine }
+body Woods  { type = forest  terrain = Ground  count = 900  inner_radius = 12  outer_radius = 1600  seed = 3
+              foliage = needles  trunk = bark }
+
+# A statue on the hillside: a sphere carrying ever smaller copies of itself.
+body Statue { type = fractal_statue  radius = 5  depth = 3  ratio = 0.36  material = marble  pedestal = granite
+              position = on_terrain("Ground", 450, 0, 3.5) }
+
+# The instrument: objective, Plössl eyepiece, mounts and tube are all physical bodies.
+body Scope  { type = prescription  file = "../lenses/kepler_16x.lens"  afocal = true  tube = true
+              position = on_terrain("Ground", 0, 0, 1.45)  point_at = on_terrain("Ground", 450, 0, 8.5) }
+body Pier   { type = cylinder radius = 0.05 height = 1.61  position = on_terrain("Ground", 0.12, 0, -0.2)  material = paint }
+
+observer Naked    { position = on_terrain("Ground", -0.46, 0.12, 1.45)  look_at = on_terrain("Ground", 450, 0, 8.5)
+                    fov = 36deg  pupil = 3mm  resolution = (480, 480) }
+observer Eyepiece { position = exit_pupil("Scope")  look_at = on_terrain("Ground", 450, 0, 8.5)
+                    fov = 36deg  pupil = 3mm  resolution = (480, 480) }
+observer Beside   { position = on_terrain("Ground", -1.5, 1.1, 1.95)  look_at = on_terrain("Ground", 3.0, -0.6, 2.2)
+                    fov = 48deg  pupil = 3mm  focus = 1.8  resolution = (640, 400) }
+
+render { detector = Eyepiece  spp = 64  seed = 1 }

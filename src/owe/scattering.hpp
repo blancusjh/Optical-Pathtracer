@@ -53,4 +53,11 @@ bool sampleScatter(const Interface& it, const Vec3& d, double uc, double u1, dou
 // Evaluates f(wo, wi) for non-delta components; wo = −d. Returns f (without cosine) and pdf of sampling wi.
 double evalScatter(const Interface& it, const Vec3& d, const Vec3& wi, TransportMode mode, double& pdf);
 
+// True when a dielectric interface bends different wavelengths differently, i.e. the
+// index ratio differs between the hero and another wavelength.
+bool isDispersive(const Interface& hero, const Interface& other);
+// Throughput multiplier at another wavelength (interface `it`) for the direction the hero
+// sampled (`s`). Only valid when the sample can be shared (see isDispersive).
+double secondaryScatterWeight(const Interface& it, const Vec3& d, const ScatterSample& s, TransportMode mode);
+
 }  // namespace owe

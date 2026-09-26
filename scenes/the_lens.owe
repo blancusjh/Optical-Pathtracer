@@ -1,0 +1,38 @@
+# THE LENS — a loose biconvex magnifier held above a printed page on a wooden table.
+# Nothing here is an "effect": the magnified, slightly aberrated page, the sunlight
+# caustic, the lens shadow and the reflections are what light does when it meets
+# these bodies. Rendered with the hybrid estimator so the caustic converges.
+units = m
+
+world {
+    sky = gradient(zenith = rgb(0.35, 0.55, 1.0, luminance = 0.5),
+                   horizon = rgb(1.0, 0.95, 0.9, luminance = 0.9),
+                   ground = rgb(0.3, 0.28, 0.25, luminance = 0.2))
+    sun { elevation = 52deg  azimuth = 12deg  luminance = 1.2e5 }
+}
+
+material wood   { type = diffuse  texture = rings(a = rgb(0.62, 0.40, 0.22), b = rgb(0.36, 0.20, 0.09), scale = 3mm, turbulence = 0.35) }
+material paper  { type = diffuse  texture = checker(a = rgb(0.86, 0.85, 0.80), b = rgb(0.06, 0.06, 0.07), scale = 4mm) }
+material red    { type = diffuse  reflectance = rgb(0.75, 0.08, 0.06) }
+material teal   { type = diffuse  reflectance = rgb(0.05, 0.45, 0.45) }
+material brass  { type = conductor  metal = gold  roughness = 0.25 }
+
+body Table  { type = box    size = (1.4, 0.9, 0.04)  position = (0, 0, -0.02)  material = wood }
+body Page   { type = sheet  size = (0.297, 0.21)     position = (0, 0.02, 0.0002)  material = paper }
+body Bead1  { type = sphere radius = 6mm   position = (0.085, 0.07, 0.0062)   material = red }    # resting on the page
+body Bead2  { type = sphere radius = 4mm   position = (-0.07, 0.085, 0.0042)  material = teal }
+body Ring   { type = cylinder radius = 9mm height = 3mm position = (-0.19, -0.05, 0) material = brass }
+
+# f = 100 mm N-BK7 magnifier; radii solved from the thick-lens equation at 587.6 nm.
+body Magnifier {
+    type = lens  medium = N-BK7  focal = 100mm  form = bi
+    diameter = 70mm  thickness = 14mm  rim = ground
+    position = (0.0, 0.03, 0.07)  axis = (0, 0, 1)
+}
+
+observer Eye {
+    position = (0.03, -0.17, 0.34)  look_at = (0, 0.02, 0.0)
+    fov = 42deg  pupil = 4mm  focus = 0.33  resolution = (640, 400)
+}
+
+render { detector = Eye  spp = 128  seed = 1  integrator = hybrid }

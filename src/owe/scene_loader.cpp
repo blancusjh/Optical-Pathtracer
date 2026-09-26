@@ -138,6 +138,7 @@ private:
     }
     Vec3 vecLen(const Value& v) {
         if (v.kind == Value::Kind::Call && v.str == "exit_pupil") return exitPupil(v);
+        if (v.kind == Value::Kind::Call && v.str == "on_terrain") return onTerrain(v);
         auto s = seq(v, 3);
         return {len(*s[0]), len(*s[1]), len(*s[2])};
     }
@@ -350,6 +351,8 @@ private:
         Vec3 up = b.has("up") ? vecNum(need(b, "up")) : w_.env.up;
         if (auto a = b.get("axis")) R = Transform::alignZ(vecNum(*a), up) * R;
         else if (auto la = b.get("look_at")) R = Transform::alignZ(vecLen(*la) - pos, up) * R;
+        // Instruments receive light travelling along local +z: point their input side at a target.
+        else if (auto pa = b.get("point_at")) R = Transform::alignZ(pos - vecLen(*pa), up) * R;
         xf = Transform::translate(pos) * R;
         if (auto d = b.get("decenter")) {
             auto s = seq(*d, 2);
@@ -360,6 +363,17 @@ private:
             xf = xf * Transform::rotate({1, 0, 0}, ang(*s[0])) * Transform::rotate({0, 1, 0}, ang(*s[1]));
         }
         return xf;
+    }
+
+    Vec3 onTerrain(const Value& v) {
+        if (v.items.size() < 3) fail(v, "on_terrain(\"Terrain\", x, y [, height above ground])");
+        std::string n = str(*v.items[0]);
+        auto it = terrains_.find(n);
+        if (it == terrains_.end()) fail(v, "on_terrain: no terrain named '" + n + "' (define it first)");
+        const Transform& xf = it->second.second;
+        double x = len(*v.items[1]), y = len(*v.items[2]);
+        double dz = v.items.size() > 3 ? len(*v.items[3]) : 0.0;
+        return {x, y, terrainHeight(it->second.first, x - xf.t.x, y - xf.t.y) + xf.t.z + dz};
     }
 
     Vec3 exitPupil(const Value& v) {
@@ -536,7 +550,7 @@ private:
                      getStr(b, "liquid", "water"), assembly, xf);
         } else if (type == "terrain") {
             TerrainSpec t = terrainSpec(b);
-            terrains_[name] = t;
+            terrains_[name] = {t, xf};
             BodyMaterial m = solidMaterial(b);
             int id = buildMesh(w_, name, makeTerrain(t), m, assembly, xf);
             w_.bodies()[id].kind = "terrain";
@@ -546,7 +560,7 @@ private:
             if (it == terrains_.end()) fail(b, "forest: unknown terrain '" + tn + "'");
             uint32_t fo = b.has("foliage") ? materialRef(need(b, "foliage")) : materials_.at("white");
             uint32_t tr = b.has("trunk") ? materialRef(need(b, "trunk")) : materials_.at("grey");
-            buildForest(w_, name, it->second, int(getNum(b, "count", 200)), getLen(b, "inner_radius", 10),
+            buildForest(w_, name, it->second.first, int(getNum(b, "count", 200)), getLen(b, "inner_radius", 10),
                         getLen(b, "outer_radius", 80), uint64_t(getNum(b, "seed", 1)), fo, tr, assembly, xf);
         } else if (type == "fractal_statue" || type == "statue") {
             uint32_t o = b.has("material") ? materialRef(need(b, "material")) : materials_.at("white");
@@ -712,7 +726,7 @@ private:
     std::string base_;
     double unit_ = 1.0;
     std::map<std::string, uint32_t> materials_;
-    std::map<std::string, TerrainSpec> terrains_;
+    std::map<std::string, std::pair<TerrainSpec, Transform>> terrains_;
     std::map<std::string, Instrument> instruments_;
     std::set<std::string> names_;
 };

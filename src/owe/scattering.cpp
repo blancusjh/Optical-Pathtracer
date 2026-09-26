@@ -245,4 +245,31 @@ double evalScatter(const Interface& it, const Vec3& d, const Vec3& wiWorld, Tran
     }
 }
 
+bool isDispersive(const Interface& hero, const Interface& other) {
+    double a = hero.nBack / hero.nFront, b = other.nBack / other.nFront;
+    return std::abs(a - b) > 1e-12 * std::abs(a);
+}
+
+double secondaryScatterWeight(const Interface& it, const Vec3& d, const ScatterSample& s, TransportMode mode) {
+    const SurfaceOptics& o = *it.optics;
+    if (!s.delta) {
+        double pdf;
+        double f = evalScatter(it, d, s.wi, mode, pdf);
+        return s.pdf > 0 ? f * std::abs(dot(s.wi, it.n)) / s.pdf : 0.0;
+    }
+    double cosI = std::abs(dot(d, it.n));
+    switch (o.type) {
+        case SurfaceType::Dielectric:
+            return s.weight;  // non-dispersive: identical Fresnel split and n² factor
+        case SurfaceType::Mirror:
+            return o.reflectance.eval(it.lambda);
+        case SurfaceType::Conductor: {
+            bool fromFront = dot(d, it.n) < 0;
+            double nMed = fromFront ? it.nFront : it.nBack;
+            return fresnelConductor(cosI, conductorEta(o, it.lambda, nMed)) * o.reflectance.eval(it.lambda);
+        }
+        default: return 0;
+    }
+}
+
 }  // namespace owe

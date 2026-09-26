@@ -12,6 +12,10 @@
 
 #include "version.hpp"
 
+#ifdef OWE_HAVE_ZLIB
+#include <zlib.h>
+#endif
+
 namespace owe {
 
 void spectralWeights(double lambda, double pdf, double out[3]) {
@@ -26,15 +30,25 @@ ProgressiveRenderer::ProgressiveRenderer(const Scene& scene, int detectorIndex, 
     if (detectorIndex < 0 || detectorIndex >= int(scene.detectors.size())) throw std::runtime_error("no such detector");
     det_ = scene.detectors[detectorIndex].get();
     film_ = Film(det_->width, det_->height);
+    lightFilm_ = Film(det_->width, det_->height);
     threads_ = settings.threads > 0 ? settings.threads : int(std::max(1u, std::thread::hardware_concurrency()));
-    if (settings.integrator != "path" && settings.integrator != "light")
-        throw std::runtime_error("unknown integrator '" + settings.integrator + "' (expected path or light)");
+    if (settings.integrator != "path" && settings.integrator != "light" && settings.integrator != "hybrid")
+        throw std::runtime_error("unknown integrator '" + settings.integrator + "' (expected path, light or hybrid)");
+    if (settings.integrator == "hybrid") {
+        if (!det_->isVirtual())
+            throw std::runtime_error("the hybrid integrator needs a virtual observer; use path or light for surface sensors");
+        tracer_.setCausticPartition(true);
+    }
 }
 
 void ProgressiveRenderer::runPass(int spp) {
     auto t0 = std::chrono::steady_clock::now();
     if (settings_.integrator == "light") passLight(spp);
-    else passPath(spp);
+    else if (settings_.integrator == "path") passPath(spp);
+    else {
+        passPath(spp);
+        passLight(spp);
+    }
     passes_++;
     totalSpp_ += spp;
     seconds_ += std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
@@ -56,18 +70,23 @@ void ProgressiveRenderer::passPath(int spp) {
                     uint64_t pixel = uint64_t(y) * W + x;
                     Rng rng(hashCombine(settings_.seed, pixel), uint64_t(passes_));
                     double acc[3] = {0, 0, 0};
+                    // Hero wavelengths are stratified across the pixel's samples in this pass
+                    // (with a per-pixel random rotation), which suppresses colour noise.
+                    double rot = rng.uniform();
                     for (int s = 0; s < spp; ++s) {
-                        double lambda = sampleVisibleWavelength(rng.uniform());
-                        double pdf = visibleWavelengthPdf(lambda);
+                        double u = (s + rng.uniform()) / spp + rot;
+                        Wavelengths wl = Wavelengths::sample(u - std::floor(u));
                         Ray ray;
                         double weight;
                         double px = x + rng.uniform(), py = y + rng.uniform();
                         if (!det_->generate(px, py, rng, ray, weight) || weight <= 0) continue;
-                        double L = tracer_.radiance(ray, det_->region, lambda, rng, stats[tid]);
-                        if (!(L > 0) || !std::isfinite(L)) continue;
-                        double wts[3];
-                        spectralWeights(lambda, pdf, wts);
-                        for (int c = 0; c < 3; ++c) acc[c] += L * weight * wts[c];
+                        Spec4 L = tracer_.radiance(ray, det_->region, wl, rng, stats[tid]);
+                        if (L.isZero()) continue;
+                        XYZ c = wl.toXYZ(L * weight);
+                        if (!std::isfinite(c.x + c.y + c.z)) continue;  // never poison the accumulation
+                        acc[0] += c.x;
+                        acc[1] += c.y;
+                        acc[2] += c.z;
                     }
                     film_.add(x, y, acc[0], acc[1], acc[2]);
                     film_.samples[pixel] += spp;
@@ -97,13 +116,8 @@ void ProgressiveRenderer::passLight(int ppp) {
             for (uint64_t c = uint64_t(lane); c < chunks; c += lanes) {
                 Rng rng(hashCombine(settings_.seed ^ 0x5bd1e995ULL, c), uint64_t(passes_));
                 uint64_t end = std::min(total, (c + 1) * chunk);
-                for (uint64_t i = c * chunk; i < end; ++i) {
-                    double lambda = sampleVisibleWavelength(rng.uniform());
-                    double pdf = visibleWavelengthPdf(lambda);
-                    double wts[3];
-                    spectralWeights(lambda, pdf, wts);
-                    tracer_.traceParticle(*det_, lambda, wts, rng, films[lane], stats[lane]);
-                }
+                for (uint64_t i = c * chunk; i < end; ++i)
+                    tracer_.traceParticle(*det_, Wavelengths::sample(rng.uniform()), rng, films[lane], stats[lane]);
             }
         }
     };
@@ -111,7 +125,7 @@ void ProgressiveRenderer::passLight(int ppp) {
     for (int i = 0; i < std::min(threads_, lanes); ++i) pool.emplace_back(worker);
     for (auto& th : pool) th.join();
     for (int l = 0; l < lanes; ++l) {
-        film_.merge(films[l]);
+        lightFilm_.merge(films[l]);
         stats_.add(stats[l]);
     }
     particles_ += double(total);
@@ -123,11 +137,11 @@ Image ProgressiveRenderer::resolve() const {
     img.height = film_.height;
     img.xyz.assign(film_.xyz.size(), 0.0);
     size_t n = size_t(img.width) * img.height;
+    double lightNorm = particles_ > 0 ? 1.0 / particles_ : 0;
     for (size_t i = 0; i < n; ++i) {
-        double norm;
-        if (settings_.integrator == "light") norm = particles_ > 0 ? 1.0 / particles_ : 0;
-        else norm = film_.samples[i] > 0 ? 1.0 / film_.samples[i] : 0;
-        for (int c = 0; c < 3; ++c) img.xyz[3 * i + c] = film_.xyz[3 * i + c] * norm;
+        double pathNorm = film_.samples[i] > 0 ? 1.0 / film_.samples[i] : 0;
+        for (int c = 0; c < 3; ++c)
+            img.xyz[3 * i + c] = film_.xyz[3 * i + c] * pathNorm + lightFilm_.xyz[3 * i + c] * lightNorm;
     }
     return img;
 }
@@ -192,7 +206,7 @@ void writePNG(const std::string& path, const Image& img, double exposureEV, bool
         for (int y = 0; y < img.height; ++y)
             for (int x = 0; x < img.width; ++x) {
                 double Y = img.at(x, y).y;
-                if (Y > 0) { s += std::log(Y + 1e-12); n++; }
+                if (Y > 0 && std::isfinite(Y)) { s += std::log(Y + 1e-12); n++; }
             }
         double avg = n ? std::exp(s / n) : 1;
         scale *= 0.18 / std::max(avg, 1e-12);
@@ -214,8 +228,15 @@ void writePNG(const std::string& path, const Image& img, double exposureEV, bool
             }
         }
     }
+    std::vector<unsigned char> z;
+#ifdef OWE_HAVE_ZLIB
+    uLongf zlen = compressBound(uLong(raw.size()));
+    z.resize(zlen);
+    if (compress2(z.data(), &zlen, raw.data(), uLong(raw.size()), 9) != Z_OK) throw std::runtime_error("zlib failure");
+    z.resize(zlen);
+#else
     // zlib stream with stored (uncompressed) deflate blocks.
-    std::vector<unsigned char> z = {0x78, 0x01};
+    z = {0x78, 0x01};
     size_t pos = 0;
     uint32_t a = 1, b = 0;
     for (unsigned char ch : raw) { a = (a + ch) % 65521; b = (b + a) % 65521; }
@@ -229,6 +250,7 @@ void writePNG(const std::string& path, const Image& img, double exposureEV, bool
         pos += len;
     } while (pos < raw.size());
     be32(z, (b << 16) | a);
+#endif
 
     std::ofstream out(path, std::ios::binary);
     if (!out) throw std::runtime_error("cannot write " + path);
@@ -278,9 +300,12 @@ std::string renderMetadataJSON(const Scene& scene, const ProgressiveRenderer& r,
                                                                     : "irradiance [W m^-2] as CIE XYZ")
        << "\"},\n";
     os << "  \"integrator\": \"" << s.integrator << "\",\n";
-    os << "  \"sampling\": {\"wavelengths\": \"one per path, visible-importance pdf on [" << LambdaMin << ", "
+    os << "  \"sampling\": {\"wavelengths\": \"4 per path (hero + 3 stratified; secondaries terminated at dispersive "
+          "interfaces), visible-importance pdf on [" << LambdaMin << ", "
        << LambdaMax << "] nm\", \"fresnel\": \"stochastic branch selection\", \"nee\": true, \"mis\": \"power heuristic\","
-       << " \"russian_roulette_depth\": " << s.rrDepth << "},\n";
+       << " \"russian_roulette_depth\": " << s.rrDepth
+       << (s.integrator == "hybrid" ? ", \"partition\": \"light tracing owns eye-D-S+-light paths, path tracing all others\"" : "")
+       << "},\n";
     os << "  \"seed\": " << s.seed << ",\n";
     os << "  \"samples_per_pixel\": " << r.samplesPerPixel() << ",\n";
     os << "  \"passes\": " << r.passes() << ",\n";

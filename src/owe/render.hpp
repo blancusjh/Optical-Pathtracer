@@ -14,7 +14,8 @@ class ProgressiveRenderer {
 public:
     ProgressiveRenderer(const Scene& scene, int detectorIndex, const RenderSettings& settings);
 
-    void runPass(int samplesPerPixel);  // path: spp; light: particles per pixel
+    // path: spp; light: particles per pixel; hybrid: both, with a disjoint path-space partition.
+    void runPass(int samplesPerPixel);
     Image resolve() const;
     int passes() const { return passes_; }
     long long samplesPerPixel() const { return totalSpp_; }
@@ -30,7 +31,8 @@ private:
     const Detector* det_;
     RenderSettings settings_;
     Tracer tracer_;
-    Film film_;
+    Film film_;       // camera-path estimates (per-pixel sample counts)
+    Film lightFilm_;  // particle splats (normalised by the particle count)
     double particles_ = 0;
     int passes_ = 0;
     long long totalSpp_ = 0;

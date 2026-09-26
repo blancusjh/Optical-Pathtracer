@@ -301,32 +301,46 @@ MeshData makeTerrain(const TerrainSpec& t) {
     return m;
 }
 
-MeshData makeTreeFoliage(double height, double radius, int seg) {
-    // Three stacked cones give a conifer silhouette; base at z = 0.
+namespace {
+// Closed surface of revolution about +z from a profile r(z) (z increasing; r > 0 except the apex),
+// with a flat bottom cap. Outward normals.
+MeshData revolve(const std::vector<std::pair<double, double>>& profile, int seg) {
     MeshData m;
-    for (int tier = 0; tier < 3; ++tier) {
-        double z0 = height * (0.25 + 0.22 * tier), z1 = z0 + height * (0.75 - 0.22 * tier) * 0.75 + height * 0.05;
-        if (tier == 2) z1 = height;
-        double r = radius * (1.0 - 0.28 * tier);
-        Vec3 apex{0, 0, z1};
-        for (int s = 0; s < seg; ++s) {
-            double a0 = 2 * Pi * s / seg, a1 = 2 * Pi * (s + 1) / seg;
-            Vec3 p0{r * std::cos(a0), r * std::sin(a0), z0}, p1{r * std::cos(a1), r * std::sin(a1), z0};
-            m.addTriangle(p0, p1, apex);
-            m.addTriangle(p1, p0, Vec3(0, 0, z0));
+    auto ring = [&](double r, double z, int s) {
+        double a = 2 * Pi * s / seg;
+        return Vec3(r * std::cos(a), r * std::sin(a), z);
+    };
+    for (int s = 0; s < seg; ++s) {
+        for (size_t k = 0; k + 1 < profile.size(); ++k) {
+            auto [r0, z0] = profile[k];
+            auto [r1, z1] = profile[k + 1];
+            Vec3 a = ring(r0, z0, s), b = ring(r0, z0, s + 1), c = ring(r1, z1, s + 1), d = ring(r1, z1, s);
+            if (r1 <= 0) m.addTriangle(a, b, c);
+            else if (r0 <= 0) m.addTriangle(a, c, d);
+            else m.addQuad(a, b, c, d);
         }
+        auto [rb, zb] = profile.front();
+        m.addTriangle(ring(rb, zb, s + 1), ring(rb, zb, s), Vec3(0, 0, zb));  // bottom cap, facing −z
     }
     return m;
 }
+}  // namespace
+
+MeshData makeTreeFoliage(double height, double radius, int seg) {
+    // A conifer silhouette: three tiers with downward-facing ledges; base at z = 0.
+    const double H = height, R = radius;
+    return revolve({{R, 0.0},
+                    {0.42 * R, 0.36 * H},
+                    {0.78 * R, 0.36 * H},
+                    {0.30 * R, 0.68 * H},
+                    {0.55 * R, 0.68 * H},
+                    {0.0, H}},
+                   seg);
+}
 
 MeshData makeTreeTrunk(double height, double radius, int seg) {
-    MeshData m;
-    for (int s = 0; s < seg; ++s) {
-        double a0 = 2 * Pi * s / seg, a1 = 2 * Pi * (s + 1) / seg;
-        Vec3 p0{radius * std::cos(a0), radius * std::sin(a0), 0}, p1{radius * std::cos(a1), radius * std::sin(a1), 0};
-        m.addQuad(p0, p1, p1 + Vec3(0, 0, height), p0 + Vec3(0, 0, height));
-    }
-    return m;
+    // Closed cylinder: side, top and bottom caps.
+    return revolve({{radius, 0.0}, {radius, height}, {0.0, height}}, seg);
 }
 
 int buildForest(World& w, const std::string& name, const TerrainSpec& terrain, int count, double r0, double r1,
@@ -338,8 +352,9 @@ int buildForest(World& w, const std::string& name, const TerrainSpec& terrain, i
     std::vector<double> heights;
     for (int v = 0; v < variants; ++v) {
         double h = 6 + 4.0 * v;
-        MeshData f = makeTreeFoliage(h, h * 0.22, 10);
-        MeshData t = makeTreeTrunk(h * 0.3, h * 0.025, 6);
+        MeshData f = makeTreeFoliage(h * 0.88, h * 0.22, 10);
+        // Trunk from 0.4 m below the ground reference up to just under the foliage base.
+        MeshData t = makeTreeTrunk(h * 0.12 + 0.39, h * 0.025, 6);
         foliage.push_back(std::make_shared<MeshShape>(f.positions, f.triangles, "foliage"));
         trunks.push_back(std::make_shared<MeshShape>(t.positions, t.triangles, "trunk"));
         heights.push_back(h);
@@ -350,12 +365,13 @@ int buildForest(World& w, const std::string& name, const TerrainSpec& terrain, i
         double a = 2 * Pi * rng.uniform();
         double x = r * std::cos(a), y = r * std::sin(a);
         if (std::abs(x) > terrain.sizeX / 2 || std::abs(y) > terrain.sizeY / 2) continue;
-        double z = terrainHeight(terrain, x, y) - 0.2;
+        double z = terrainHeight(terrain, x, y);
         int v = int(rng.uniform() * variants) % variants;
         Transform place = Transform::translate({x, y, z}) * Transform::rotate({0, 0, 1}, 2 * Pi * rng.uniform());
         w.addBoundary(body, "tree" + std::to_string(i) + ".foliage", foliage[v],
                       place * Transform::translate({0, 0, heights[v] * 0.12}), kOutside, inside, foliageOptics);
-        w.addBoundary(body, "tree" + std::to_string(i) + ".trunk", trunks[v], place, kOutside, inside, trunkOptics);
+        w.addBoundary(body, "tree" + std::to_string(i) + ".trunk", trunks[v], place * Transform::translate({0, 0, -0.4}),
+                      kOutside, inside, trunkOptics);
     }
     return body;
 }

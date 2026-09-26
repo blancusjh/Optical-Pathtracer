@@ -332,7 +332,9 @@ BuiltInstrument buildPrescription(World& w, const Prescription& p, const std::st
         bi.rearNearestZ = std::max({bi.vertexZ[j], zLastEdge, bi.vertexZ[i], zFirstEdge});
         bi.rearEdgeRadius = edge;
         if (tubeRadius > edge) {
-            int m = buildStop(w, label + "-mount", edge, tubeRadius, bi.assembly,
+            // The mount's bore clears the rim by 1e-9 relative (picometres) so the two bodies do
+            // not share an edge; rays then never meet an ambiguous rim/mount junction.
+            int m = buildStop(w, label + "-mount", edge * (1 + 1e-9), tubeRadius, bi.assembly,
                               Transform::translate({0, 0, 0.5 * (zFirstEdge + zLastEdge)}));
             bi.bodies.push_back(m);
         }
