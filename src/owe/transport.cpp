@@ -99,6 +99,7 @@ Interface Tracer::makeInterface(const SurfaceHit& hit, double lambda) const {
     it.nFront = world_.indexOf(b.front, lambda);
     it.nBack = world_.indexOf(b.back, lambda);
     it.lambda = lambda;
+    it.fresnelFloor = fresnelFloor_;
     return it;
 }
 
@@ -181,6 +182,7 @@ Spec4 Tracer::directLighting(const SurfaceHit& hit, const Vec3& d, const Wavelen
 
 Spec4 Tracer::radiance(Ray ray, uint32_t region, Wavelengths& wl, Rng& rng, TransportStats& st, PathRecord* rec) const {
     Spec4 L(0.0), beta(1.0);
+    uint32_t lastBoundary = kNone;
     maskTerminated(wl, beta);
     double opl = 0;
     bool specular = true;
@@ -283,10 +285,11 @@ Spec4 Tracer::radiance(Ray ray, uint32_t region, Wavelengths& wl, Rng& rng, Tran
         uint32_t inc = fromFront ? b.front : b.back;
         uint32_t other = fromFront ? b.back : b.front;
         if (inc != region) {
-            st.inconsistencies++;
+            st.noteInconsistency(hit.boundary, region, inc, lastBoundary, hit.p);
             region = inc;
         }
         const SurfaceOptics& o = world_.optics()[b.optics];
+        lastBoundary = hit.boundary;
         size_t vIndex = rec ? rec->v.size() : 0;
         if (rec) pushVertex(rec, hit.p, ray.d, EventKind::None, hit.boundary, inc, inc, nMed, world_.indexOf(other, hero),
                             1, 1, 0, 0, opl, beta[0]);
@@ -467,6 +470,7 @@ void Tracer::traceParticle(const Detector& det, Wavelengths wl, Rng& rng, Film& 
         pushVertex(rec, ray.o, ray.d, EventKind::Emit, emitterBoundary, region, region, 0, 0, 1, 1, 0, 0, 0, beta[0]);
     }
     double opl = 0;
+    uint32_t lastBoundary = emitterBoundary;
     int targetBoundary = det.boundary();
     int nonDeltaEvents = 0, deltaEvents = 0;
     // Under the caustic partition, connect only at the first non-specular vertex after ≥1 specular one.
@@ -555,10 +559,11 @@ void Tracer::traceParticle(const Detector& det, Wavelengths wl, Rng& rng, Film& 
         uint32_t inc = fromFront ? b.front : b.back;
         uint32_t other = fromFront ? b.back : b.front;
         if (inc != region) {
-            st.inconsistencies++;
+            st.noteInconsistency(hit.boundary, region, inc, lastBoundary, hit.p);
             region = inc;
         }
         const SurfaceOptics& o = w.optics()[b.optics];
+        lastBoundary = hit.boundary;
         if (o.type == SurfaceType::Null) {
             pushVertex(rec, hit.p, ray.d, EventKind::Pass, hit.boundary, inc, other, nMed, w.indexOf(other, hero), 1, 1, 0,
                        1, opl, beta[0]);

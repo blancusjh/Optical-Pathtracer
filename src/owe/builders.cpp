@@ -236,26 +236,49 @@ int buildSheet(World& w, const std::string& name, double hx, double hy, uint32_t
 }
 
 int buildCup(World& w, const std::string& name, double Ro, double wall, double base, double H, double level,
-             const std::string& glass, const std::string& liquid, int assembly, const Transform& xf) {
+             const std::string& glass, const std::string& liquid, int assembly, const Transform& xf, const CupRod& rod) {
     double Ri = Ro - wall;
     if (!(Ri > 0) || !(H > base) || level < 0 || base + level > H) throw std::runtime_error("cup '" + name + "': bad dimensions");
+    bool hasRod = rod.radius > 0;
+    if (hasRod && (std::hypot(rod.x, rod.y) + rod.radius >= Ri || rod.top <= base + level))
+        throw std::runtime_error("cup '" + name + "': the rod must stand inside the cup and rise above the liquid");
     int body = w.addBody(name, "cup", assembly, xf);
     uint32_t G = w.addRegion(name + ".glass", w.medium(glass), body);
     uint32_t d = w.dielectricOptics(0);
     w.addBoundary(body, "outer-wall", std::make_shared<CylinderShape>(Ro, 0, H), Transform{}, kOutside, G, d);
     w.addBoundary(body, "outer-bottom", PlaneShape::disk(Ro), flipZ(), kOutside, G, d);
     w.addBoundary(body, "rim", PlaneShape::disk(Ro, Ri), Transform::translate({0, 0, H}), kOutside, G, d);
+    uint32_t L = kOutside;
     if (level > 0) {
-        uint32_t L = w.addRegion(name + ".liquid", w.medium(liquid), body);
+        L = w.addRegion(name + ".liquid", w.medium(liquid), body);
         w.addBoundary(body, "inner-wall-wet", std::make_shared<CylinderShape>(Ri, base, base + level), Transform{}, G, L, d);
         w.addBoundary(body, "inner-bottom", PlaneShape::disk(Ri), Transform::translate({0, 0, base}), L, G, d);
-        w.addBoundary(body, "liquid-surface", PlaneShape::disk(Ri), Transform::translate({0, 0, base + level}), kOutside, L, d);
+        std::shared_ptr<const Shape> surface =
+            hasRod ? std::static_pointer_cast<const Shape>(PlaneShape::diskWithHole(Ri, rod.radius, rod.x, rod.y))
+                   : std::static_pointer_cast<const Shape>(PlaneShape::disk(Ri));
+        w.addBoundary(body, "liquid-surface", surface, Transform::translate({0, 0, base + level}), kOutside, L, d);
         if (base + level < H)
             w.addBoundary(body, "inner-wall-dry", std::make_shared<CylinderShape>(Ri, base + level, H), Transform{}, G,
                           kOutside, d);
     } else {
         w.addBoundary(body, "inner-wall", std::make_shared<CylinderShape>(Ri, base, H), Transform{}, G, kOutside, d);
         w.addBoundary(body, "inner-bottom", PlaneShape::disk(Ri), Transform::translate({0, 0, base}), kOutside, G, d);
+    }
+    if (hasRod) {
+        bool clear = !rod.medium.empty();
+        uint32_t R = w.addRegion(name + ".rod", w.medium(clear ? rod.medium : "opaque"), body);
+        uint32_t ro = clear ? d : rod.optics;
+        double z0 = base + 1e-3;  // rests 1 mm above the bottom: bodies never share faces
+        Transform at = Transform::translate({rod.x, rod.y, 0});
+        uint32_t below = level > 0 ? L : kOutside;
+        double zs = level > 0 ? base + level : z0;
+        w.addBoundary(body, "rod-bottom", PlaneShape::disk(rod.radius), at * Transform::translate({0, 0, z0}) * flipZ(), below,
+                      R, ro);
+        if (level > 0)
+            w.addBoundary(body, "rod-wet", std::make_shared<CylinderShape>(rod.radius, z0, zs), at, below, R, ro);
+        w.addBoundary(body, "rod-dry", std::make_shared<CylinderShape>(rod.radius, zs, rod.top), at, kOutside, R, ro);
+        w.addBoundary(body, "rod-top", PlaneShape::disk(rod.radius), at * Transform::translate({0, 0, rod.top}), kOutside, R,
+                      ro);
     }
     return body;
 }
@@ -395,7 +418,7 @@ int buildFractalStatue(World& w, const std::string& name, double radius, int dep
         orientOutward(ped);
     }
     w.addBoundary(body, "pedestal", std::make_shared<MeshShape>(ped.positions, ped.triangles, "pedestal"),
-                  Transform::translate({0, 0, -radius * 0.02}), kOutside, inside, pedestalOptics);
+                  Transform::translate({0, 0, -radius * 1e-6}), kOutside, inside, pedestalOptics);
     static const Vec3 dirs[6] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
     std::vector<std::shared_ptr<SphereShape>> shapes;
     double r = radius;
@@ -409,7 +432,9 @@ int buildFractalStatue(World& w, const std::string& name, double radius, int dep
         for (int k = 0; k < 6; ++k) {
             if (parentDir >= 0 && k == (parentDir ^ 1)) continue;  // skip the direction back to the parent
             if (level == 0 && k == 5) continue;                    // nothing sinks into the pedestal
-            rec(c + dirs[k] * (rl + rc), level + 1, k);
+            // Tangent spheres would touch at a single point (a degenerate contact); a 1e-7
+            // relative clearance keeps every body disjoint without any visible gap.
+            rec(c + dirs[k] * ((rl + rc) * (1 + 1e-7)), level + 1, k);
         }
     };
     rec(Vec3(0, 0, radius), 0, -1);

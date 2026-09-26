@@ -117,9 +117,11 @@ bool sampleScatter(const Interface& it, const Vec3& d, double uc, double u1, dou
                 s.T = 1 - R;
                 s.delta = true;
                 s.pdf = 0;
-                if (uc < R) {
+                double pR = R;
+                if (it.fresnelFloor > 0 && R < 1) pR = clampd(R, it.fresnelFloor, 1 - it.fresnelFloor);
+                if (uc < pR) {
                     s.wi = frame.toWorld(Vec3(-wo.x, -wo.y, wo.z));
-                    s.weight = 1;
+                    s.weight = R / pR;
                     s.event = R >= 1 ? EventKind::TIR : EventKind::Reflect;
                     s.transmitted = false;
                     s.cosT = s.cosI;
@@ -127,7 +129,7 @@ bool sampleScatter(const Interface& it, const Vec3& d, double uc, double u1, dou
                     Vec3 wt;
                     if (!refractDirection(d, it.n, ni, nt, wt)) return false;
                     s.wi = wt;
-                    s.weight = mode == TransportMode::Radiance ? sqr(ni / nt) : 1.0;
+                    s.weight = (1 - R) / (1 - pR) * (mode == TransportMode::Radiance ? sqr(ni / nt) : 1.0);
                     s.event = EventKind::Refract;
                     s.transmitted = true;
                     s.cosT = std::abs(dot(wt, it.n));

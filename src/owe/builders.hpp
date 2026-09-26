@@ -73,9 +73,17 @@ int buildSheet(World& w, const std::string& name, double halfX, double halfY, ui
                int assembly, const Transform& xf, bool disk = false);
 int buildMesh(World& w, const std::string& name, const MeshData& mesh, const BodyMaterial& m, int assembly,
               const Transform& xf);
-// Drinking glass with water: z up, base at z = 0.
+// Drinking glass with water: z up, base at z = 0. Optionally a vertical rod (radius rodRadius,
+// centred at rodX, rodY, rising to rodTop) stands in it, crossing the liquid surface through a
+// matching hole so that all matter stays disjoint. rodMedium empty = opaque rod with rodOptics.
+struct CupRod {
+    double radius = 0, x = 0, y = 0, top = 0;
+    std::string medium;        // transparent rod (e.g. "N-BK7"); empty = opaque
+    uint32_t optics = 0;       // opaque rod surface
+};
 int buildCup(World& w, const std::string& name, double outerRadius, double wall, double base, double height,
-             double waterLevel, const std::string& glass, const std::string& liquid, int assembly, const Transform& xf);
+             double waterLevel, const std::string& glass, const std::string& liquid, int assembly, const Transform& xf,
+             const CupRod& rod = CupRod{});
 
 // Procedural natural geometry.
 struct TerrainSpec {

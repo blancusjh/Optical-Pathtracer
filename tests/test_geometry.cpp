@@ -22,6 +22,26 @@ TEST(sphere_intersection_inside_and_outside) {
     CHECK_NEAR(h.p.z, -2.0, 1e-9);
 }
 
+TEST(quadric_hits_stay_precise_for_distant_origins) {
+    // Rays arriving from 400 m must land on 5 cm surfaces to within an ulp of the origin (~1e-13 m),
+    // otherwise the origin offset of the next segment can start inside the body.
+    Rng rng(21, 22);
+    CylinderShape cyl(0.05, 0, 1.5);
+    SphereShape sph(0.05);
+    SagSurface cap(1 / 0.03, -0.5, {}, 0.02);
+    for (int i = 0; i < 5000; ++i) {
+        Vec3 target{0.05 * (rng.uniform() - 0.5), 0.05 * (rng.uniform() - 0.5), 0.2 + rng.uniform()};
+        Vec3 far = target + sampleUniformSphere(rng.uniform(), rng.uniform()) * 400.0;
+        Ray r{far, normalize(target - far)};
+        LocalHit h;
+        if (cyl.intersect(r, 0, Inf, h)) CHECK_NEAR(std::hypot(h.p.x, h.p.y), 0.05, 1e-13);
+        Ray rs{far - Vec3(0, 0, 0.7), r.d};
+        if (sph.intersect(rs, 0, Inf, h)) CHECK_NEAR(length(h.p), 0.05, 1e-13);
+        Ray rc{far - Vec3(0, 0, 0.7), r.d};
+        if (cap.intersect(rc, 0, Inf, h)) CHECK_NEAR(cap.sag(std::hypot(h.p.x, h.p.y)), h.p.z, 1e-13);
+    }
+}
+
 TEST(sag_surface_hits_lie_on_surface_with_correct_normal) {
     Rng rng(2, 3);
     struct Case { double c, k; std::vector<double> A; };

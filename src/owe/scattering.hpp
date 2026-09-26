@@ -34,6 +34,9 @@ struct Interface {
     Vec3 pLocal, nLocal; // shape-local position/normal (for textures)
     double nFront = 1, nBack = 1;  // refractive indices at the current wavelength
     double lambda = 550;
+    // Sampling knob (not physics): smooth-dielectric branches are chosen with probability
+    // max(R, floor) / max(T, floor) and reweighted, so rare ghost reflections are explored.
+    double fresnelFloor = 0;
 };
 
 struct ScatterSample {

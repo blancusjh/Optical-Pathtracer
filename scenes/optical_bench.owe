@@ -1,0 +1,32 @@
+# THE OPTICAL BENCH — an illuminated letter "F", a biconvex lens in a 2f–2f arrangement and a
+# sensor surface that is part of the world. Rendering the sensor with the light tracer gives
+# the irradiance actually deposited on it: an inverted, slightly aberrated, colour-fringed F.
+# The Eye observer looks at the bench itself.
+units = mm
+
+world { sky = uniform(rgb(1, 1, 1, luminance = 0.02)) }
+
+material rail { type = conductor  metal = aluminium  roughness = 0.3 }
+
+# The object: three emissive plates forming an "F" (24 mm tall), facing the lens (+y).
+body F_stem { type = sheet  size = (4, 24)   position = (-6, 0, 0)  axis = (0, 1, 0)  up = (0, 0, 1)
+              material = black  emission = blackbody(4500K, 2000) }
+body F_top  { type = sheet  size = (12, 4)   position = (2, 0, 10)  axis = (0, 1, 0)  up = (0, 0, 1)
+              material = black  emission = blackbody(4500K, 2000) }
+body F_mid  { type = sheet  size = (8, 4)    position = (0, 0, 0)   axis = (0, 1, 0)  up = (0, 0, 1)
+              material = black  emission = blackbody(4500K, 2000) }
+
+body Lens   { type = lens  medium = N-BK7  focal = 100  form = bi  diameter = 40  thickness = 8  rim = black
+              position = (0, 196.2, 0)  axis = (0, 1, 0) }
+
+# Iris just in front of the lens: close it to trade brightness for sharpness (less spherical aberration).
+body Iris   { type = iris  aperture = 14  outer_diameter = 90  position = (0, 190, 0)  axis = (0, 1, 0) }
+
+sensor Sensor { size = (40, 40)  resolution = (240, 240)  position = (0, 403.8, 0)  axis = (0, -1, 0)  up = (0, 0, 1) }
+
+body Rail   { type = box  size = (30, 520, 8)  position = (0, 200, -40)  material = rail }
+
+observer Eye { position = (260, -120, 160)  look_at = (0, 200, -10)  fov = 42deg  pupil = 3  focus = 380
+               resolution = (480, 320) }
+
+render { detector = Sensor  spp = 400  integrator = light }

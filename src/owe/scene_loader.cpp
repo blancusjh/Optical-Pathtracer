@@ -545,9 +545,19 @@ private:
             MeshData md = loadObj(path(str(need(b, "file"))), getNum(b, "scale", 1.0) * unit_);
             buildMesh(w_, name, md, solidMaterial(b), assembly, xf);
         } else if (type == "cup") {
+            CupRod rod;
+            if (auto r = b.get("rod")) {
+                // rod = rod(diameter = 7mm, at = (x, y), top = 0.16, medium = N-BK7 | material = ...)
+                rod.radius = getRadius(*r, "", 0.0035);
+                if (auto at = r->get("at")) { auto q = seq(*at, 2); rod.x = len(*q[0]); rod.y = len(*q[1]); }
+                rod.top = getLen(*r, "top", getLen(b, "height", 0.11) + 0.05);
+                rod.medium = getStr(*r, "medium", "");
+                if (rod.medium.empty()) rod.optics = r->has("material") ? materialRef(need(*r, "material")) : materials_.at("white");
+                else w_.medium(rod.medium);
+            }
             buildCup(w_, name, getRadius(b, "outer_", 0.035), getLen(b, "wall", 0.0025), getLen(b, "base", 0.008),
                      getLen(b, "height", 0.11), getLen(b, "level", 0.07), getStr(b, "glass", "N-BK7"),
-                     getStr(b, "liquid", "water"), assembly, xf);
+                     getStr(b, "liquid", "water"), assembly, xf, rod);
         } else if (type == "terrain") {
             TerrainSpec t = terrainSpec(b);
             terrains_[name] = {t, xf};
@@ -718,6 +728,7 @@ private:
         r.seed = uint64_t(getNum(b, "seed", double(r.seed)));
         r.maxDepth = int(getNum(b, "max_depth", r.maxDepth));
         r.exposure = getNum(b, "exposure", r.exposure);
+        r.fresnelFloor = getNum(b, "fresnel_floor", r.fresnelFloor);
         if (auto a = b.get("auto_exposure")) r.autoExposure = boolean(*a);
     }
 

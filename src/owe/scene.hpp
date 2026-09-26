@@ -18,6 +18,7 @@ struct RenderSettings {
     int maxDepth = 64;
     int rrDepth = 6;
     int threads = 0;                // 0 = hardware concurrency
+    double fresnelFloor = 0;        // sampling knob: min branch probability at smooth dielectrics
     double exposure = 0;            // EV applied to the display image only
     bool autoExposure = true;
 };

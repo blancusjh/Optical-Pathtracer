@@ -1,0 +1,41 @@
+# THE PRISM — a spectroscope on a dark table: lamp → slit → collimating lens → 60° N-SF11
+# prism at minimum deviation → white screen. The spectrum is not painted: each wavelength
+# refracts by n(λ) at two faces and lands where geometry sends it.
+units = m
+
+world { sky = uniform(rgb(1, 1, 1, luminance = 0.015)) }
+
+material felt   { type = diffuse  reflectance = rgb(0.10, 0.10, 0.12) }
+material screen { type = diffuse  reflectance = 0.85 }
+
+body Table { type = sheet  size = (1.6, 1.6)  position = (0, 0.2, 0)  material = felt }
+
+# Lamp house: a tungsten bead inside a black tube closed by a 1 mm slit.
+body Lamp      { type = sphere  radius = 4mm  position = (-0.345, 0, 0.1)  material = black
+                 emission = blackbody(3200K, 2e4) }
+body LampTube  { type = tube  radius = 20mm  length = 40mm  position = (-0.36, 0, 0.1)  axis = (1, 0, 0) }
+body LampBack  { type = disk  radius = 20mm  position = (-0.36, 0, 0.1)  axis = (-1, 0, 0)  material = black }
+body SlitJawA  { type = sheet  size = (20mm, 40mm)  position = (-0.32,  0.0105, 0.1)  axis = (1, 0, 0)  up = (0, 0, 1)
+                 material = black }
+body SlitJawB  { type = sheet  size = (20mm, 40mm)  position = (-0.32, -0.0105, 0.1)  axis = (1, 0, 0)  up = (0, 0, 1)
+                 material = black }
+
+# Collimator: f = 100 mm achromat-free singlet with the slit at its focal plane.
+body Collimator { type = lens  medium = N-BK7  focal = 100mm  form = bi  diameter = 30mm  thickness = 6mm
+                  rim = black  position = (-0.2235, 0, 0.1)  axis = (1, 0, 0) }
+
+# Baffle: blocks slit light that would miss the collimator.
+body Baffle { type = stop  aperture = 30mm  outer_diameter = 0.24  position = (-0.229, 0, 0.1)  axis = (1, 0, 0) }
+
+# 60° N-SF11 prism turned close to minimum deviation (theory: 66.4° at 587.6 nm; `owe emit` gives 68.0° here).
+body Prism { type = prism  apex = 60deg  side = 50mm  length = 40mm  medium = N-SF11
+             position = (0, 0, 0.1)  rotate = (0, 0, -33.2deg) }
+
+# Screen 0.6 m along the deviated beam.
+body Screen { type = sheet  size = (0.34, 0.16)  material = screen
+              position = (0.224, 0.556, 0.1)  axis = (-0.374, -0.927, 0)  up = (0, 0, 1) }
+
+observer Eye { position = (0.16, -0.20, 0.36)  look_at = (0.08, 0.30, 0.09)
+               fov = 55deg  pupil = 4mm  focus = 0.7  resolution = (640, 400) }
+
+render { detector = Eye  spp = 256  integrator = hybrid }

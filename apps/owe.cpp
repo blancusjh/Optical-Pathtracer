@@ -39,7 +39,7 @@ const std::map<std::string, int> kArity = {
     {"--max-depth", 1}, {"--out", 1},    {"--exposure", 1}, {"--pixel", 2},    {"--samples", 1},    {"--svg", 1},
     {"--json", 1},     {"--from", 1},    {"--dir", 1},      {"--toward", 1},   {"--cone", 1},       {"--rays", 1},
     {"--lambda", 1},   {"--plane", 1},   {"--origin", 1},   {"--fields", 1},   {"--resolution", 1}, {"--field", 1},
-    {"--bounds", 1},   {"--title", 1}};
+    {"--bounds", 1},   {"--title", 1},      {"--fresnel-floor", 1}};
 
 Args parse(int argc, char** argv, int start) {
     Args a;
@@ -108,7 +108,7 @@ void usage() {
         "\n"
         "  owe render <scene.owe> [--detector NAME] [--spp N] [--passes K] [--integrator path|light]\n"
         "                         [--seed S] [--threads T] [--max-depth D] [--resolution WxH]\n"
-        "                         [--out PREFIX] [--exposure EV] [--no-auto-exposure]\n"
+        "                         [--out PREFIX] [--exposure EV] [--no-auto-exposure] [--fresnel-floor P]\n"
         "      Progressive spectral render. Writes PREFIX.png (display), PREFIX.pfm (raw linear) and\n"
         "      PREFIX.json (reproducibility record) after every pass.\n"
         "\n"
@@ -136,6 +136,7 @@ int cmdRender(const Args& a) {
     if (a.has("--threads")) rs.threads = std::stoi(a.get("--threads"));
     if (a.has("--max-depth")) rs.maxDepth = std::stoi(a.get("--max-depth"));
     if (a.has("--exposure")) rs.exposure = std::stod(a.get("--exposure"));
+    if (a.has("--fresnel-floor")) rs.fresnelFloor = std::stod(a.get("--fresnel-floor"));
     if (a.has("--no-auto-exposure")) rs.autoExposure = false;
     int di = detectorIndex(scene, a);
     if (a.has("--resolution")) {
@@ -167,6 +168,15 @@ int cmdRender(const Args& a) {
     std::fprintf(stderr, "paths %llu, segments %llu, region inconsistencies %llu, leaks %llu\n",
                  (unsigned long long)st.paths, (unsigned long long)st.segments, (unsigned long long)st.inconsistencies,
                  (unsigned long long)st.leaks);
+    if (st.inconsistencies) {
+        const auto& f = st.first;
+        std::fprintf(stderr,
+                     "first inconsistency: ray in %s, last at %s, met %s (whose side there is %s) at (%.9g, %.9g, %.9g)\n",
+                     scene.world.regionLabel(f.rayRegion).c_str(),
+                     f.previous == kNone ? "its origin" : scene.world.boundaryLabel(f.previous).c_str(),
+                     scene.world.boundaryLabel(f.boundary).c_str(), scene.world.regionLabel(f.boundaryRegion).c_str(), f.p.x,
+                     f.p.y, f.p.z);
+    }
     std::printf("%s.png %s.pfm %s.json\n", out.c_str(), out.c_str(), out.c_str());
     return 0;
 }

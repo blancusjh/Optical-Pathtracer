@@ -31,6 +31,7 @@ ProgressiveRenderer::ProgressiveRenderer(const Scene& scene, int detectorIndex, 
     det_ = scene.detectors[detectorIndex].get();
     film_ = Film(det_->width, det_->height);
     lightFilm_ = Film(det_->width, det_->height);
+    tracer_.setFresnelFloor(settings.fresnelFloor);
     threads_ = settings.threads > 0 ? settings.threads : int(std::max(1u, std::thread::hardware_concurrency()));
     if (settings.integrator != "path" && settings.integrator != "light" && settings.integrator != "hybrid")
         throw std::runtime_error("unknown integrator '" + settings.integrator + "' (expected path, light or hybrid)");
@@ -303,7 +304,7 @@ std::string renderMetadataJSON(const Scene& scene, const ProgressiveRenderer& r,
     os << "  \"sampling\": {\"wavelengths\": \"4 per path (hero + 3 stratified; secondaries terminated at dispersive "
           "interfaces), visible-importance pdf on [" << LambdaMin << ", "
        << LambdaMax << "] nm\", \"fresnel\": \"stochastic branch selection\", \"nee\": true, \"mis\": \"power heuristic\","
-       << " \"russian_roulette_depth\": " << s.rrDepth
+       << " \"russian_roulette_depth\": " << s.rrDepth << ", \"fresnel_floor\": " << s.fresnelFloor
        << (s.integrator == "hybrid" ? ", \"partition\": \"light tracing owns eye-D-S+-light paths, path tracing all others\"" : "")
        << "},\n";
     os << "  \"seed\": " << s.seed << ",\n";
@@ -312,7 +313,11 @@ std::string renderMetadataJSON(const Scene& scene, const ProgressiveRenderer& r,
     os << "  \"max_depth\": " << s.maxDepth << ",\n";
     os << "  \"render_seconds\": " << r.seconds() << ",\n";
     os << "  \"statistics\": {\"paths\": " << r.stats().paths << ", \"segments\": " << r.stats().segments
-       << ", \"region_inconsistencies\": " << r.stats().inconsistencies << ", \"leaks\": " << r.stats().leaks << "},\n";
+       << ", \"region_inconsistencies\": " << r.stats().inconsistencies << ", \"leaks\": " << r.stats().leaks;
+    if (r.stats().inconsistencies)
+        os << ", \"first_inconsistency\": {\"boundary\": \"" << jsonEscape(w.boundaryLabel(r.stats().first.boundary))
+           << "\", \"ray_region\": \"" << jsonEscape(w.regionLabel(r.stats().first.rayRegion)) << "\"}";
+    os << "},\n";
     os << "  \"mean_Y\": " << img.meanY() << ",\n";
     os << "  \"world\": {\"media\": [";
     for (size_t i = 0; i < w.media().size(); ++i)

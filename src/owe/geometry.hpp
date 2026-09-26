@@ -77,14 +77,17 @@ private:
 // Plane z = 0 trimmed by an aperture. Normal +z.
 class PlaneShape : public Shape {
 public:
-    enum class Aperture { Disk, Rect, Ellipse };
+    enum class Aperture { Disk, Rect, Ellipse, DiskHole };
     static std::shared_ptr<PlaneShape> disk(double rMax, double rMin = 0);
+    // Disk of radius rMax with a circular hole of radius holeR centred at (hx, hy).
+    static std::shared_ptr<PlaneShape> diskWithHole(double rMax, double holeR, double hx, double hy);
     static std::shared_ptr<PlaneShape> rect(double halfX, double halfY);
     static std::shared_ptr<PlaneShape> ellipse(double semiX, double semiY);
     bool intersect(const Ray& r, double tmin, double tmax, LocalHit& h) const override;
     AABB bounds() const override;
     std::string describe() const override;
-    bool canSample() const override { return true; }
+    // A holed disk has no exact area sampler here; emitters on it are still found by BSDF sampling.
+    bool canSample() const override { return ap_ != Aperture::DiskHole; }
     double area() const override;
     void sampleArea(double u1, double u2, double u3, Vec3& p, Vec3& n) const override;
     Aperture aperture() const { return ap_; }
@@ -93,7 +96,8 @@ public:
 
 private:
     Aperture ap_ = Aperture::Disk;
-    double a_ = 0, b_ = 0;  // disk: rMax, rMin; rect: halfX, halfY; ellipse: semiX, semiY
+    double a_ = 0, b_ = 0;  // disk: rMax, rMin; rect: halfX, halfY; ellipse: semiX, semiY; hole: rMax, holeR
+    double hx_ = 0, hy_ = 0;  // hole centre
 };
 
 // Full sphere centred at the origin, outward normal.
