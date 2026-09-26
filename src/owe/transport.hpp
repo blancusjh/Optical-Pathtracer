@@ -42,7 +42,18 @@ struct PathRecord {
 
 struct TransportStats {
     uint64_t paths = 0, segments = 0, inconsistencies = 0, leaks = 0;
+    // First region inconsistency seen: a ray reached a boundary from a region other than
+    // the one it was travelling in (overlapping or unclosed geometry).
+    struct Inconsistency {
+        uint32_t boundary = kNone, rayRegion = kNone, boundaryRegion = kNone, previous = kNone;
+        Vec3 p;
+    } first;
+    void noteInconsistency(uint32_t boundary, uint32_t rayRegion, uint32_t boundaryRegion, uint32_t previous,
+                           const Vec3& p) {
+        if (inconsistencies++ == 0) first = {boundary, rayRegion, boundaryRegion, previous, p};
+    }
     void add(const TransportStats& o) {
+        if (inconsistencies == 0 && o.inconsistencies > 0) first = o.first;
         paths += o.paths; segments += o.segments; inconsistencies += o.inconsistencies; leaks += o.leaks;
     }
 };
@@ -61,6 +72,9 @@ public:
     // D non-specular, S specular) are owned by light tracing, every other path by path
     // tracing. The partition is disjoint and complete, so the summed estimate is unbiased.
     void setCausticPartition(bool on) { partition_ = on; }
+    // Minimum probability of choosing either branch at smooth dielectric interfaces (0 = exact
+    // Fresnel probabilities). Unbiased for any value in [0, 0.5); raises ghost-path sampling.
+    void setFresnelFloor(double f) { fresnelFloor_ = clampd(f, 0.0, 0.49); }
 
     // Spectral radiance (or its adjoint measurement) arriving along -ray.d at ray.o, at the
     // path's wavelengths. `wl` may have its secondary wavelengths terminated on return.
@@ -91,6 +105,7 @@ private:
     const World& world_;
     int maxDepth_, rrDepth_;
     bool partition_ = false;
+    double fresnelFloor_ = 0;
 };
 
 }  // namespace owe

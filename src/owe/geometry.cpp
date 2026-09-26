@@ -52,6 +52,20 @@ int solveQuadratic(double a, double b, double c, double& t0, double& t1) {
     if (t0 > t1) std::swap(t0, t1);
     return 2;
 }
+// Distant origins lose precision in the quadratic's coefficients (cancellation in c and in
+// the discriminant). Re-solving from the approximate hit point, where all quantities are
+// small, and adding the correction restores near-full precision at any distance.
+template <class Coeffs>
+double refineRoot(const Ray& r, double t, Coeffs coeffs) {
+    Vec3 o1 = r.at(t);
+    double A, B, C;
+    coeffs(o1, A, B, C);
+    double u0, u1;
+    int n = solveQuadratic(A, B, C, u0, u1);
+    if (n == 0) return t;
+    double du = std::abs(u0) < std::abs(u1) ? u0 : u1;
+    return std::abs(du) < 1e-6 * (1 + std::abs(t)) ? t + du : t;
+}
 }  // namespace
 
 // ---------------------------------------------------------------- SagSurface
@@ -112,29 +126,32 @@ bool SagSurface::intersect(const Ray& r, double tmin, double tmax, LocalHit& h) 
 }
 
 bool SagSurface::intersectQuadric(const Ray& ray, double tmin, double tmax, LocalHit& h) const {
-    const Vec3& o = ray.o;
     const Vec3& d = ray.d;
     double t0, t1;
     int n;
+    // c(x²+y²) + c(1+k) z² − 2z = 0
+    double ck = c_ * (1 + k_);
+    auto coeffs = [&](const Vec3& o, double& A, double& B, double& C) {
+        A = c_ * (d.x * d.x + d.y * d.y) + ck * d.z * d.z;
+        B = 2 * (c_ * (o.x * d.x + o.y * d.y) + ck * o.z * d.z - d.z);
+        C = c_ * (o.x * o.x + o.y * o.y) + ck * o.z * o.z - 2 * o.z;
+    };
     if (c_ == 0) {
         if (d.z == 0) return false;
-        t0 = t1 = -o.z / d.z;
+        t0 = t1 = -ray.o.z / d.z;
         n = 1;
     } else {
-        // c(x²+y²) + c(1+k) z² − 2z = 0
-        double ck = c_ * (1 + k_);
-        double A = c_ * (d.x * d.x + d.y * d.y) + ck * d.z * d.z;
-        double B = 2 * (c_ * (o.x * d.x + o.y * d.y) + ck * o.z * d.z - d.z);
-        double C = c_ * (o.x * o.x + o.y * o.y) + ck * o.z * o.z - 2 * o.z;
+        double A, B, C;
+        coeffs(ray.o, A, B, C);
         n = solveQuadratic(A, B, C, t0, t1);
     }
     for (int i = 0; i < n; ++i) {
         double t = i == 0 ? t0 : t1;
+        if (c_ != 0) t = refineRoot(ray, t, coeffs);
         if (t <= tmin || t >= tmax) continue;
         Vec3 p = ray.at(t);
         if (!accept(p)) continue;
         if (c_ != 0 && (1 + k_) * c_ * p.z > 1 + 1e-12) continue;  // wrong sheet of the quadric
-        // Polish the root with one Newton step on the exact sag equation.
         h.t = t;
         h.p = p;
         h.n = normalAt(p);
@@ -235,6 +252,18 @@ std::shared_ptr<PlaneShape> PlaneShape::disk(double rMax, double rMin) {
     s->b_ = rMin;
     return s;
 }
+std::shared_ptr<PlaneShape> PlaneShape::diskWithHole(double rMax, double holeR, double hx, double hy) {
+    if (!(rMax > 0) || !(holeR > 0) || std::sqrt(hx * hx + hy * hy) + holeR >= rMax)
+        throw std::runtime_error("disk with hole: the hole must lie inside the disk");
+    auto s = std::make_shared<PlaneShape>();
+    s->ap_ = Aperture::DiskHole;
+    s->a_ = rMax;
+    s->b_ = holeR;
+    s->hx_ = hx;
+    s->hy_ = hy;
+    return s;
+}
+
 std::shared_ptr<PlaneShape> PlaneShape::rect(double hx, double hy) {
     if (!(hx > 0 && hy > 0)) throw std::runtime_error("rect: invalid size");
     auto s = std::make_shared<PlaneShape>();
@@ -270,6 +299,9 @@ bool PlaneShape::intersect(const Ray& r, double tmin, double tmax, LocalHit& h) 
         case Aperture::Ellipse:
             if (sqr(p.x / a_) + sqr(p.y / b_) > 1) return false;
             break;
+        case Aperture::DiskHole:
+            if (p.x * p.x + p.y * p.y > a_ * a_ || sqr(p.x - hx_) + sqr(p.y - hy_) < b_ * b_) return false;
+            break;
     }
     h.t = t;
     h.p = p;
@@ -280,7 +312,7 @@ bool PlaneShape::intersect(const Ray& r, double tmin, double tmax, LocalHit& h) 
 
 AABB PlaneShape::bounds() const {
     AABB b;
-    double ex = a_, ey = (ap_ == Aperture::Disk) ? a_ : b_;
+    double ex = a_, ey = (ap_ == Aperture::Disk || ap_ == Aperture::DiskHole) ? a_ : b_;
     double pad = 1e-9 * (1 + std::max(ex, ey));
     b.expand(Vec3(-ex, -ey, -pad));
     b.expand(Vec3(ex, ey, pad));
@@ -293,6 +325,9 @@ std::string PlaneShape::describe() const {
         case Aperture::Disk: std::snprintf(buf, sizeof buf, "plane-disk(r=[%g,%g])", b_, a_); break;
         case Aperture::Rect: std::snprintf(buf, sizeof buf, "plane-rect(%g x %g)", 2 * a_, 2 * b_); break;
         case Aperture::Ellipse: std::snprintf(buf, sizeof buf, "plane-ellipse(%g x %g)", 2 * a_, 2 * b_); break;
+        case Aperture::DiskHole:
+            std::snprintf(buf, sizeof buf, "plane-disk(r=%g, hole r=%g at %g,%g)", a_, b_, hx_, hy_);
+            break;
     }
     return buf;
 }
@@ -302,6 +337,7 @@ double PlaneShape::area() const {
         case Aperture::Disk: return Pi * (a_ * a_ - b_ * b_);
         case Aperture::Rect: return 4 * a_ * b_;
         case Aperture::Ellipse: return Pi * a_ * b_;
+        case Aperture::DiskHole: return Pi * (a_ * a_ - b_ * b_);
     }
     return 0;
 }
@@ -321,6 +357,7 @@ void PlaneShape::sampleArea(double u1, double u2, double, Vec3& p, Vec3& n) cons
             p = {a_ * r * std::cos(phi), b_ * r * std::sin(phi), 0};
             return;
         }
+        case Aperture::DiskHole: p = {}; return;  // not sampleable (see canSample)
     }
 }
 
@@ -337,6 +374,13 @@ bool SphereShape::intersect(const Ray& r, double tmin, double tmax, LocalHit& h)
     double q = -b - std::copysign(s, b);
     double t0 = q, t1 = (q != 0) ? c / q : q;
     if (t0 > t1) std::swap(t0, t1);
+    auto coeffs = [&](const Vec3& o, double& A, double& B, double& C) {
+        A = dot(r.d, r.d);
+        B = 2 * dot(o, r.d);
+        C = lengthSq(o) - R_ * R_;
+    };
+    t0 = refineRoot(r, t0, coeffs);
+    t1 = refineRoot(r, t1, coeffs);
     double t = t0;
     if (t <= tmin || t >= tmax) {
         t = t1;
@@ -410,7 +454,13 @@ bool CylinderShape::intersect(const Ray& r, double tmin, double tmax, LocalHit& 
     double c = r.o.x * r.o.x + r.o.y * r.o.y - R_ * R_;
     double t0, t1;
     if (solveQuadratic(a, b, c, t0, t1) == 0) return false;
+    auto coeffs = [&](const Vec3& o, double& A, double& B, double& C) {
+        A = a;
+        B = 2 * (o.x * r.d.x + o.y * r.d.y);
+        C = o.x * o.x + o.y * o.y - R_ * R_;
+    };
     for (double t : {t0, t1}) {
+        t = refineRoot(r, t, coeffs);
         if (t <= tmin || t >= tmax) continue;
         Vec3 p = r.at(t);
         if (p.z < z0_ || p.z > z1_) continue;

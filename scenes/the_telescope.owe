@@ -34,7 +34,7 @@ body Statue { type = fractal_statue  radius = 5  depth = 3  ratio = 0.36  materi
 # The instrument: objective, Plössl eyepiece, mounts and tube are all physical bodies.
 body Scope  { type = prescription  file = "../lenses/kepler_16x.lens"  afocal = true  tube = true
               position = on_terrain("Ground", 0, 0, 1.45)  point_at = on_terrain("Ground", 450, 0, 8.5) }
-body Pier   { type = cylinder radius = 0.05 height = 1.61  position = on_terrain("Ground", 0.12, 0, -0.2)  material = paint }
+body Pier   { type = cylinder radius = 0.05 height = 1.41  position = on_terrain("Ground", 0.12, 0, 10um)  material = paint }
 
 observer Naked    { position = on_terrain("Ground", -0.46, 0.12, 1.45)  look_at = on_terrain("Ground", 450, 0, 8.5)
                     fov = 36deg  pupil = 3mm  resolution = (480, 480) }

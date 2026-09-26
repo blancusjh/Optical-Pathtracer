@@ -263,3 +263,23 @@ TEST(smooth_dielectric_branching_probabilities) {
     }
     CHECK_NEAR(double(refl) / N, R, 4 * std::sqrt(R * (1 - R) / N));
 }
+
+TEST(fresnel_floor_changes_variance_not_expectation) {
+    SurfaceOptics o;
+    o.type = SurfaceType::Dielectric;
+    Interface it = makeIt(o, 1.0, 1.5);
+    it.fresnelFloor = 0.3;
+    Vec3 d = normalize(Vec3(std::sin(0.4), 0, -std::cos(0.4)));
+    double R = fresnelDielectric(std::cos(0.4), 1.5);
+    double sumR = 0, sumT = 0;
+    int N = 400000, nR = 0;
+    Rng rng(2, 2);
+    for (int i = 0; i < N; ++i) {
+        ScatterSample s;
+        CHECK(sampleScatter(it, d, rng.uniform(), 0, 0, TransportMode::Importance, s));
+        if (s.transmitted) sumT += s.weight; else { sumR += s.weight; ++nR; }
+    }
+    CHECK_NEAR(double(nR) / N, 0.3, 0.005);               // branch chosen with the floor probability
+    CHECK_NEAR(sumR / N, R, 4 * std::sqrt(0.3 * 0.7 / N) * R / 0.3);  // expected reflected energy is still R
+    CHECK_NEAR(sumT / N, 1 - R, 4 * std::sqrt(0.3 * 0.7 / N) * (1 - R) / 0.7);
+}
