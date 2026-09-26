@@ -1,0 +1,16 @@
+{
+  "engine": "optical-world-engine 0.1.0",
+  "backend": "cpu-reference (IEEE-754 double)",
+  "scene": {"path": "scenes/the_lens.owe", "fnv1a64": "0a45567bfa303b89"},
+  "detector": {"name": "Eye", "description": "ideal observer 'Eye' 640x400, fovY=42 deg, pupil diameter=4 mm, focus=0.330000 m", "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ"},
+  "integrator": "hybrid",
+  "sampling": {"wavelengths": "one per path, visible-importance pdf on [360, 830] nm", "fresnel": "stochastic branch selection", "nee": true, "mis": "power heuristic", "russian_roulette_depth": 6, "partition": "light tracing owns eye-D-S+-light paths, path tracing all others"},
+  "seed": 1,
+  "samples_per_pixel": 128,
+  "passes": 1,
+  "max_depth": 64,
+  "render_seconds": 14.8781,
+  "statistics": {"paths": 65536000, "segments": 102864297, "region_inconsistencies": 0, "leaks": 0},
+  "mean_Y": 0.957793,
+  "world": {"media": [{"name": "air", "index": "ciddor-air", "n_d": 1.00028}, {"name": "opaque", "index": "constant(1)", "n_d": 1}, {"name": "N-BK7", "index": "sellmeier(B1=1.03961 C1=0.0060007, B2=0.231792 C2=0.0200179, B3=1.01047 C3=103.561) rel. air", "n_d": 1.51722}], "regions": 6, "boundaries": 10, "bodies": 6, "assemblies": 0}
+}

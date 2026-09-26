@@ -172,26 +172,23 @@ PixelProbe probePixel(const Scene& scene, int di, int px, int py, int samples, u
     std::map<std::string, PixelProbe::Group> groups;
     Rng rng(hashCombine(seed, uint64_t(py) * det.width + px), 0xabcdefULL);
     for (int s = 0; s < samples; ++s) {
-        double lambda = sampleVisibleWavelength(rng.uniform());
-        double pdf = visibleWavelengthPdf(lambda);
+        Wavelengths wl = Wavelengths::sample(rng.uniform());
         Ray ray;
         double weight;
         PathRecord rec;
         if (!det.generate(px + rng.uniform(), py + rng.uniform(), rng, ray, weight) || weight <= 0) continue;
-        tr.radiance(ray, det.region, lambda, rng, st, &rec);
-        double w3[3];
-        spectralWeights(lambda, pdf, w3);
+        tr.radiance(ray, det.region, wl, rng, st, &rec);
         size_t index = pr.records.size();
         for (const auto& c : rec.c) {
-            double val = c.value * weight;
-            pr.estimate.x += val * w3[0] / samples;
-            pr.estimate.y += val * w3[1] / samples;
-            pr.estimate.z += val * w3[2] / samples;
+            XYZ v = rec.wavelengths.toXYZ(c.value * weight);
+            pr.estimate.x += v.x / samples;
+            pr.estimate.y += v.y / samples;
+            pr.estimate.z += v.z / samples;
             std::string sig = pathSignature(scene.world, rec, c.vertex) + (c.nee ? " ⇢ " : " ← ") + c.source;
             auto& g = groups[sig];
             if (g.paths == 0) { g.signature = sig; g.example = index; }
             g.paths++;
-            g.valueY += val * w3[1] / samples;
+            g.valueY += v.y / samples;
         }
         pr.records.push_back(std::move(rec));
     }

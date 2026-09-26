@@ -79,6 +79,56 @@ TEST(near_axis_real_ray_reaches_paraxial_focus) {
     }
 }
 
+TEST(instruments_far_from_the_origin_keep_their_precision) {
+    // The same lens 3 km from the world origin must focus identically (extreme spatial scale).
+    Prescription p = parsePrescription(kSinglet);
+    Vec3 far{3000.0, -2000.0, 850.0};
+    Transform place = Transform::translate(far) * Transform::alignZ(normalize(Vec3(0.3, 0.8, 0.2)));
+    Scene sc;
+    BuiltInstrument bi = buildPrescription(sc.world, p, "L", -1, place, 0, catalogIndex());
+    sc.world.build();
+    Tracer tr(sc);
+    Rng rng(1, 1);
+    Paraxial px = paraxialAnalysis(p, LambdaD, catalogIndex());
+    Vec3 axis = place.vector({0, 0, 1}), lateral = place.vector({0, 1, 0});
+    PathRecord r = tr.walk({place.point({0, 2e-6, -0.05}), axis}, 0, LambdaD, WalkMode::PrimaryTransmission, rng);
+    CHECK(r.v.size() == 4);
+    const PathVertex& last = r.v[2];
+    // Axis crossing in the lens frame.
+    Vec3 q = place.inverse().point(last.p), d = place.inverse().vector(last.dOut);
+    double zCross = q.z - q.y * d.z / d.y;
+    CHECK_NEAR(zCross, bi.lastVertexZ + px.bfl, 2e-8);
+    (void)lateral;
+    // Edge rays still meet the rim rather than slipping past it.
+    int rimHits = 0;
+    for (int i = 0; i < 2000; ++i) {
+        Rng g(i, 4);
+        double a = 2 * Pi * g.uniform();
+        Vec3 dl = normalize(Vec3(2 * std::cos(a), 2 * std::sin(a), 1));
+        Vec3 entry{0.010 * std::cos(a), 0.010 * std::sin(a), 0.05 - std::sqrt(0.05 * 0.05 - 0.010 * 0.010)};
+        PathRecord e = tr.walk({place.point(entry - dl * 0.01), place.vector(dl)}, 0, LambdaD, WalkMode::PrimaryTransmission, g);
+        for (auto& v : e.v) rimHits += v.boundary != kNone && sc.world.boundaryLabel(v.boundary) == "L.L1.rim1";
+    }
+    CHECK(rimHits > 1900);
+    // Rendering through it produces no region inconsistencies.
+    auto obs = std::make_unique<IdealObserver>();
+    obs->name = "eye";
+    obs->width = obs->height = 24;
+    obs->position = place.point({0, 0, 0.1});
+    obs->lookAt = place.point({0, 0, -1});
+    obs->fovY = radians(60);
+    obs->pupilRadius = 0.002;
+    sc.detectors.push_back(std::move(obs));
+    sc.world.env.skyModel = Environment::Sky::Uniform;
+    sc.world.env.zenith = Spectrum::constant(1);
+    sc.build();
+    RenderSettings rs;
+    rs.spp = 64;
+    ProgressiveRenderer R(sc, 0, rs);
+    R.runPass(64);
+    CHECK(R.stats().inconsistencies == 0);
+}
+
 TEST(spherical_and_chromatic_aberration_trends) {
     Prescription p = parsePrescription(kSinglet);
     LensReport rep = analyzeLens(p, {0}, {LambdaF, LambdaD, LambdaC}, 6);

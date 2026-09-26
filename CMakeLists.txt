@@ -35,6 +35,13 @@ add_library(owe
 target_include_directories(owe PUBLIC src)
 target_link_libraries(owe PUBLIC Threads::Threads)
 
+# Optional: compressed PNG output. Without zlib, PNGs use stored deflate blocks.
+find_package(ZLIB)
+if(ZLIB_FOUND)
+  target_link_libraries(owe PRIVATE ZLIB::ZLIB)
+  target_compile_definitions(owe PRIVATE OWE_HAVE_ZLIB=1)
+endif()
+
 add_executable(owe_cli apps/owe.cpp)
 set_target_properties(owe_cli PROPERTIES OUTPUT_NAME owe)
 target_link_libraries(owe_cli PRIVATE owe)

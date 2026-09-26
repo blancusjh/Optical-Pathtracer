@@ -33,7 +33,10 @@ double cieYIntegral() {
     return v;
 }
 
-double sampleVisibleWavelength(double u) { return 538.0 - 138.888889 * std::atanh(0.85691062 - 1.82750197 * u); }
+double sampleVisibleWavelength(double u) {
+    // Inverse CDF can round a hair outside the range at u → 0 or 1.
+    return clampd(538.0 - 138.888889 * std::atanh(0.85691062 - 1.82750197 * u), LambdaMin, LambdaMax);
+}
 double visibleWavelengthPdf(double l) {
     if (l < LambdaMin || l > LambdaMax) return 0;
     return 0.0039398042 / sqr(std::cosh(0.0072 * (l - 538.0)));
@@ -89,17 +92,69 @@ Spectrum Spectrum::tabulated(std::vector<double> lambdas, std::vector<double> va
     return s;
 }
 
+namespace {
+// Maps an sRGB triple to partition-basis weights so the spectrum reproduces that colour
+// (white-balanced to the 6504 K reference white). White maps to equal weights, i.e. a flat
+// spectrum; reflectance weights are clamped to [0,1] so they remain physical.
+struct RgbCalibration {
+    double inv[3][3];
+    double white[3];
+    RgbCalibration() {
+        double M[3][3];
+        for (int k = 0; k < 3; ++k) {
+            XYZ c;
+            double inv0 = 1.0 / cieYIntegral();
+            for (double l = LambdaMin; l <= LambdaMax; l += 0.5) {
+                double br, bg, bb;
+                rgbBasis(l, br, bg, bb);
+                double w = (k == 0 ? br : k == 1 ? bg : bb) * planck(l, 6504.0) * 0.5;
+                c.x += w * cieX(l) * inv0;
+                c.y += w * cieY(l) * inv0;
+                c.z += w * cieZ(l) * inv0;
+            }
+            double rgb[3];
+            xyzToLinearSRGB(c, rgb);
+            for (int i = 0; i < 3; ++i) M[i][k] = rgb[i];
+        }
+        for (int i = 0; i < 3; ++i) white[i] = M[i][0] + M[i][1] + M[i][2];
+        double det = M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1]) - M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0]) +
+                     M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0]);
+        inv[0][0] = (M[1][1] * M[2][2] - M[1][2] * M[2][1]) / det;
+        inv[0][1] = (M[0][2] * M[2][1] - M[0][1] * M[2][2]) / det;
+        inv[0][2] = (M[0][1] * M[1][2] - M[0][2] * M[1][1]) / det;
+        inv[1][0] = (M[1][2] * M[2][0] - M[1][0] * M[2][2]) / det;
+        inv[1][1] = (M[0][0] * M[2][2] - M[0][2] * M[2][0]) / det;
+        inv[1][2] = (M[0][2] * M[1][0] - M[0][0] * M[1][2]) / det;
+        inv[2][0] = (M[1][0] * M[2][1] - M[1][1] * M[2][0]) / det;
+        inv[2][1] = (M[0][1] * M[2][0] - M[0][0] * M[2][1]) / det;
+        inv[2][2] = (M[0][0] * M[1][1] - M[0][1] * M[1][0]) / det;
+    }
+    void weights(double r, double g, double b, double w[3]) const {
+        double c[3] = {r * white[0], g * white[1], b * white[2]};
+        for (int i = 0; i < 3; ++i) w[i] = inv[i][0] * c[0] + inv[i][1] * c[1] + inv[i][2] * c[2];
+    }
+};
+const RgbCalibration& rgbCalibration() {
+    static const RgbCalibration c;
+    return c;
+}
+}  // namespace
+
 Spectrum Spectrum::rgbReflectance(double r, double g, double b) {
     Spectrum s;
     s.kind_ = Kind::RgbReflectance;
-    s.a_ = r; s.b_ = g; s.c_ = b;
+    double w[3];
+    rgbCalibration().weights(r, g, b, w);
+    s.a_ = clampd(w[0], 0, 1); s.b_ = clampd(w[1], 0, 1); s.c_ = clampd(w[2], 0, 1);
     return s;
 }
 
 Spectrum Spectrum::rgbIlluminant(double r, double g, double b) {
     Spectrum s;
     s.kind_ = Kind::RgbIlluminant;
-    s.a_ = r; s.b_ = g; s.c_ = b;
+    double w[3];
+    rgbCalibration().weights(r, g, b, w);
+    s.a_ = std::max(0.0, w[0]); s.b_ = std::max(0.0, w[1]); s.c_ = std::max(0.0, w[2]);
     static const double norm = [] {
         Spectrum w;
         w.kind_ = Kind::RgbIlluminant;

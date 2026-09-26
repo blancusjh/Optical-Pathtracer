@@ -84,7 +84,17 @@ LensReport analyzeLens(const Prescription& p, const std::vector<double>& fields,
                 }
             }
             s.arrived = int(rays.size());
-            if (rays.size() >= 3) {
+            if (px.afocal && rays.size() >= 3) {
+                double n = double(rays.size()), mx = 0, my = 0;
+                for (auto& r : rays) { mx += r.d.x / r.d.z / n; my += r.d.y / r.d.z / n; }
+                double v = 0;
+                for (auto& r : rays) {
+                    double ax = std::atan(r.d.x / r.d.z) - std::atan(mx), ay = std::atan(r.d.y / r.d.z) - std::atan(my);
+                    v += ax * ax + ay * ay;
+                }
+                s.apparentAngle = std::atan(my);
+                s.angularRms = std::sqrt(v / n);
+            } else if (rays.size() >= 3) {
                 // Best focus: minimise the spot variance over z (closed form).
                 double n = double(rays.size());
                 Vec2 ma{}, mb{};
@@ -122,7 +132,7 @@ LensReport analyzeLens(const Prescription& p, const std::vector<double>& fields,
 
     // Longitudinal spherical aberration on axis at the first wavelength.
     double l0 = lambdas.empty() ? p.wavelength : lambdas.front();
-    {
+    if (!px.afocal) {
         Paraxial pl = paraxialAnalysis(p, l0, catalogIndex());
         double zPar = lw.bi.lastVertexZ + pl.bfl;
         for (int k = 1; k <= 10; ++k) {
@@ -178,7 +188,20 @@ std::string LensReport::text() const {
         std::snprintf(buf, sizeof buf, "  image distance from last vertex: %.4f mm\n", p.imageDistance * 1e3);
         os << buf;
     }
-    if (!spots.empty()) {
+    if (!spots.empty() && p.afocal) {
+        os << "\nReal-ray emerging beams (non-sequential transport, primary transmission branch)\n";
+        os << "   lambda   field    arrived   apparent angle   magnification   RMS angular spread\n";
+        for (const auto& s : spots) {
+            if (s.arrived < 3) {
+                std::snprintf(buf, sizeof buf, "  %6.1fnm %6.2f° %4d/%-4d  (vignetted)\n", s.lambda, s.fieldDeg, s.arrived, s.launched);
+            } else {
+                double m = s.fieldDeg != 0 ? std::tan(s.apparentAngle) / std::tan(radians(s.fieldDeg)) : std::nan("");
+                std::snprintf(buf, sizeof buf, "  %6.1fnm %6.2f° %4d/%-4d %12.3f° %14.3f %15.3f arcmin\n", s.lambda, s.fieldDeg,
+                              s.arrived, s.launched, degrees(s.apparentAngle), m, degrees(s.angularRms) * 60);
+            }
+            os << buf;
+        }
+    } else if (!spots.empty()) {
         os << "\nReal-ray spots (non-sequential transport, primary transmission branch)\n";
         os << "   lambda   field   arrived   RMS@paraxial   best focus dz   RMS@best     centroid y\n";
         for (const auto& s : spots) {

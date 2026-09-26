@@ -5,6 +5,8 @@
 #include "owe/render.hpp"
 #include "owe/scene_loader.hpp"
 
+#include <array>
+
 using namespace owe;
 
 namespace {
@@ -20,6 +22,36 @@ Image renderScene(const Scene& sc, int det, int spp, const std::string& integrat
     CHECK(R.stats().inconsistencies == 0);
     CHECK(R.stats().leaks == 0);
     return R.resolve();
+}
+// Per-block means and standard errors over independent seeds (4×3 blocks of a 24×18 image).
+struct BlockStats {
+    double mean[12] = {}, se[12] = {};
+    double imageMean = 0, imageSe = 0;
+};
+BlockStats blockStats(const Scene& sc, int det, int spp, const std::string& integrator, int seeds) {
+    std::vector<std::array<double, 13>> runs;
+    for (int k = 0; k < seeds; ++k) {
+        Image img = renderScene(sc, det, spp, integrator, 0, 100 + uint64_t(k));
+        std::array<double, 13> v{};
+        for (int y = 0; y < 18; ++y)
+            for (int x = 0; x < 24; ++x) v[(y / 6) * 4 + x / 6] += img.at(x, y).y;
+        v[12] = img.meanY();
+        runs.push_back(v);
+    }
+    BlockStats b;
+    for (int i = 0; i < 13; ++i) {
+        double m = 0, q = 0;
+        for (auto& r : runs) m += r[i] / seeds;
+        for (auto& r : runs) q += sqr(r[i] - m) / (seeds - 1);
+        double se = std::sqrt(q / seeds);
+        if (i < 12) { b.mean[i] = m; b.se[i] = se; } else { b.imageMean = m; b.imageSe = se; }
+    }
+    return b;
+}
+// Two unbiased estimators of the same image must agree within 4 combined standard errors.
+void checkAgreement(const BlockStats& a, const BlockStats& b) {
+    CHECK_NEAR(a.imageMean, b.imageMean, 4 * std::hypot(a.imageSe, b.imageSe) + 1e-12);
+    for (int i = 0; i < 12; ++i) CHECK_NEAR(a.mean[i], b.mean[i], 4 * std::hypot(a.se[i], b.se[i]) + 1e-12);
 }
 }  // namespace
 
@@ -177,7 +209,8 @@ TEST(underwater_radiance_obeys_n_squared_law) {
     int N = 20000;
     for (int i = 0; i < N; ++i) {
         Rng rng(i, 9);
-        sum += tr.radiance({{0, 0, -1}, {0, 0, 1}}, wr, lambda, rng, st);
+        Wavelengths wl = Wavelengths::single(lambda);
+        sum += tr.radiance({{0, 0, -1}, {0, 0, 1}}, wr, wl, rng, st)[0];
     }
     double expected = T * sqr(nw / na);
     CHECK_NEAR(sum / N, expected, 4 * std::sqrt(expected * expected * (1 - T) / T / N) + 1e-3);
@@ -260,17 +293,10 @@ TEST(path_and_light_tracing_agree_through_a_pinhole_and_a_lens_pupil) {
     Scene sc = loadSceneFromString(text);
     for (int det : {0, 1}) {
         // Two independent unbiased estimators of the same measurement must converge together.
-        Image pt = renderScene(sc, det, 3072);
-        Image lt = renderScene(sc, det, 12000, "light");
-        CHECK_NEAR(lt.meanY(), pt.meanY(), 0.02 * pt.meanY());
-        // Coarse spatial agreement (4×3 blocks).
-        for (int by = 0; by < 3; ++by)
-            for (int bx = 0; bx < 4; ++bx) {
-                double sp = 0, sl = 0;
-                for (int y = by * 6; y < by * 6 + 6; ++y)
-                    for (int x = bx * 6; x < bx * 6 + 6; ++x) { sp += pt.at(x, y).y; sl += lt.at(x, y).y; }
-                CHECK_NEAR(sl, sp, 0.08 * sp + 1e-9);  // ≈3σ at these sample counts
-            }
+        BlockStats pt = blockStats(sc, det, 512, "path", 6);
+        BlockStats lt = blockStats(sc, det, 2000, "light", 6);
+        checkAgreement(pt, lt);
+        CHECK(pt.imageSe < 0.01 * pt.imageMean);  // the comparison is sharp enough to be meaningful
     }
 }
 
@@ -290,4 +316,22 @@ TEST(renders_are_bitwise_reproducible) {
         CHECK(a.xyz == b.xyz);
         CHECK(a.xyz != c.xyz);
     }
+}
+
+TEST(hybrid_partition_matches_path_tracing_on_a_caustic) {
+    // A glass ball focuses a large lamp onto a floor. Pure path tracing and the hybrid
+    // (light tracing owns eye→D→S⁺→light) are both unbiased and must agree.
+    std::string text = R"(
+        units = m
+        material floor { type = diffuse  reflectance = 0.7 }
+        body Floor { type = sheet  size = (3, 3)  material = floor }
+        body Ball  { type = sphere radius = 0.3  position = (0, 0, 0.45)  medium = N-BK7 }
+        body Lamp  { type = sphere radius = 0.35  position = (0.2, 0.1, 1.8)  material = black  emission = blackbody(5000K, 4) }
+        observer Eye { position = (0, -2.0, 1.1)  look_at = (0, 0, 0.3)  fov = 45deg  resolution = (24, 18) }
+    )";
+    Scene sc = loadSceneFromString(text);
+    BlockStats pt = blockStats(sc, 0, 1024, "path", 6);
+    BlockStats hy = blockStats(sc, 0, 256, "hybrid", 6);
+    checkAgreement(pt, hy);
+    CHECK(pt.imageSe < 0.01 * pt.imageMean);
 }

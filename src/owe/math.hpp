@@ -183,9 +183,11 @@ struct AABB {
     }
 };
 
-// Displacement used to move a new ray origin off a surface along its normal.
-// Scales with coordinate magnitude so it stays above double rounding at any world scale.
-inline double surfaceEpsilon(const Vec3& p) { return 1e-10 * (1.0 + maxAbsComponent(p)) * 16.0; }
+// Displacement used to move a new ray origin off a surface. It scales with coordinate
+// magnitude so it stays well above double rounding (ulp ≈ 2.2e-16 relative, a few ulp after
+// rigid transforms) at any world scale, yet far below optical feature sizes: 10 pm at the
+// origin, 1 nm for an instrument standing 100 m away, 0.1 µm at 10 km.
+inline double surfaceEpsilon(const Vec3& p) { return 1e-11 * (1.0 + maxAbsComponent(p)); }
 // Moves along the new ray itself so the origin stays exactly on the refracted or
 // reflected line (no lateral error); grazing directions fall back to the normal.
 inline Vec3 offsetOrigin(const Vec3& p, const Vec3& n, const Vec3& dir) {
