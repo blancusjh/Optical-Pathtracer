@@ -1,0 +1,16 @@
+{
+  "engine": "optical-world-engine 0.1.0",
+  "backend": "cpu-reference (IEEE-754 double)",
+  "scene": {"path": "scenes/camera_obscura.owe", "fnv1a64": "6801b22f64f23dc1"},
+  "detector": {"name": "BackWall", "description": "surface sensor 'BackWall' 464x400, 2900 x 2500 mm, aimed", "quantity": "irradiance [W m^-2] as CIE XYZ"},
+  "integrator": "path",
+  "sampling": {"wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm", "fresnel": "stochastic branch selection", "nee": true, "mis": "power heuristic", "russian_roulette_depth": 6, "fresnel_floor": 0},
+  "seed": 1,
+  "samples_per_pixel": 512,
+  "passes": 1,
+  "max_depth": 64,
+  "render_seconds": 64.4389,
+  "statistics": {"paths": 95027200, "segments": 331134532, "region_inconsistencies": 0, "leaks": 0},
+  "mean_Y": 0.00546349,
+  "world": {"media": [{"name": "air", "index": "ciddor-air", "n_d": 1.00028}, {"name": "opaque", "index": "constant(1)", "n_d": 1}, {"name": "N-BK7", "index": "sellmeier(B1=1.03961 C1=0.0060007, B2=0.231792 C2=0.0200179, B3=1.01047 C3=103.561) rel. air", "n_d": 1.51722}], "regions": 16, "boundaries": 24, "bodies": 18, "assemblies": 0}
+}

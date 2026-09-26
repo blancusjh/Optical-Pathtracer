@@ -1,0 +1,16 @@
+{
+  "engine": "optical-world-engine 0.1.0",
+  "backend": "cpu-reference (IEEE-754 double)",
+  "scene": {"path": "scenes/the_statue.owe", "fnv1a64": "5f8de252b1fe4533"},
+  "detector": {"name": "Telescope", "description": "ideal observer 'Telescope' 480x480, fovY=36 deg, pupil diameter=3 mm, focus=0.230000 m", "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ"},
+  "integrator": "path",
+  "sampling": {"wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm", "fresnel": "stochastic branch selection", "nee": true, "mis": "power heuristic", "russian_roulette_depth": 6, "fresnel_floor": 0},
+  "seed": 1,
+  "samples_per_pixel": 512,
+  "passes": 1,
+  "max_depth": 64,
+  "render_seconds": 132.947,
+  "statistics": {"paths": 117964800, "segments": 717350861, "region_inconsistencies": 4, "leaks": 0, "first_inconsistency": {"boundary": "Scope.L2-mount.blade", "ray_region": "Scope.L3.glass0[N-BK7]"}},
+  "mean_Y": 0.595436,
+  "world": {"media": [{"name": "air", "index": "ciddor-air", "n_d": 1.00028}, {"name": "opaque", "index": "constant(1)", "n_d": 1}, {"name": "N-BK7", "index": "sellmeier(B1=1.03961 C1=0.0060007, B2=0.231792 C2=0.0200179, B3=1.01047 C3=103.561) rel. air", "n_d": 1.51722}, {"name": "F2", "index": "sellmeier(B1=1.34533 C1=0.00997744, B2=0.209073 C2=0.0470451, B3=0.937357 C3=111.887) rel. air", "n_d": 1.62049}], "regions": 9, "boundaries": 805, "bodies": 10, "assemblies": 1}
+}
