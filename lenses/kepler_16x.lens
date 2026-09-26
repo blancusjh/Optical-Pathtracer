@@ -1,0 +1,16 @@
+# Keplerian telescope ≈16×: achromatic objective (f≈400 mm, D=50 mm) and a Plössl
+# eyepiece (two f≈50 mm achromats with their crown faces toward each other, f≈25 mm).
+# Use `afocal = true` (scene) or `owe lens --afocal` to solve the tube length so the
+# instrument is exactly afocal at the design wavelength.
+name Keplerian telescope 16x (Plossl eyepiece)
+units mm
+# label     R           t        medium   semi-diameter
+O1        179.12       8.0      N-BK7     25
+O2       -179.12       4.0      F2        25
+O3      -3243.0      400.0      air       25
+E1        405.4        1.5      F2         8
+E2         22.39       4.0      N-BK7      8
+E3        -22.39       0.5      air        8
+E4         22.39       4.0      N-BK7      8
+E5        -22.39       1.5      F2         8
+E6       -405.4       20.0      air        8

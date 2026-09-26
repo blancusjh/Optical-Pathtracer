@@ -1,0 +1,7 @@
+# Cemented achromat, f ≈ 50 mm, with a front aperture stop: a simple camera objective.
+name Achromat f=50 mm f/4 with front stop
+units mm
+STO       inf        5.0     air       6.25   stop
+S1        22.39      4.0     N-BK7     9.0
+S2       -22.39      1.5     F2        9.0
+S3      -405.4      45.0     air       9.0

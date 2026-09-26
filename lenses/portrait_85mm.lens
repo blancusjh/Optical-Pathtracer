@@ -1,0 +1,13 @@
+# Petzval-type portrait objective, f ≈ 85 mm, maximum aperture ≈ f/2.
+# Two cemented N-BK7/F2 achromats with the aperture stop between them. Wide open it shows
+# the classic Petzval rendering (glowing spherical aberration, curved field); stopped down it
+# sharpens. Cameras resize the stop with `f_number = N`.
+name Petzval-type portrait objective 85 mm
+units mm
+S1       68.07      9.0     N-BK7    22.0
+S2      -68.07      3.0     F2       22.0
+S3    -1232.4      15.0     air      22.0
+STO     inf        15.0     air      19.0   stop
+S5       68.07      9.0     N-BK7    20.0
+S6      -68.07      3.0     F2       20.0
+S7    -1232.4      50.0     air      20.0

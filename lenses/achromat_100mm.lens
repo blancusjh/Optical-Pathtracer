@@ -1,0 +1,9 @@
+# Cemented achromatic doublet, f ≈ 100 mm, crown-first (N-BK7 / F2).
+# Thin-lens achromat: φ₁/V₁ + φ₂/V₂ = 0 with an equiconvex crown element.
+name Achromatic doublet f=100 mm
+units mm
+wavelength 587.5618
+# label   R          t       medium   semi-diameter
+S1        44.78      6.0     N-BK7    12.5
+S2       -44.78      2.5     F2       12.5
+S3      -810.8      95.0     air      12.5

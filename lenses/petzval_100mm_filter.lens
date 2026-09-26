@@ -1,0 +1,13 @@
+# The Petzval-type objective of petzval_100mm.lens behind a flat, uncoated protective filter.
+# Filter–lens reflections form compact ghosts point-symmetric to bright sources.
+name Petzval-type objective f=100 mm with protective filter
+units mm
+F1      inf        2.0     N-BK7    16.0
+F2      inf        4.0     air      16.0
+S1       89.56     6.0     N-BK7    14.0
+S2      -89.56     2.5     F2       14.0
+S3    -1621.6     20.0     air      14.0
+STO     inf       20.0     air       9.0   stop
+S5       89.56     6.0     N-BK7    14.0
+S6      -89.56     2.5     F2       14.0
+S7    -1621.6     60.0     air      14.0

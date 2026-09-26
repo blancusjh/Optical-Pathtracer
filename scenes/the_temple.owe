@@ -1,0 +1,98 @@
+# THE TEMPLE — a Doric peristyle temple on a Mediterranean hillside at golden hour, with a
+# marble Athena (a museum scan, fetched by tools/fetch_assets.sh; the scene renders without it)
+# standing before it. Cypress and olive trees, amphorae, a paved precinct.
+#
+# Cam is a physical camera — an 85 mm Petzval-type portrait lens in a housing, with a real
+# aperture stop and a sensor — whose aperture and focus are scene values:
+#   owe render scenes/the_temple.owe --set Cam.f_number=8 --set "Cam.focus=24 m"
+#   owe studio scenes/the_temple.owe          (then: set Cam.f_number=2, render 16 8, ...)
+# Wide is an ideal eye for the establishing view.
+units = m
+
+world {
+    sky = gradient(zenith = rgb(0.06, 0.26, 0.92, luminance = 0.3),
+                   horizon = rgb(0.74, 0.82, 0.94, luminance = 0.9),
+                   ground = rgb(0.62, 0.66, 0.70, luminance = 0.55))  # distant haze below the horizon
+    sun { elevation = 14deg  azimuth = 248deg  temperature = 4300  luminance = 9e4 }
+}
+
+material marble   { type = diffuse  texture = marble(a = rgb(0.88, 0.84, 0.77), b = rgb(0.58, 0.54, 0.48), scale = 0.35, turbulence = 1.1) }
+material statuary { type = diffuse  texture = marble(a = rgb(0.90, 0.88, 0.84), b = rgb(0.66, 0.63, 0.60), scale = 0.08, turbulence = 0.8) }
+material paving   { type = diffuse  texture = checker(a = rgb(0.62, 0.57, 0.49), b = rgb(0.55, 0.50, 0.43), scale = 0.9) }
+material hillside { type = diffuse  texture = terrain(a = rgb(0.42, 0.40, 0.20), b = rgb(0.52, 0.49, 0.44), c = rgb(0.5, 0.5, 0.5), scale = 30) }
+material cypress  { type = diffuse  reflectance = rgb(0.06, 0.16, 0.07) }
+material olive    { type = diffuse  reflectance = rgb(0.25, 0.30, 0.20) }
+material bark     { type = diffuse  reflectance = rgb(0.22, 0.17, 0.12) }
+material clay     { type = diffuse  reflectance = rgb(0.62, 0.32, 0.18) }
+
+body Ground { type = terrain  size = (3000, 3000)  resolution = 512  amplitude = 70  feature = 450  ridge = 0.35
+              seed = 11  flat_radius = 70  material = hillside }
+
+# ---------------------------------------------------------------- the temple (long axis +y)
+body Precinct { type = sheet  size = (44, 60)  position = on_terrain("Ground", 0, 18, 0.002)  material = paving }
+body Step1    { type = box  size = (17.4, 25.2, 0.4)  position = on_terrain("Ground", 0, 20, 0.2021)  material = marble }
+body Step2    { type = box  size = (16.4, 24.2, 0.4)  position = on_terrain("Ground", 0, 20, 0.6022)  material = marble }
+body Stylobate { type = box  size = (15.4, 23.2, 0.4)  position = on_terrain("Ground", 0, 20, 1.0023)  material = marble }
+
+# Peristyle: 6 × 9 Doric columns (26 in all), 6 m tall, 1.3 m lower diameter, 2.6 m spacing.
+body FrontRow { type = column  height = 6.0  radius = 0.65  flutes = 20  material = marble
+                position = on_terrain("Ground", -6.5, 9.6, 1.2024)  repeat = (6, (2.6, 0, 0)) }
+body BackRow  { type = column  height = 6.0  radius = 0.65  flutes = 20  material = marble
+                position = on_terrain("Ground", -6.5, 30.4, 1.2024)  repeat = (6, (2.6, 0, 0)) }
+body WestRow  { type = column  height = 6.0  radius = 0.65  flutes = 20  material = marble
+                position = on_terrain("Ground", -6.5, 12.2, 1.2024)  repeat = (7, (0, 2.6, 0)) }
+body EastRow  { type = column  height = 6.0  radius = 0.65  flutes = 20  material = marble
+                position = on_terrain("Ground", 6.5, 12.2, 1.2024)  repeat = (7, (0, 2.6, 0)) }
+
+body Cella     { type = box  size = (8.4, 15.0, 5.99)  position = on_terrain("Ground", 0, 21, 4.1975)  material = marble }
+body Architrave { type = box  size = (14.6, 22.4, 1.0)  position = on_terrain("Ground", 0, 20, 7.7025)  material = marble }
+body Frieze    { type = box  size = (14.6, 22.4, 1.0)  position = on_terrain("Ground", 0, 20, 8.7026)
+                 material = marble }
+body Cornice   { type = box  size = (15.6, 23.4, 0.35)  position = on_terrain("Ground", 0, 20, 9.3777)  material = marble }
+# Low gable roof with pediments: a 150° prism along the long axis (base 15.6 m).
+body Roof      { type = prism  apex = 150deg  side = 8.076  length = 23.4  material = marble
+                 position = on_terrain("Ground", 0, 20, 10.2502)  rotate = (90deg, 0, 0) }
+
+# ---------------------------------------------------------------- Athena on her pedestal
+body Plinth    { type = box  size = (1.3, 1.3, 0.25)  position = on_terrain("Ground", 0, 3.5, 0.1271)  material = marble }
+body Die       { type = box  size = (0.95, 0.95, 1.0)  position = on_terrain("Ground", 0, 3.5, 0.7572)  material = marble }
+body Cap       { type = box  size = (1.15, 1.15, 0.15)  position = on_terrain("Ground", 0, 3.5, 1.3323)  material = marble }
+body Athena    { type = mesh  file = "../assets/athena.obj"  optional = true
+                 model_up = (0.0522, -0.9089, -0.4138)  fit_height = 1.95  material = statuary
+                 position = on_terrain("Ground", 0, 3.5, 1.4074) }
+
+# ---------------------------------------------------------------- amphorae flanking the steps
+body Amphora   { type = lathe  material = clay  segments = 48
+                 profile = [(0.10, 0), (0.16, 0.05), (0.26, 0.35), (0.28, 0.55), (0.22, 0.80), (0.10, 0.95),
+                            (0.08, 1.05), (0.12, 1.12), (0.11, 1.15)]
+                 position = on_terrain("Ground", -8.6, 7.2, 0.003)  repeat = (2, (17.2, 0, 0)) }
+
+# ---------------------------------------------------------------- trees
+body Cypress   { type = lathe  material = cypress  segments = 24
+                 profile = [(0.25, 0), (0.9, 1.0), (1.05, 3.5), (0.95, 6.5), (0.6, 9.5), (0.2, 11.8), (0, 12.4)]
+                 position = on_terrain("Ground", -15, 8, 0.003)  repeat = (4, (0, 7.5, 0.0)) }
+body Cypress2  { type = lathe  material = cypress  segments = 24
+                 profile = [(0.25, 0), (0.8, 1.0), (0.95, 3.2), (0.85, 6.0), (0.5, 8.8), (0.15, 10.6), (0, 11.1)]
+                 position = on_terrain("Ground", 15.5, 11, 0.003)  repeat = (3, (0, 9, 0.0)) }
+body OliveTrunk { type = cylinder  radius = 0.22  height = 2.2  material = bark
+                  position = on_terrain("Ground", 11, -4, 0.003)  repeat = (3, (5.5, -6, 0)) }
+body OliveCrown  { type = sphere  radius = 1.7  material = olive
+                   position = on_terrain("Ground", 11, -4, 3.5)  repeat = (3, (5.5, -6, 0)) }
+body OliveCrownB { type = sphere  radius = 1.2  material = olive
+                   position = on_terrain("Ground", 12.9, -3.2, 3.0)  repeat = (3, (5.5, -6, 0)) }
+body OliveCrownC { type = sphere  radius = 1.1  material = olive
+                   position = on_terrain("Ground", 9.4, -4.9, 2.9)  repeat = (3, (5.5, -6, 0)) }
+
+# ---------------------------------------------------------------- observers
+camera Cam { lens = "../lenses/portrait_85mm.lens"  sensor = (36mm, 24mm)  resolution = (600, 400)
+             position = on_terrain("Ground", -1.9, -8.2, 1.55)  look_at = on_terrain("Ground", 0.35, 3.5, 2.4)
+             focus = 11.95  f_number = 2.0 }
+
+observer Wide { position = on_terrain("Ground", -16, -24, 3.2)  look_at = on_terrain("Ground", 1, 17, 4.5)
+                fov = 46deg  pupil = 3mm  focus = 40  resolution = (720, 450) }
+
+# From the south-west corner of the precinct, along the sunlit west colonnade.
+observer Colonnade { position = on_terrain("Ground", -11.5, 3.5, 1.7)  look_at = on_terrain("Ground", -6.2, 22, 4.2)
+                     fov = 50deg  pupil = 3mm  focus = 12  resolution = (720, 480) }
+
+render { detector = Wide  spp = 128 }

@@ -1,0 +1,12 @@
+# Petzval-type portrait objective, f ≈ 100 mm f/4: two cemented achromats separated by an
+# air space, stop between them. Six air–glass surfaces and one stop make a rich set of
+# ghost paths when the optics are uncoated.
+name Petzval-type objective f=100 mm
+units mm
+S1       89.56     6.0     N-BK7    14.0
+S2      -89.56     2.5     F2       14.0
+S3    -1621.6     20.0     air      14.0
+STO     inf       20.0     air       9.0   stop
+S5       89.56     6.0     N-BK7    14.0
+S6      -89.56     2.5     F2       14.0
+S7    -1621.6     60.0     air      14.0

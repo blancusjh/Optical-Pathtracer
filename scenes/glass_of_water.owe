@@ -1,0 +1,31 @@
+# THE GLASS OF WATER — refraction, absorption, reflection and caustics in a domestic scene.
+# A drinking glass (N-BK7) holds water (Daimon–Masumura dispersion, Pope–Fry absorption);
+# a red rod stands in it. The rod appears broken at the water line and the striped card
+# behind is compressed by the water cylinder — nothing is faked, it is Snell's law applied
+# at every glass–air, glass–water and water–air boundary. Hybrid estimator for the caustic.
+units = m
+
+world {
+    sky = gradient(zenith = rgb(0.9, 0.93, 1.0, luminance = 0.35), horizon = rgb(1.0, 0.97, 0.92, luminance = 0.45),
+                   ground = rgb(0.4, 0.35, 0.3, luminance = 0.1))
+}
+
+material oak     { type = diffuse  texture = rings(a = rgb(0.58, 0.40, 0.24), b = rgb(0.40, 0.25, 0.13), scale = 4mm, turbulence = 0.4) }
+material stripes { type = diffuse  texture = checker(a = rgb(0.9, 0.9, 0.88), b = rgb(0.08, 0.10, 0.25), scale = 6mm) }
+material red     { type = diffuse  reflectance = rgb(0.80, 0.10, 0.06) }
+
+body Table { type = box  size = (1.2, 0.8, 0.03)  position = (0, 0.1, -0.015)  material = oak }
+body Card  { type = sheet  size = (0.30, 0.20)  position = (0, 0.12, 0.10)  axis = (0, -1, 0)  up = (0, 0, 1)
+             material = stripes }
+
+body Glass { type = cup  outer_diameter = 76mm  wall = 2.5mm  base = 9mm  height = 115mm  level = 72mm
+             glass = N-BK7  liquid = water
+             rod = rod(diameter = 7mm, at = (14mm, 6mm), top = 0.175, material = red)
+             position = (0, 0, 10um) }   # resting on the table without sharing a face
+
+body Lamp { type = sphere  radius = 25mm  position = (-0.35, -0.25, 0.45)  material = black  emission = blackbody(3400K, 900) }
+
+observer Eye { position = (0.02, -0.34, 0.115)  look_at = (0, 0, 0.07)  fov = 34deg  pupil = 3mm  focus = 0.34
+               resolution = (480, 480) }
+
+render { detector = Eye  spp = 256  integrator = hybrid }

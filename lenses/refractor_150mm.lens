@@ -1,0 +1,15 @@
+# Classical great refractor: 150 mm f/15 achromatic objective (N-BK7/F2, crown first) and a
+# 16 mm Plössl eyepiece — about 140×, the power used on planets. `afocal = true` solves the
+# tube length.
+name Great refractor 150 mm f/15 with 16 mm Plossl
+units mm
+# label      R          t        medium   semi-diameter
+O1         895.6       10.0     N-BK7     75
+O2        -895.6        6.0     F2        75
+O3      -16216.0     2250.0     air       75
+E1         259.5        1.2     F2         5.0
+E2          14.33       3.0     N-BK7      5.0
+E3         -14.33       0.4     air        5.0
+E4          14.33       3.0     N-BK7      5.0
+E5         -14.33       1.2     F2         5.0
+E6        -259.5       15.0     air        5.0

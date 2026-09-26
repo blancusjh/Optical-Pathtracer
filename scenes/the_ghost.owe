@@ -1,0 +1,25 @@
+# THE GHOST — a bright lamp at night photographed through an uncoated Petzval-type objective
+# behind a flat protective filter.
+# Every air–glass surface reflects a few percent; light bouncing twice inside the lens forms
+# ghost images of the lamp. They are not added by a flare shader: they are camera paths that
+# met a Fresnel reflection twice. For this design they are strongly defocused and spread over
+# the whole frame as a faint veil — inspect them with
+#   owe emit scenes/the_ghost.owe --from -0.6,6.43,2.35 --toward 0.2,-1.5,1.6 --cone 0.1 --rays 40000
+# (≈0.4% of the flux reaching the sensor arrives by double reflections). fresnel_floor makes
+# the renderer explore those branches more often without changing the expected image.
+units = m
+
+world { sky = gradient(zenith = rgb(0.05, 0.08, 0.2, luminance = 0.004), horizon = rgb(0.2, 0.18, 0.25, luminance = 0.01)) }
+
+material asphalt { type = diffuse  texture = noise(a = rgb(0.10, 0.10, 0.11), b = rgb(0.18, 0.18, 0.19), scale = 0.05) }
+material brick   { type = diffuse  texture = checker(a = rgb(0.16, 0.08, 0.05), b = rgb(0.10, 0.05, 0.035), scale = 0.25) }
+
+body Street   { type = sheet  size = (60, 60)  material = asphalt }
+body Post     { type = cylinder  radius = 0.035  height = 2.28  position = (-0.62, 6.5, 0)  material = grey }
+body Lantern  { type = sphere  radius = 0.06  position = (-0.62, 6.5, 2.36)  material = black
+                emission = blackbody(2900K, 3e4) }
+
+camera Cam { lens = "../lenses/petzval_100mm_filter.lens"  sensor = (36mm, 24mm)  resolution = (540, 360)
+             position = (0.2, -1.5, 1.6)  look_at = (0.2, 22, 1.6)  focus = 8 }
+
+render { detector = Cam  spp = 1024  exposure = 9  auto_exposure = false  fresnel_floor = 0.25 }
