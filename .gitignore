@@ -3,4 +3,5 @@ out/
 *.pfm
 render.png
 render.json
-assets/
+assets
+__pycache__/

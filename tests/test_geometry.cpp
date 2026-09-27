@@ -1,9 +1,9 @@
 // Geometry kernel: exact surfaces, conic foci, acceleration structures.
 #include "check.hpp"
-#include "owe/builders.hpp"
-#include "owe/geometry.hpp"
-#include "owe/sampling.hpp"
-#include "owe/transport.hpp"
+#include "owe/scene/builders.hpp"
+#include "owe/scene/geometry.hpp"
+#include "owe/core/sampling.hpp"
+#include "owe/transport/transport.hpp"
 
 using namespace owe;
 

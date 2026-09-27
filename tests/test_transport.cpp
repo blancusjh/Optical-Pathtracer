@@ -1,9 +1,11 @@
 // Radiative transport against analytic limits.
+#include "analytic.hpp"
 #include "check.hpp"
-#include "owe/builders.hpp"
-#include "owe/optics.hpp"
-#include "owe/render.hpp"
-#include "owe/scene_loader.hpp"
+#include "owe/scene/builders.hpp"
+#include "owe/transport/optics.hpp"
+#include "owe/backends/registry.hpp"
+#include "owe/loader/scene_loader.hpp"
+#include "owe/transport/transport.hpp"
 
 #include <array>
 
@@ -17,11 +19,12 @@ Image renderScene(const Scene& sc, int det, int spp, const std::string& integrat
     rs.integrator = integrator;
     rs.threads = threads;
     rs.seed = seed;
-    ProgressiveRenderer R(sc, det, rs);
-    R.runPass(spp);
-    CHECK(R.stats().inconsistencies == 0);
-    CHECK(R.stats().leaks == 0);
-    return R.resolve();
+    rs.backend = referenceBackend().name();  // the reference transport, every integrator
+    auto R = makeRenderer(sc, det, rs);
+    R->runPass(spp);
+    CHECK(R->stats().inconsistencies == 0);
+    CHECK(R->stats().leaks == 0);
+    return R->resolve();
 }
 // Per-block means and standard errors over independent seeds (4×3 blocks of a 24×18 image).
 struct BlockStats {
@@ -217,69 +220,6 @@ TEST(underwater_radiance_obeys_n_squared_law) {
     CHECK(st.inconsistencies == 0);
 }
 
-namespace {
-// Irradiance at radial offset r on a plane parallel to a Lambertian disk (radius a, height h, radiance L).
-double diskIrradiance(double L, double a, double h, double r) {
-    double s = h * h + r * r + a * a;
-    return Pi * L / 2 * (1 - (h * h + r * r - a * a) / std::sqrt(s * s - 4 * r * r * a * a));
-}
-double meanDiskIrradiance(double L, double a, double h, double half) {
-    int N = 200;
-    double sum = 0;
-    for (int i = 0; i < N; ++i)
-        for (int j = 0; j < N; ++j) {
-            double x = -half + (i + 0.5) * 2 * half / N, y = -half + (j + 0.5) * 2 * half / N;
-            sum += diskIrradiance(L, a, h, std::sqrt(x * x + y * y));
-        }
-    return sum / (N * N);
-}
-// Disk emitter of radius a at height h above an upward-facing square sensor (half-size `half`).
-Scene diskIrradianceScene(double a, double h, bool aimed, double half) {
-    Scene sc;
-    SurfaceOptics black;
-    black.type = SurfaceType::Absorber;
-    Emission e;
-    e.radiance = Spectrum::constant(2.0);
-    int body = sc.world.addBody("lamp", "sheet", -1, Transform::translate({0, 0, h}) * Transform::rotate({1, 0, 0}, Pi));
-    sc.world.addBoundary(body, "face", PlaneShape::disk(a), Transform{}, kOutside, kOutside, sc.world.addOptics(black),
-                         sc.world.addEmission(e));
-    int sb = sc.world.addBody("sensor", "sensor", -1, Transform{});
-    SurfaceOptics so;
-    so.type = SurfaceType::Detector;
-    so.detector = 0;
-    uint32_t bi = sc.world.addBoundary(sb, "pixels", PlaneShape::rect(half, half), Transform{}, kOutside, kOutside,
-                                       sc.world.addOptics(so));
-    auto d = std::make_unique<SurfaceSensor>();
-    d->name = "E";
-    d->width = d->height = 2;
-    d->boundaryIndex = bi;
-    d->halfX = d->halfY = half;
-    if (aimed) {
-        d->hasAim = true;
-        d->aimCenter = {0, 0, h};
-        d->aimNormal = {0, 0, 1};
-        d->aimRadius = a;
-    }
-    sc.detectors.push_back(std::move(d));
-    sc.build();
-    return sc;
-}
-}  // namespace
-
-TEST(irradiance_from_lambertian_disk_path_and_light_tracing) {
-    double a = 0.3, h = 0.5, L = 2.0, half = 0.15;
-    CHECK_NEAR(diskIrradiance(L, a, h, 0), Pi * L * a * a / (a * a + h * h), 1e-12);
-    double expected = meanDiskIrradiance(L, a, h, half);
-    for (bool aimed : {false, true}) {
-        Scene sc = diskIrradianceScene(a, h, aimed, half);
-        Image pt = renderScene(sc, 0, 40000);
-        CHECK_NEAR(pt.meanY(), expected, 0.01 * expected);
-    }
-    Scene sc = diskIrradianceScene(a, h, false, half);
-    Image lt = renderScene(sc, 0, 400000, "light");
-    CHECK_NEAR(lt.meanY(), expected, 0.01 * expected);
-}
-
 TEST(path_and_light_tracing_agree_through_a_pinhole_and_a_lens_pupil) {
     std::string text = R"(
         units = m
@@ -334,4 +274,80 @@ TEST(hybrid_partition_matches_path_tracing_on_a_caustic) {
     BlockStats hy = blockStats(sc, 0, 256, "hybrid", 6);
     checkAgreement(pt, hy);
     CHECK(pt.imageSe < 0.01 * pt.imageMean);
+}
+
+TEST(diffuse_screen_records_irradiance_and_reflects_toward_observers) {
+    Scene sc = diskIrradianceScene(0.3, 0.5, true, 0.15, true);
+    double irradiance = meanDiskIrradiance(2, 0.3, 0.5, 0.15);
+    CHECK_REL(renderScene(sc, 0, 40000).meanY(), irradiance, 0.02);
+    CHECK_REL(renderScene(sc, 0, 200000, "light").meanY(), irradiance, 0.02);
+    auto eye = std::make_unique<IdealObserver>();
+    eye->name = "see-screen";
+    eye->position = {0, 0, 0.25}; eye->lookAt = {0, 0, 0}; eye->up = {0, 1, 0};
+    eye->fovY = radians(5); eye->width = eye->height = 12;
+    sc.detectors.push_back(std::move(eye)); sc.build();
+    double expected = 0.7 * diskIrradiance(2, 0.3, 0.5, 0) / Pi;
+    CHECK_REL(renderScene(sc, 1, 1024).meanY(), expected, 0.02);
+    CHECK_REL(renderScene(sc, 1, 4096, "light").meanY(), expected, 0.04);
+
+    // The SAME illuminated patch has the same radiance throughout its front hemisphere.
+    // A small field keeps the footprint near the centre even at 85 degrees from the normal.
+    auto& moving = static_cast<IdealObserver&>(*sc.detectors[1]);
+    moving.fovY = radians(0.1);
+    for (double polar : {0., 45., 80., 85.}) {
+        for (double azimuth : {0., 120., 240.}) {
+            double a = radians(polar), b = radians(azimuth);
+            moving.position = Vec3(std::sin(a) * std::cos(b), std::sin(a) * std::sin(b), std::cos(a)) * 0.25;
+            moving.prepare(sc.world);
+            CHECK_REL(renderScene(sc, 1, 1024).meanY(), expected, 0.02);
+        }
+    }
+    moving.position = {0, 0, -0.25}; moving.prepare(sc.world);
+    CHECK_NEAR(renderScene(sc, 1, 128).meanY(), 0, 0); // no transmission of the front projection
+}
+
+TEST(optical_bench_projection_is_visible_from_free_front_directions) {
+    Scene sc = loadScene("scenes/optical_bench.owe");
+    // Delete every observer/readout. Image formation must depend only on physical bodies.
+    sc.detectors.clear();
+    Tracer tracer(sc);
+    auto radianceAt = [&](Vec3 patch, double angle) {
+        Vec3 eye = patch + Vec3(std::sin(angle), -std::cos(angle), 0) * 0.05;
+        double sum = 0;
+        TransportStats stats;
+        for (int i = 0; i < 30000; ++i) {
+            Rng rng(i, 101);
+            auto wl = Wavelengths::single(550);
+            sum += tracer.radiance({eye, normalize(patch - eye)}, sc.world.locate(eye), wl, rng, stats)[0];
+        }
+        CHECK(stats.leaks == 0);
+        CHECK(stats.inconsistencies == 0);
+        return sum / 30000;
+    };
+    // The stem moves from x=-6 mm on the object to x=+6 mm on the screen (inversion).
+    Vec3 bright{0.006, 0.4038, 0.006}, dark{-0.012, 0.4038, 0.010};
+    double reference = radianceAt(bright, 0);
+    CHECK(reference > 5 * radianceAt(dark, 0));
+    for (double angle : {-85., -45., 45., 85.})
+        CHECK_REL(radianceAt(bright, radians(angle)), reference, 1e-6);
+    CHECK(radianceAt(bright, Pi) < reference * 0.1);
+}
+
+TEST(diffuse_screen_aim_sampling_retains_full_hemisphere_and_matching_pdf) {
+    SurfaceOptics o; o.type = SurfaceType::Diffuse; o.reflectance = Spectrum::constant(0.7);
+    o.sampleAimCenter = {0, 0, 1}; o.sampleAimNormal = {0, 0, 1};
+    o.sampleAimRadius = 0.15; o.sampleAimShare = 0.95;
+    Interface it; it.optics = &o; it.n = {0, 0, 1};
+    Rng rng(812, 3); double sum = 0, sq = 0;
+    const int N = 200000;
+    for (int i = 0; i < N; ++i) {
+        Draw3 u(rng); ScatterSample s;
+        CHECK(sampleScatter(it, {0, 0, -1}, u.u1, u.u2, u.u3, TransportMode::Radiance, s));
+        double pdf; double f = evalScatter(it, {0, 0, -1}, s.wi, TransportMode::Radiance, pdf);
+        CHECK_REL(pdf, s.pdf, 1e-10);
+        CHECK_NEAR(f, 0.7 * InvPi, 1e-12);
+        sum += s.weight; sq += s.weight * s.weight;
+    }
+    double mean = sum / N, se = std::sqrt((sq / N - mean * mean) / (N - 1));
+    CHECK_NEAR(mean, 0.7, 5 * se);
 }

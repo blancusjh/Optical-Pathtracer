@@ -1,12 +1,198 @@
 // Lenses and instruments: paraxial optics, real rays through physical bodies.
 #include "check.hpp"
-#include "owe/analysis.hpp"
-#include "owe/builders.hpp"
-#include "owe/optics.hpp"
-#include "owe/render.hpp"
-#include "owe/scene_loader.hpp"
+#include "owe/analysis/analysis.hpp"
+#include "owe/backends/registry.hpp"
+#include "owe/scene/builders.hpp"
+#include "owe/transport/optics.hpp"
+#include "owe/loader/scene_loader.hpp"
 
 using namespace owe;
+
+TEST(observatory_free_eye_planet_signal_dominates_room_reflection) {
+    Scene sc = loadScene("scenes/the_observatory.owe");
+    sc.useDetector(sc.findDetector("Room"));
+    IdealObserver eye = dynamic_cast<IdealObserver&>(*sc.detectors[sc.findDetector("Room")]);
+    eye.width = eye.height = 100;
+    Tracer tracer(sc); TransportStats stats;
+    for (const char* object : {"Saturn", "Jupiter", "Moon"}) {
+        auto& target = dynamic_cast<IdealObserver&>(*sc.detectors[sc.findDetector(std::string(object) + "Eyepiece")]);
+        // Move the existing room eye; do not adopt the bookmark's aperture, FOV,
+        // focus, exposure or sun-sampling settings. Also displace it from the nominal pupil.
+        eye.position = target.position + target.right() * 0.0002;
+        eye.lookAt = eye.position + target.forward(); eye.prepare(sc.world);
+        double half = 50 * std::tan(radians(0.4)) / std::tan(eye.fovY / 2);
+        double planet = 0, other = 0;
+        for (int i = 0; i < 100000; ++i) {
+            Rng rng(i, 27); Ray ray; double weight;
+            eye.generate(50 + half * (2 * rng.uniform() - 1), 50 + half * (2 * rng.uniform() - 1), rng, ray, weight);
+            auto wl = Wavelengths::single(550); PathRecord rec;
+            tracer.radiance(ray, eye.region, wl, rng, stats, &rec);
+            for (const auto& c : rec.c) {
+                bool fromPlanet = false;
+                for (size_t j = 1; j <= c.vertex && j < rec.v.size(); ++j) {
+                    if (rec.v[j].event != EventKind::Diffuse) continue;
+                    fromPlanet = sc.world.boundaryLabel(rec.v[j].boundary).rfind(object, 0) == 0;
+                    break;
+                }
+                (fromPlanet ? planet : other) += c.value[0] * weight;
+            }
+        }
+        std::fprintf(stderr, "    free %s eye: planet %.8g, other %.8g\n", object, planet / 100000, other / 100000);
+        CHECK(planet > 0);
+        CHECK(planet > 20 * other);
+    }
+}
+
+TEST(observatory_window_transmits_candlelight_to_exterior_ground) {
+    double signal[2]{};
+    for (int sealed = 0; sealed < 2; ++sealed) {
+        Scene sc = loadSceneWithEdits("scenes/the_observatory.owe", sealed ?
+            std::vector<std::string>{"Wall.openings=[]"} : std::vector<std::string>{});
+        Tracer tracer(sc); TransportStats stats; SurfaceHit ground;
+        CHECK(sc.world.intersect({{-6 * std::sin(radians(70)), -6 * std::cos(radians(70)), 1000}, {0, 0, -1}}, 2000, ground));
+        Ray ray{ground.p + Vec3(0, 0, 0.01), {0, 0, -1}};
+        auto region = sc.world.locate(ray.o);
+        for (int i = 0; i < 30000; ++i) {
+            Rng rng(i, 17); auto wl = Wavelengths::single(550); PathRecord rec;
+            tracer.radiance(ray, region, wl, rng, stats, &rec);
+            for (const auto& c : rec.c) if (c.source.find("Flame") != std::string::npos) signal[sealed] += c.value[0];
+        }
+    }
+    std::fprintf(stderr, "    exterior candlelight: window open %.9g, sealed %.9g\n", signal[0] / 30000, signal[1] / 30000);
+    CHECK(signal[0] / 30000 > 1e-9);
+    CHECK(signal[0] > 1000 * signal[1]);
+}
+
+TEST(pinhole_has_finite_geometric_blur_without_a_lens_focus) {
+    for (double objectDistance : {12., 24.}) for (double screenDistance : {2., 3.9, 6.})
+        for (double diameter : {0.006, 0.03, 0.3}) {
+            Scene sc;
+            buildStop(sc.world, "hole", diameter / 2, 10, -1, Transform{});
+            int body = sc.world.addBody("screen", "sensor", -1, Transform::translate({0, 0, screenDistance}));
+            SurfaceOptics detector; detector.type = SurfaceType::Detector;
+            sc.world.addBoundary(body, "pixels", PlaneShape::rect(2, 2), Transform{}, kOutside, kOutside,
+                                 sc.world.addOptics(detector));
+            sc.build(); Tracer tracer(sc); Rng rng(19, 1);
+            Vec3 object{0.2, 0, -objectDistance};
+            Vec3 centre{-object.x * screenDistance / objectDistance, 0, screenDistance};
+            double radius = diameter * 0.5 * (1 + screenDistance / objectDistance);
+            double sumR2 = 0, maxR = 0;
+            for (int i = 0; i < 4096; ++i) {
+                Draw2 u(rng); Vec2 disk = sampleUniformDiskConcentric(u.u1, u.u2);
+                Vec3 aperture{disk.x * diameter / 2, disk.y * diameter / 2, 0};
+                auto path = tracer.walk({object, normalize(aperture - object)}, 0, 550,
+                                        WalkMode::PrimaryTransmission, rng);
+                CHECK(path.v.back().event == EventKind::Detect);
+                double r = length(path.v.back().p - centre);
+                CHECK(r <= radius * (1 + 1e-9));
+                maxR = std::max(maxR, r); sumR2 += r * r;
+            }
+            CHECK_REL(maxR, radius, 0.005);
+            CHECK_REL(std::sqrt(sumR2 / 4096), radius / std::sqrt(2), 0.02);
+        }
+}
+
+TEST(moon_eyepiece_saved_glass_view_separates_reflection_from_transmission) {
+    // Regression for the reported freely navigated view. Match the scene loaded by that
+    // viewer (before the eyecups were added), rather than substituting a Saturn bookmark.
+    auto sc = loadSceneWithEdits("scenes/the_observatory.owe",
+        {"GreatRefractor.eyecup=false", "Refractor2.eyecup=false", "MoonScope.eyecup=false"});
+    IdealObserver eye;
+    eye.position = {-3.020303470341136, -1.096159549177377, 47.843021349537416};
+    eye.lookAt = {-9.5845774247424593, -4.6348822980427569, 51.119390082637246};
+    eye.up = {0.15135342771703073, 0.50563757519874331, 0.84936610626127584};
+    eye.fovY = radians(80); eye.pupilRadius = 0.0025; eye.focusDistance = 3.5;
+    eye.width = 80; eye.height = 50; eye.prepare(sc.world);
+    const auto& reference = dynamic_cast<IdealObserver&>(*sc.detectors[sc.findDetector("MoonEyepiece")]);
+    Vec3 offset = eye.position - reference.position;
+    double axial = dot(offset, reference.forward());
+    CHECK_NEAR(axial, 0.0188296038, 1e-9);
+    CHECK_NEAR(length(offset - reference.forward() * axial), 0.0050488352, 1e-8);
+
+    Tracer tracer(sc); Rng primaryRng(1, 1);
+    auto primary = tracer.walk({eye.position, eye.forward()}, eye.region, 550,
+                               WalkMode::PrimaryTransmission, primaryRng);
+    CHECK(sc.world.boundaryLabel(primary.v.back().boundary) == "MoonScope.tube.wall");
+    CHECK(primary.v.back().event == EventKind::Absorb);
+    double moon[2]{}, reflectedRoom[2]{};
+    for (int pose = 0; pose < 2; ++pose) {
+        if (pose) {
+            Vec3 direction = eye.lookAt - eye.position;
+            eye.position = reference.position;
+            eye.lookAt = eye.position + direction; // only translate; keep all eye settings
+            eye.prepare(sc.world);
+        }
+        TransportStats stats;
+        for (int i = 0; i < 100000; ++i) {
+            Rng rng(i, 19); Ray ray; double weight;
+            double x = eye.width * rng.uniform(), y = eye.height * rng.uniform();
+            eye.generate(x, y, rng, ray, weight);
+            SurfaceHit first;
+            if (!sc.world.intersect(ray, Inf, first) ||
+                !sc.world.boundaryLabel(first.boundary).starts_with("MoonScope.L3.")) continue;
+            auto wl = Wavelengths::single(550); PathRecord path;
+            tracer.radiance(ray, eye.region, wl, rng, stats, &path);
+            for (const auto& c : path.c) {
+                bool reflected = false;
+                for (size_t j = 1; j <= c.vertex && j < path.v.size(); ++j) {
+                    const auto& v = path.v[j];
+                    reflected |= v.event == EventKind::Reflect || v.event == EventKind::TIR;
+                    if (v.event != EventKind::Diffuse) continue;
+                    if (sc.world.boundaryLabel(v.boundary) == "Moon.surface") moon[pose] += c.value[0];
+                    else {
+                        CHECK(reflected);
+                        reflectedRoom[pose] += c.value[0];
+                    }
+                    break;
+                }
+            }
+        }
+        CHECK(stats.leaks == 0);
+        CHECK(stats.inconsistencies == 0);
+    }
+    CHECK(reflectedRoom[0] > 0);
+    CHECK(moon[1] > 0);
+    CHECK(moon[1] > 100 * moon[0]);
+}
+
+TEST(observatory_eyepiece_room_light_is_reflected_and_eyecup_reduces_it) {
+    double planet[2]{}, room[2]{};
+    for (int shield = 0; shield < 2; ++shield) {
+        auto sc = loadSceneWithEdits("scenes/the_observatory.owe",
+                                    {std::string("GreatRefractor.eyecup=") + (shield ? "true" : "false")});
+        auto eye = dynamic_cast<IdealObserver&>(*sc.detectors[sc.findDetector("SaturnEyepiece")]);
+        eye.pupilRadius = 0.0025; // the room observer's 5 mm pupil, not the small eyepiece preset
+        eye.width = eye.height = 100; eye.prepare(sc.world);
+        Tracer tracer(sc); TransportStats stats;
+        for (int i = 0; i < 100000; ++i) {
+            Rng rng(i, 19); Ray ray; double weight;
+            double x = 40 + 20 * rng.uniform(), y = 40 + 20 * rng.uniform();
+            eye.generate(x, y, rng, ray, weight);
+            auto wl = Wavelengths::single(550); PathRecord path;
+            tracer.radiance(ray, eye.region, wl, rng, stats, &path);
+            for (const auto& c : path.c) {
+                bool reflected = false;
+                for (size_t j = 1; j <= c.vertex && j < path.v.size(); ++j) {
+                    const auto& v = path.v[j];
+                    reflected |= v.event == EventKind::Reflect || v.event == EventKind::TIR;
+                    if (v.event != EventKind::Diffuse) continue;
+                    auto label = sc.world.boundaryLabel(v.boundary);
+                    if (label.starts_with("Saturn")) planet[shield] += c.value[0];
+                    else {
+                        CHECK(reflected); // room geometry must not replace the transmitted celestial view
+                        room[shield] += c.value[0];
+                    }
+                    break;
+                }
+            }
+        }
+        CHECK(stats.leaks == 0);
+        CHECK(stats.inconsistencies == 0);
+    }
+    CHECK(planet[0] > 0 && room[0] > 0);
+    CHECK_REL(planet[1], planet[0], 0.01);
+    CHECK(room[1] < room[0] * 0.9);
+}
 
 namespace {
 double relIndex(const std::string& glass, double l) {
@@ -124,9 +310,9 @@ TEST(instruments_far_from_the_origin_keep_their_precision) {
     sc.build();
     RenderSettings rs;
     rs.spp = 64;
-    ProgressiveRenderer R(sc, 0, rs);
-    R.runPass(64);
-    CHECK(R.stats().inconsistencies == 0);
+    auto R = makeRenderer(sc, 0, rs);  // the reference backend
+    R->runPass(64);
+    CHECK(R->stats().inconsistencies == 0);
 }
 
 TEST(spherical_and_chromatic_aberration_trends) {
@@ -230,10 +416,10 @@ camera Cam { lens = "lenses/achromat_100mm.lens" sensor = (24mm, 16mm) resolutio
     Scene sc = loadSceneFromString(scene, ".");
     RenderSettings rs;
     rs.spp = 96;
-    ProgressiveRenderer R(sc, 0, rs);
-    R.runPass(96);
-    CHECK(R.stats().inconsistencies == 0);
-    Image img = R.resolve();
+    auto R = makeRenderer(sc, 0, rs);  // the reference backend
+    R->runPass(96);
+    CHECK(R->stats().inconsistencies == 0);
+    Image img = R->resolve();
     double quad[2][2] = {{0, 0}, {0, 0}};
     for (int y = 0; y < img.height; ++y)
         for (int x = 0; x < img.width; ++x) quad[y < img.height / 2][x >= img.width / 2] += img.at(x, y).y;
@@ -263,9 +449,9 @@ camera Cam { lens = "lenses/portrait_85mm.lens" sensor = (36mm, 24mm) resolution
         RenderSettings rs;
         rs.spp = spp;
         rs.seed = seed;
-        ProgressiveRenderer R(sc, 0, rs);
-        R.runPass(spp);
-        return R.resolve().meanY();
+        auto R = makeRenderer(sc, 0, rs);  // the reference backend
+        R->runPass(spp);
+        return R->resolve().meanY();
     };
     double share = sensor->focusShare;
     // Independent estimates give the standard error of the unaimed (high-variance) sampler.
