@@ -94,7 +94,7 @@ for frosted glass); an opaque one takes `material = …`. Any solid can emit:
 | type | parameters |
 |---|---|
 | `lens` | `medium`, `front`, `back` (surfaces), `thickness`, `diameter` / `front_diameter` / `back_diameter` / `edge_diameter`, `rim = ground \| black \| polished`; or `surfaces = […]`, `media = […]`, `thicknesses = […]` for cemented groups; or `focal =`, `form = bi \| plano` |
-| `prescription` | `file`, `afocal = true` (solve the tube length), `tube = true` or `tube_radius`, `tube_material` (outer finish: brass, paint; the inside stays black), `rim` |
+| `prescription` | `file`, `afocal = true` (solve the tube length), `tube = true` or `tube_radius`, `tube_material` (outer finish: brass, paint; the inside stays black), `eyecup = true` (physical black light shield around the eye-side opening), `rim` |
 | `mirror` | `surface`, `diameter`, `thickness`, `hole_diameter`, `material` (default aluminium) |
 | `flat_mirror` | `size = (w, h)` or `ellipse = (a, b)`, `material` |
 | `stop`, `iris`, `aperture` | `aperture` (diameter), `outer_diameter` |
@@ -107,9 +107,9 @@ for frosted glass); an opaque one takes `material = …`. Any solid can emit:
 | `column` | Doric column: `height`, `radius` (lower shaft), `taper`, `entasis`, `flutes`, `flute_depth`, `capital_height` |
 | `round_wall` | cylindrical wall: `radius`, `height`, `openings = [(azimuth, width, sill, top), …]` |
 | `dome` | hemisphere: `radius`, `slit_azimuth`, `slit_width`, `slit_top` (elevation where the slit ends) |
-| `starfield` | `count`, `seed`, `distance`, `angular_radius`, `brightest` (luminance of the brightest star), `min_elevation`: small emitting spheres on the celestial sphere, with a steep magnitude distribution and a range of colour temperatures; not sampled by next-event estimation |
+| `starfield` | `count`, `seed`, `distance`, `angular_radius`, `brightest` (luminance of the brightest star), `min_elevation`: small emitting spheres on the celestial sphere, with a steep magnitude distribution and a range of colour temperatures; directly sampled in a separate group so they do not starve nearby lamps |
 | `cup` | `outer_diameter`, `wall`, `base`, `height`, `level`, `glass`, `liquid`, `rod = rod(diameter =, at = (x, y), top =, medium = \| material =)` |
-| `terrain` | `size`, `resolution`, `amplitude`, `feature`, `ridge`, `seed`, `flat_radius` |
+| `terrain` | `size`, `resolution`, `amplitude`, `feature`, `ridge`, `seed`, `flat_radius`, `reference_only = true` (the height field that `on_terrain` and forests use, without matter: for scenes whose visible ground is a detailed mesh, so no second surface overlaps it) |
 | `forest` | `terrain`, `count`, `inner_radius`, `outer_radius`, `seed`, `foliage`, `trunk` |
 | `fractal_statue` | `radius`, `depth`, `ratio`, `material`, `pedestal` |
 
@@ -137,9 +137,16 @@ Any detector may carry its own display and sampling settings, which apply when i
 `exposure = EV` (a fixed exposure replacing auto exposure), `white_balance = K | none`, and
 `sun_share = s` (the sun's `nee_share` for this view: an eyepiece on Saturn wants nearly all
 light samples on the sun; the candlelit room around it does not).
-* `sensor Name { size = (w, h), resolution, placement, aim_center, aim_axis, aim_diameter }`
-  — a sensitive surface in the world (front = local +z). The optional aim is an
-  importance-sampling hint for an opening through which all light must pass.
+* `sensor Name { size = (w, h), resolution, placement, material, aim_center, aim_axis, aim_diameter }`
+  — a surface irradiance measurement (front = local +z). Without `material` it is an absorbing
+  sensor. With a diffuse `material` it is a measurement screen: it records incident irradiance
+  and scatters light with the specified reflectance, so an observer can see a projected image.
+  The readout is incident irradiance, not the screen's reflected radiance. An opaque screen's
+  image is visible from its illuminated side, not transmitted through its back.
+  The optional aim is an importance-sampling hint for an opening. Diffuse screens mix 95%
+  opening-directed samples with 5% cosine-hemisphere samples, for both readout rays and
+  camera-path continuation at the screen; this retains support for indirect illumination.
+  Absorbing sensors use the aim exclusively and require it to cover all incident paths.
 
 ### `render { … }`
 
@@ -147,6 +154,12 @@ light samples on the sun; the candlelit room around it does not).
 (EV, display only), `auto_exposure`, `white_balance = K | none` (display white point: a
 Bradford adaptation from a Planckian white at K to D65, so candlelight at 2000 K reads as warm
 white; the raw PFM is untouched), `fresnel_floor` (sampling knob, 0–0.49).
+
+`indirect_guide = BodyName` optionally names a spherical reflector (for example, the Moon).
+Diffuse surfaces without their own guide sample a 50/50 mixture of its projected disk and
+the full cosine hemisphere. This reduces noise from small indirect light sources; it does
+not make the body emissive or replace its reflection, occlusion, or illumination calculation.
+The reflector's own material is excluded. Use `indirect_guide = ""` to disable the hint.
 
 ## Edits without rewriting the file
 

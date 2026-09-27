@@ -14,14 +14,18 @@ world {
     # Night sky ~10^-6 of the Moon's luminance, as on a moonlit night.
     sky = gradient(zenith = rgb(0.03, 0.06, 0.16, luminance = 2.5e-7), horizon = rgb(0.10, 0.13, 0.24, luminance = 8e-7),
                    ground = rgb(0.02, 0.02, 0.02, luminance = 1e-6))
-    # nee_share: a sampling choice — the sun receives 30% of light samples, the candles the rest.
+    # Relative photometry: the solar normal irradiance is 6.7967 scene units. Map that
+    # to 100,000 lux: one scene illuminance unit represents 14,713 lux. Candle and star
+    # intensities below use the SAME scale, rather than unrelated display brightnesses.
+    # nee_share is sampling only: 30% sun, with the remainder split between lamps and stars.
     sun { azimuth = 350deg  elevation = -20deg  temperature = 5778  luminance = 1e5  nee_share = 0.3 }
 }
 
-material plaster  { type = diffuse  reflectance = rgb(0.78, 0.74, 0.66) }
+material plaster  { type = diffuse  texture = noise(a = rgb(0.61, 0.56, 0.45), b = rgb(0.72, 0.67, 0.56), scale = 0.035) }
+material dome_lining { type = diffuse texture = noise(a = rgb(0.19, 0.23, 0.20), b = rgb(0.24, 0.28, 0.24), scale = 0.12) }
 material parquet  { type = diffuse  texture = wood(a = rgb(0.45, 0.28, 0.14), b = rgb(0.30, 0.17, 0.08), scale = 9mm, turbulence = 0.4) }
 material walnut   { type = diffuse  texture = wood(a = rgb(0.30, 0.18, 0.09), b = rgb(0.18, 0.10, 0.05), scale = 4mm, turbulence = 0.5) }
-material rug      { type = diffuse  texture = checker(a = rgb(0.45, 0.08, 0.07), b = rgb(0.30, 0.20, 0.10), scale = 0.12) }
+material rug      { type = diffuse  texture = noise(a = rgb(0.24, 0.055, 0.035), b = rgb(0.32, 0.085, 0.05), scale = 0.002) }
 material brass    { type = conductor  metal = gold  roughness = 0.18  tint = rgb(0.95, 0.85, 0.65) }
 material polished { type = conductor  metal = gold  roughness = 0.06 }
 material iron     { type = diffuse  reflectance = rgb(0.08, 0.08, 0.09) }
@@ -50,23 +54,25 @@ material ringA    { type = diffuse  texture = radial(a = rgb(0.82, 0.78, 0.70, s
 # The Earth beneath the landscape: its curvature is what keeps the sun, 20° below the
 # horizon, off the mountains (a flat finite world would let it light every steep north face).
 body Earth  { type = sphere  radius = 6371000  material = rock  position = (0, 0, -6371260) }
+# Coordinate-only terrain (heights for on_terrain, no matter); the visible ground is Landscape_Ground_relief.
 body Ground { type = terrain  size = (3000, 3000)  resolution = 384  amplitude = 150  feature = 700  ridge = 0.6
-              seed = 23  flat_radius = 30  material = rock }
+              seed = 23  flat_radius = 30  reference_only = true }
 
 # ---------------------------------------------------------------- the building
-body Floor  { type = disk  radius = 4.5  position = on_terrain("Ground", 0, 0, 0.001)  material = parquet }
+body Floor  { type = disk  radius = 4.5  position = on_terrain("Ground", 0, 0, -0.048)  material = parquet }
 body Rug    { type = sheet  size = (2.6, 1.8)  position = on_terrain("Ground", 0.2, 0.2, 0.002)  material = rug }
 body Wall   { type = round_wall  radius = 4.5  height = 3.2  material = plaster  position = on_terrain("Ground", 0, 0, 0)
-              openings = [(250deg, 1.2, 1.2, 2.6)] }
+              openings = [(250deg, 1.2, 1.2, 2.6), (75deg, 0.80, 0.76, 2.56),
+                          (345deg, 0.80, 0.76, 2.56), (225deg, 0.80, 0.76, 2.56), (135deg, 0.80, 0.76, 2.56)] }
 body Dome   { type = dome  radius = 4.5  slit_azimuth = 170deg  slit_width = 1.8  slit_top = 80deg
-              material = plaster  position = on_terrain("Ground", 0, 0, 3.2) }
+              material = dome_lining  position = on_terrain("Ground", 0, 0, 3.2) }
 body Chart  { type = sheet  size = (1.1, 0.75)  material = chart  position = on_terrain("Ground", 3.13, 3.13, 1.75)
               axis = (-0.7071, -0.7071, 0)  up = (0, 0, 1) }
 
 # ---------------------------------------------------------------- the great refractors
-body GreatRefractor { type = prescription  file = "../lenses/refractor_150mm.lens"  afocal = true  tube = true  tube_material = paint
+body GreatRefractor { type = prescription  file = "../lenses/refractor_150mm.lens"  afocal = true  tube = true  eyecup = true  tube_material = paint
                       position = on_terrain("Ground", 0.4188, -0.6984, 2.6556)  point_at = sky(176deg, 33deg, 1.28e12) }
-body Refractor2     { type = prescription  file = "../lenses/refractor_150mm.lens"  afocal = true  tube = true  tube_material = brass
+body Refractor2     { type = prescription  file = "../lenses/refractor_150mm.lens"  afocal = true  tube = true  eyecup = true  tube_material = brass
                       position = on_terrain("Ground", -0.4591, -0.9377, 2.7498)  point_at = sky(164deg, 38deg, 6.3e11) }
 body Pier1 { type = lathe  material = iron  segments = 48
          profile = [(0.26, 0), (0.24, 0.08), (0.13, 0.14), (0.11, 1.847), (0.15, 1.887), (0.15, 1.967)]
@@ -76,7 +82,7 @@ body Pier2 { type = lathe  material = iron  segments = 48
          position = on_terrain("Ground", -0.6763, -0.1802, 0.0021) }
 
 # ---------------------------------------------------------------- the Moon telescope at the west window
-body MoonScope { type = prescription  file = "../lenses/kepler_16x.lens"  afocal = true  tube = true  tube_material = brass
+body MoonScope { type = prescription  file = "../lenses/kepler_16x.lens"  afocal = true  tube = true  eyecup = true  tube_material = brass
                  position = on_terrain("Ground", -3.3949, -1.2337, 1.6871)  point_at = sky(250deg, 24deg, 3.844e8) }
 body Leg1 { type = cylinder  radius = 0.014  height = 1.5452  material = walnut  position = on_terrain("Ground", -2.9874, -0.7981, 0.0030)  look_at = on_terrain("Ground", -3.1974, -1.1619, 1.4900) }
 body Leg2 { type = cylinder  radius = 0.014  height = 1.5452  material = walnut  position = on_terrain("Ground", -2.9874, -1.5256, 0.0030)  look_at = on_terrain("Ground", -3.1974, -1.1619, 1.4900) }
@@ -110,10 +116,7 @@ assembly BookC { position = on_terrain("Ground", 0.4100, 3.4800, 0.87760)  rotat
 
 # An open folio: two page blocks on a leather board, gently tilted toward the spine.
 body Folio.Board { type = box  size = (0.46, 0.32, 0.005)  position = on_terrain("Ground", 0.95, 3.17, 0.78790)  material = leather1 }
-body Folio.Left  { type = box  size = (0.215, 0.30, 0.012)  position = on_terrain("Ground", 0.838, 3.17, 0.80160)  rotate = (0, 4deg, 0)
-                   material = text }
-body Folio.Right { type = box  size = (0.215, 0.30, 0.012)  position = on_terrain("Ground", 1.062, 3.17, 0.80160)  rotate = (0, -4deg, 0)
-                   material = text }
+# Curved, layered and typeset folio pages are in the crafted model group below.
 
 # A compass: brass case, printed rose, steel needle, glass cover held by a brass bezel.
 body CompassCase  { type = cylinder  radius = 0.06  height = 0.014  material = brass  position = on_terrain("Ground", 1.380, 3.470, 0.78540) }
@@ -134,21 +137,24 @@ body RingMeridian { type = torus  radius = 0.12   tube_radius = 0.004  material 
 body Holder1 { type = lathe  material = brass  segments = 40  position = on_terrain("Ground", 0.700, 3.560, 0.78540)
                 profile = [(0.045, 0), (0.042, 0.008), (0.014, 0.018), (0.010, 0.055), (0.024, 0.064), (0.022, 0.070)] }
 body Candle1 { type = cylinder  radius = 0.0105  height = 0.100  material = wax  position = on_terrain("Ground", 0.700, 3.560, 0.85550) }
-body Flame1  { type = sphere  radius = 0.0055  material = black  emission = blackbody(1850K, 60)  position = on_terrain("Ground", 0.700, 3.560, 0.96900) }
+# A Lambertian spherical flame has intensity I = pi*r^2*L. These small flames are
+# approximately 1 cd on the solar scale above (about 1 lux at 1 m), not 84 cd.
+body Flame1  { type = sphere  radius = 0.0055  material = black  emission = blackbody(1850K, 0.715189)  position = on_terrain("Ground", 0.700, 3.560, 0.96900) }
 body Holder2 { type = lathe  material = brass  segments = 40  position = on_terrain("Ground", 1.160, 3.580, 0.78540)
                 profile = [(0.045, 0), (0.042, 0.008), (0.014, 0.018), (0.010, 0.055), (0.024, 0.064), (0.022, 0.070)] }
 body Candle2 { type = cylinder  radius = 0.0105  height = 0.130  material = wax  position = on_terrain("Ground", 1.160, 3.580, 0.85550) }
-body Flame2  { type = sphere  radius = 0.0055  material = black  emission = blackbody(1850K, 60)  position = on_terrain("Ground", 1.160, 3.580, 0.99900) }
+body Flame2  { type = sphere  radius = 0.0055  material = black  emission = blackbody(1850K, 0.715189)  position = on_terrain("Ground", 1.160, 3.580, 0.99900) }
 body Holder3 { type = lathe  material = brass  segments = 40  position = on_terrain("Ground", 1.860, 3.500, 0.78540)
                 profile = [(0.045, 0), (0.042, 0.008), (0.014, 0.018), (0.010, 0.055), (0.024, 0.064), (0.022, 0.070)] }
 body Candle3 { type = cylinder  radius = 0.0105  height = 0.160  material = wax  position = on_terrain("Ground", 1.860, 3.500, 0.85550) }
-body Flame3  { type = sphere  radius = 0.0055  material = black  emission = blackbody(1850K, 60)  position = on_terrain("Ground", 1.860, 3.500, 1.02900) }
+body Flame3  { type = sphere  radius = 0.0055  material = black  emission = blackbody(1850K, 0.715189)  position = on_terrain("Ground", 1.860, 3.500, 1.02900) }
 
 # A floor candelabrum by the great refractor.
 body Candelabrum { type = lathe  material = brass  segments = 48  position = on_terrain("Ground", 1.55, -0.55, 0.0021)
                    profile = [(0.16, 0), (0.15, 0.02), (0.05, 0.05), (0.02, 0.15), (0.03, 0.6), (0.015, 1.05), (0.05, 1.12), (0.045, 1.13)] }
 body TallCandle  { type = cylinder  radius = 0.02  height = 0.22  material = wax  position = on_terrain("Ground", 1.55, -0.55, 1.1302) }
-body TallFlame   { type = sphere  radius = 0.009  material = black  emission = blackbody(1850K, 120)
+# The larger flame represents 2 cd on the same scale, not the previous 449 cd.
+body TallFlame   { type = sphere  radius = 0.009  material = black  emission = blackbody(1850K, 0.534184)
                    position = on_terrain("Ground", 1.55, -0.55, 1.3703) }
 
 # A terrestrial globe on a turned stand.
@@ -158,7 +164,10 @@ body Globe      { type = sphere  radius = 0.22  material = earth  axis = (0.39, 
 body GlobeRing  { type = torus  radius = 0.245  tube_radius = 0.006  material = brass  axis = (0, 1, 0)  position = on_terrain("Ground", -0.75, 3.05, 0.9999) }
 
 # ---------------------------------------------------------------- the sky
-body Stars   { type = starfield  count = 3500  seed = 5  distance = 1e13  angular_radius = 0.03deg  brightest = 0.6  min_elevation = -3deg }
+# Synthetic finite stellar discs, not a measured star catalogue. Their angular radius
+# is enlarged for geometric rendering; normalize the light accordingly. The brightest
+# supplies about 2 microlux on a normal plane, on the same solar/candle scale.
+body Stars   { type = starfield  count = 3500  seed = 5  distance = 1e13  angular_radius = 0.03deg  brightest = 0.000157826  min_elevation = -3deg }
 body Moon    { type = sphere  radius = 1737400  material = regolith  position = sky(250deg, 24deg, 3.844e8) }
 body Jupiter { type = sphere  radius = 69911000  material = jovian  axis = (0.05, 0.1, 0.99)  position = sky(164deg, 38deg, 6.3e11) }
 body Saturn  { type = sphere  radius = 58232000  material = kronian  axis = (0.054, 0.217, 0.975)  position = sky(176deg, 33deg, 1.28e12) }
@@ -166,6 +175,150 @@ body Saturn  { type = sphere  radius = 58232000  material = kronian  axis = (0.0
 body SaturnRingC { type = disk  radius = 92000000  inner_radius = 74500000  material = ringC  axis = (0.054, 0.217, 0.975)  position = sky(176deg, 33deg, 1.28e12) }
 body SaturnRingB { type = disk  radius = 117580000  inner_radius = 92000100  material = ringB  axis = (0.054, 0.217, 0.975)  position = sky(176deg, 33deg, 1.28e12) }
 body SaturnRingA { type = disk  radius = 136780000  inner_radius = 122170000  material = ringA  axis = (0.054, 0.217, 0.975)  position = sky(176deg, 33deg, 1.28e12) }
+
+# BEGIN CRAFTED MODELS
+# Generated by tools/build_scene_models.py; edit its recipes to regenerate.
+material Crafted_Handmade_brick_0 { type = diffuse texture = noise(a = rgb(0.3401, 0.1701, 0.1119), b = rgb(0.3095, 0.1547, 0.1018), scale = 0.028) }
+body Crafted_Handmade_brick_0 { type = mesh file = "../models/crafted/the_observatory_Handmade_brick_0.obj" material = Crafted_Handmade_brick_0 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Handmade_brick_1 { type = diffuse texture = noise(a = rgb(0.3534, 0.1767, 0.1162), b = rgb(0.3216, 0.1608, 0.1058), scale = 0.028) }
+body Crafted_Handmade_brick_1 { type = mesh file = "../models/crafted/the_observatory_Handmade_brick_1.obj" material = Crafted_Handmade_brick_1 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Handmade_brick_2 { type = diffuse texture = noise(a = rgb(0.3667, 0.1833, 0.1206), b = rgb(0.3337, 0.1668, 0.1098), scale = 0.028) }
+body Crafted_Handmade_brick_2 { type = mesh file = "../models/crafted/the_observatory_Handmade_brick_2.obj" material = Crafted_Handmade_brick_2 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Handmade_brick_3 { type = diffuse texture = noise(a = rgb(0.3800, 0.1900, 0.1250), b = rgb(0.3458, 0.1729, 0.1138), scale = 0.028) }
+body Crafted_Handmade_brick_3 { type = mesh file = "../models/crafted/the_observatory_Handmade_brick_3.obj" material = Crafted_Handmade_brick_3 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Handmade_brick_4 { type = diffuse texture = noise(a = rgb(0.3933, 0.1966, 0.1294), b = rgb(0.3579, 0.1790, 0.1177), scale = 0.028) }
+body Crafted_Handmade_brick_4 { type = mesh file = "../models/crafted/the_observatory_Handmade_brick_4.obj" material = Crafted_Handmade_brick_4 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Handmade_brick_5 { type = diffuse texture = noise(a = rgb(0.4066, 0.2033, 0.1338), b = rgb(0.3700, 0.1850, 0.1217), scale = 0.028) }
+body Crafted_Handmade_brick_5 { type = mesh file = "../models/crafted/the_observatory_Handmade_brick_5.obj" material = Crafted_Handmade_brick_5 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Handmade_brick_6 { type = diffuse texture = noise(a = rgb(0.4199, 0.2099, 0.1381), b = rgb(0.3821, 0.1911, 0.1257), scale = 0.028) }
+body Crafted_Handmade_brick_6 { type = mesh file = "../models/crafted/the_observatory_Handmade_brick_6.obj" material = Crafted_Handmade_brick_6 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Sandstone_0 { type = diffuse texture = noise(a = rgb(0.6392, 0.5076, 0.3384), b = rgb(0.5817, 0.4619, 0.3079), scale = 0.028) }
+body Crafted_Sandstone_0 { type = mesh file = "../models/crafted/the_observatory_Sandstone_0.obj" material = Crafted_Sandstone_0 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Sandstone_1 { type = diffuse texture = noise(a = rgb(0.6664, 0.5292, 0.3528), b = rgb(0.6064, 0.4816, 0.3210), scale = 0.028) }
+body Crafted_Sandstone_1 { type = mesh file = "../models/crafted/the_observatory_Sandstone_1.obj" material = Crafted_Sandstone_1 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Sandstone_2 { type = diffuse texture = noise(a = rgb(0.6936, 0.5508, 0.3672), b = rgb(0.6312, 0.5012, 0.3342), scale = 0.028) }
+body Crafted_Sandstone_2 { type = mesh file = "../models/crafted/the_observatory_Sandstone_2.obj" material = Crafted_Sandstone_2 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Sandstone_3 { type = diffuse texture = noise(a = rgb(0.7208, 0.5724, 0.3816), b = rgb(0.6559, 0.5209, 0.3473), scale = 0.028) }
+body Crafted_Sandstone_3 { type = mesh file = "../models/crafted/the_observatory_Sandstone_3.obj" material = Crafted_Sandstone_3 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Walnut_panelling_0 { type = diffuse texture = noise(a = rgb(0.1960, 0.1000, 0.0480), b = rgb(0.1784, 0.0910, 0.0437), scale = 0.006) }
+body Crafted_Walnut_panelling_0 { type = mesh file = "../models/crafted/the_observatory_Walnut_panelling_0.obj" material = Crafted_Walnut_panelling_0 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Walnut_panelling_1 { type = diffuse texture = noise(a = rgb(0.2205, 0.1125, 0.0540), b = rgb(0.2007, 0.1024, 0.0491), scale = 0.006) }
+body Crafted_Walnut_panelling_1 { type = mesh file = "../models/crafted/the_observatory_Walnut_panelling_1.obj" material = Crafted_Walnut_panelling_1 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Walnut_panelling_2 { type = diffuse texture = noise(a = rgb(0.2450, 0.1250, 0.0600), b = rgb(0.2230, 0.1138, 0.0546), scale = 0.006) }
+body Crafted_Walnut_panelling_2 { type = mesh file = "../models/crafted/the_observatory_Walnut_panelling_2.obj" material = Crafted_Walnut_panelling_2 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Walnut_panelling_3 { type = diffuse texture = noise(a = rgb(0.2695, 0.1375, 0.0660), b = rgb(0.2452, 0.1251, 0.0601), scale = 0.006) }
+body Crafted_Walnut_panelling_3 { type = mesh file = "../models/crafted/the_observatory_Walnut_panelling_3.obj" material = Crafted_Walnut_panelling_3 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Walnut_panelling_4 { type = diffuse texture = noise(a = rgb(0.2940, 0.1500, 0.0720), b = rgb(0.2675, 0.1365, 0.0655), scale = 0.006) }
+body Crafted_Walnut_panelling_4 { type = mesh file = "../models/crafted/the_observatory_Walnut_panelling_4.obj" material = Crafted_Walnut_panelling_4 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Engraved_brass { type = conductor metal = gold roughness = 0.24 tint = rgb(0.6000, 0.4050, 0.1450) }
+body Crafted_Engraved_brass { type = mesh file = "../models/crafted/the_observatory_Engraved_brass.obj" material = Crafted_Engraved_brass position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Dome_bronze { type = diffuse texture = noise(a = rgb(0.1350, 0.1900, 0.1700), b = rgb(0.1229, 0.1729, 0.1547), scale = 0.028) }
+body Crafted_Dome_bronze { type = mesh file = "../models/crafted/the_observatory_Dome_bronze.obj" material = Crafted_Dome_bronze position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Window_glass { type = diffuse texture = noise(a = rgb(0.7500, 0.8500, 0.8600), b = rgb(0.6825, 0.7735, 0.7826), scale = 0.028) }
+body Crafted_Window_glass { type = mesh file = "../models/crafted/the_observatory_Window_glass.obj" medium = N-BK7 closed = true position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Recessed_glazing { type = diffuse texture = noise(a = rgb(0.0700, 0.1250, 0.1450), b = rgb(0.0637, 0.1138, 0.1319), scale = 0.028) }
+body Crafted_Recessed_glazing { type = mesh file = "../models/crafted/the_observatory_Recessed_glazing.obj" material = Crafted_Recessed_glazing position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Oak_boards_0 { type = diffuse texture = noise(a = rgb(0.2924, 0.1763, 0.0886), b = rgb(0.2661, 0.1604, 0.0806), scale = 0.006) }
+body Crafted_Oak_boards_0 { type = mesh file = "../models/crafted/the_observatory_Oak_boards_0.obj" material = Crafted_Oak_boards_0 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Oak_boards_1 { type = diffuse texture = noise(a = rgb(0.3060, 0.1845, 0.0927), b = rgb(0.2785, 0.1679, 0.0844), scale = 0.006) }
+body Crafted_Oak_boards_1 { type = mesh file = "../models/crafted/the_observatory_Oak_boards_1.obj" material = Crafted_Oak_boards_1 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Oak_boards_2 { type = diffuse texture = noise(a = rgb(0.3196, 0.1927, 0.0968), b = rgb(0.2908, 0.1754, 0.0881), scale = 0.006) }
+body Crafted_Oak_boards_2 { type = mesh file = "../models/crafted/the_observatory_Oak_boards_2.obj" material = Crafted_Oak_boards_2 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Oak_boards_3 { type = diffuse texture = noise(a = rgb(0.3332, 0.2009, 0.1009), b = rgb(0.3032, 0.1828, 0.0919), scale = 0.006) }
+body Crafted_Oak_boards_3 { type = mesh file = "../models/crafted/the_observatory_Oak_boards_3.obj" material = Crafted_Oak_boards_3 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Oak_boards_4 { type = diffuse texture = noise(a = rgb(0.3468, 0.2091, 0.1051), b = rgb(0.3156, 0.1903, 0.0956), scale = 0.006) }
+body Crafted_Oak_boards_4 { type = mesh file = "../models/crafted/the_observatory_Oak_boards_4.obj" material = Crafted_Oak_boards_4 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Oak_boards_5 { type = diffuse texture = noise(a = rgb(0.3604, 0.2173, 0.1092), b = rgb(0.3280, 0.1977, 0.0994), scale = 0.006) }
+body Crafted_Oak_boards_5 { type = mesh file = "../models/crafted/the_observatory_Oak_boards_5.obj" material = Crafted_Oak_boards_5 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Oak_boards_6 { type = diffuse texture = noise(a = rgb(0.3740, 0.2255, 0.1133), b = rgb(0.3403, 0.2052, 0.1031), scale = 0.006) }
+body Crafted_Oak_boards_6 { type = mesh file = "../models/crafted/the_observatory_Oak_boards_6.obj" material = Crafted_Oak_boards_6 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Oak_boards_7 { type = diffuse texture = noise(a = rgb(0.3876, 0.2337, 0.1174), b = rgb(0.3527, 0.2127, 0.1069), scale = 0.006) }
+body Crafted_Oak_boards_7 { type = mesh file = "../models/crafted/the_observatory_Oak_boards_7.obj" material = Crafted_Oak_boards_7 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Oak_grain { type = diffuse texture = noise(a = rgb(0.2800, 0.1650, 0.0840), b = rgb(0.2548, 0.1502, 0.0764), scale = 0.006) }
+body Crafted_Oak_grain { type = mesh file = "../models/crafted/the_observatory_Oak_grain.obj" material = Crafted_Oak_grain position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Floor_forged_nails { type = diffuse texture = noise(a = rgb(0.1300, 0.1200, 0.1000), b = rgb(0.1183, 0.1092, 0.0910), scale = 0.028) }
+body Crafted_Floor_forged_nails { type = mesh file = "../models/crafted/the_observatory_Floor_forged_nails.obj" material = Crafted_Floor_forged_nails position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Floor_inlay { type = diffuse texture = noise(a = rgb(0.1300, 0.0900, 0.0520), b = rgb(0.1183, 0.0819, 0.0473), scale = 0.028) }
+body Crafted_Floor_inlay { type = mesh file = "../models/crafted/the_observatory_Floor_inlay.obj" material = Crafted_Floor_inlay position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Library_bindings_0 { type = diffuse texture = noise(a = rgb(0.1632, 0.0714, 0.0510), b = rgb(0.1485, 0.0650, 0.0464), scale = 0.028) }
+body Crafted_Library_bindings_0 { type = mesh file = "../models/crafted/the_observatory_Library_bindings_0.obj" material = Crafted_Library_bindings_0 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Library_bindings_1 { type = diffuse texture = noise(a = rgb(0.2016, 0.0882, 0.0630), b = rgb(0.1835, 0.0803, 0.0573), scale = 0.028) }
+body Crafted_Library_bindings_1 { type = mesh file = "../models/crafted/the_observatory_Library_bindings_1.obj" material = Crafted_Library_bindings_1 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Library_bindings_2 { type = diffuse texture = noise(a = rgb(0.2400, 0.1050, 0.0750), b = rgb(0.2184, 0.0955, 0.0683), scale = 0.028) }
+body Crafted_Library_bindings_2 { type = mesh file = "../models/crafted/the_observatory_Library_bindings_2.obj" material = Crafted_Library_bindings_2 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Library_bindings_3 { type = diffuse texture = noise(a = rgb(0.2784, 0.1218, 0.0870), b = rgb(0.2533, 0.1108, 0.0792), scale = 0.028) }
+body Crafted_Library_bindings_3 { type = mesh file = "../models/crafted/the_observatory_Library_bindings_3.obj" material = Crafted_Library_bindings_3 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Library_bindings_4 { type = diffuse texture = noise(a = rgb(0.3168, 0.1386, 0.0990), b = rgb(0.2883, 0.1261, 0.0901), scale = 0.028) }
+body Crafted_Library_bindings_4 { type = mesh file = "../models/crafted/the_observatory_Library_bindings_4.obj" material = Crafted_Library_bindings_4 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Parchment_edges { type = diffuse texture = noise(a = rgb(0.6400, 0.5600, 0.3900), b = rgb(0.5824, 0.5096, 0.3549), scale = 0.028) }
+body Crafted_Parchment_edges { type = mesh file = "../models/crafted/the_observatory_Parchment_edges.obj" material = Crafted_Parchment_edges position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Mansard_slate_0 { type = diffuse texture = noise(a = rgb(0.1365, 0.1729, 0.1865), b = rgb(0.1242, 0.1573, 0.1698), scale = 0.028) }
+body Crafted_Mansard_slate_0 { type = mesh file = "../models/crafted/the_observatory_Mansard_slate_0.obj" material = Crafted_Mansard_slate_0 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Mansard_slate_1 { type = diffuse texture = noise(a = rgb(0.1455, 0.1843, 0.1988), b = rgb(0.1324, 0.1677, 0.1810), scale = 0.028) }
+body Crafted_Mansard_slate_1 { type = mesh file = "../models/crafted/the_observatory_Mansard_slate_1.obj" material = Crafted_Mansard_slate_1 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Mansard_slate_2 { type = diffuse texture = noise(a = rgb(0.1545, 0.1957, 0.2112), b = rgb(0.1406, 0.1781, 0.1921), scale = 0.028) }
+body Crafted_Mansard_slate_2 { type = mesh file = "../models/crafted/the_observatory_Mansard_slate_2.obj" material = Crafted_Mansard_slate_2 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Mansard_slate_3 { type = diffuse texture = noise(a = rgb(0.1635, 0.2071, 0.2235), b = rgb(0.1488, 0.1885, 0.2033), scale = 0.028) }
+body Crafted_Mansard_slate_3 { type = mesh file = "../models/crafted/the_observatory_Mansard_slate_3.obj" material = Crafted_Mansard_slate_3 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Tooled_leather_1 { type = diffuse texture = noise(a = rgb(0.2400, 0.0500, 0.0290), b = rgb(0.2184, 0.0455, 0.0264), scale = 0.028) }
+body Crafted_Tooled_leather_1 { type = mesh file = "../models/crafted/the_observatory_Tooled_leather_1.obj" material = Crafted_Tooled_leather_1 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Book_brass_tooling { type = conductor metal = gold roughness = 0.24 tint = rgb(0.5500, 0.3700, 0.1200) }
+body Crafted_Book_brass_tooling { type = mesh file = "../models/crafted/the_observatory_Book_brass_tooling.obj" material = Crafted_Book_brass_tooling position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Book_deckled_paper { type = diffuse texture = noise(a = rgb(0.6900, 0.6000, 0.4300), b = rgb(0.6279, 0.5460, 0.3913), scale = 0.028) }
+body Crafted_Book_deckled_paper { type = mesh file = "../models/crafted/the_observatory_Book_deckled_paper.obj" material = Crafted_Book_deckled_paper position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Book_page_shadows { type = diffuse texture = noise(a = rgb(0.3600, 0.2850, 0.1900), b = rgb(0.3276, 0.2593, 0.1729), scale = 0.028) }
+body Crafted_Book_page_shadows { type = mesh file = "../models/crafted/the_observatory_Book_page_shadows.obj" material = Crafted_Book_page_shadows position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Book_brass_lettering { type = conductor metal = gold roughness = 0.24 tint = rgb(0.5500, 0.3650, 0.1200) }
+body Crafted_Book_brass_lettering { type = mesh file = "../models/crafted/the_observatory_Book_brass_lettering.obj" material = Crafted_Book_brass_lettering position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Tooled_leather_2 { type = diffuse texture = noise(a = rgb(0.0450, 0.1300, 0.0950), b = rgb(0.0410, 0.1183, 0.0864), scale = 0.028) }
+body Crafted_Tooled_leather_2 { type = mesh file = "../models/crafted/the_observatory_Tooled_leather_2.obj" material = Crafted_Tooled_leather_2 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Tooled_leather_3 { type = diffuse texture = noise(a = rgb(0.2200, 0.1100, 0.0450), b = rgb(0.2002, 0.1001, 0.0410), scale = 0.028) }
+body Crafted_Tooled_leather_3 { type = mesh file = "../models/crafted/the_observatory_Tooled_leather_3.obj" material = Crafted_Tooled_leather_3 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Tooled_leather_4 { type = diffuse texture = noise(a = rgb(0.1600, 0.0290, 0.0200), b = rgb(0.1456, 0.0264, 0.0182), scale = 0.028) }
+body Crafted_Tooled_leather_4 { type = mesh file = "../models/crafted/the_observatory_Tooled_leather_4.obj" material = Crafted_Tooled_leather_4 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Folio_curved_pages { type = diffuse texture = noise(a = rgb(0.7900, 0.7100, 0.5400), b = rgb(0.7189, 0.6461, 0.4914), scale = 0.028) }
+body Crafted_Folio_curved_pages { type = mesh file = "../models/crafted/the_observatory_Folio_curved_pages.obj" material = Crafted_Folio_curved_pages position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Folio_printed_ink { type = diffuse texture = noise(a = rgb(0.0650, 0.0430, 0.0220), b = rgb(0.0592, 0.0391, 0.0200), scale = 0.028) }
+body Crafted_Folio_printed_ink { type = mesh file = "../models/crafted/the_observatory_Folio_printed_ink.obj" material = Crafted_Folio_printed_ink position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Folio_ink_lettering { type = diffuse texture = noise(a = rgb(0.0550, 0.0380, 0.0210), b = rgb(0.0501, 0.0346, 0.0191), scale = 0.028) }
+body Crafted_Folio_ink_lettering { type = mesh file = "../models/crafted/the_observatory_Folio_ink_lettering.obj" material = Crafted_Folio_ink_lettering position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Carpet_pile_0 { type = diffuse texture = noise(a = rgb(0.2850, 0.0450, 0.0310), b = rgb(0.2593, 0.0410, 0.0282), scale = 0.028) }
+body Crafted_Carpet_pile_0 { type = mesh file = "../models/crafted/the_observatory_Carpet_pile_0.obj" material = Crafted_Carpet_pile_0 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Carpet_pile_1 { type = diffuse texture = noise(a = rgb(0.1100, 0.0220, 0.0180), b = rgb(0.1001, 0.0200, 0.0164), scale = 0.028) }
+body Crafted_Carpet_pile_1 { type = mesh file = "../models/crafted/the_observatory_Carpet_pile_1.obj" material = Crafted_Carpet_pile_1 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Carpet_pile_2 { type = diffuse texture = noise(a = rgb(0.0350, 0.0700, 0.0780), b = rgb(0.0319, 0.0637, 0.0710), scale = 0.028) }
+body Crafted_Carpet_pile_2 { type = mesh file = "../models/crafted/the_observatory_Carpet_pile_2.obj" material = Crafted_Carpet_pile_2 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Carpet_pile_3 { type = diffuse texture = noise(a = rgb(0.4800, 0.3100, 0.1300), b = rgb(0.4368, 0.2821, 0.1183), scale = 0.028) }
+body Crafted_Carpet_pile_3 { type = mesh file = "../models/crafted/the_observatory_Carpet_pile_3.obj" material = Crafted_Carpet_pile_3 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Carpet_pile_4 { type = diffuse texture = noise(a = rgb(0.6500, 0.5400, 0.3400), b = rgb(0.5915, 0.4914, 0.3094), scale = 0.028) }
+body Crafted_Carpet_pile_4 { type = mesh file = "../models/crafted/the_observatory_Carpet_pile_4.obj" material = Crafted_Carpet_pile_4 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Carpet_pile_5 { type = diffuse texture = noise(a = rgb(0.1400, 0.2000, 0.1300), b = rgb(0.1274, 0.1820, 0.1183), scale = 0.028) }
+body Crafted_Carpet_pile_5 { type = mesh file = "../models/crafted/the_observatory_Carpet_pile_5.obj" material = Crafted_Carpet_pile_5 position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Carpet_cotton_fringe { type = diffuse texture = noise(a = rgb(0.6200, 0.5400, 0.3900), b = rgb(0.5642, 0.4914, 0.3549), scale = 0.028) }
+body Crafted_Carpet_cotton_fringe { type = mesh file = "../models/crafted/the_observatory_Carpet_cotton_fringe.obj" material = Crafted_Carpet_cotton_fringe position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Machined_brass { type = conductor metal = gold roughness = 0.24 tint = rgb(0.5300, 0.3400, 0.1200) }
+body Crafted_Machined_brass { type = mesh file = "../models/crafted/the_observatory_Machined_brass.obj" material = Crafted_Machined_brass position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Engraving_black { type = diffuse texture = noise(a = rgb(0.0350, 0.0250, 0.0160), b = rgb(0.0319, 0.0228, 0.0146), scale = 0.028) }
+body Crafted_Engraving_black { type = mesh file = "../models/crafted/the_observatory_Engraving_black.obj" material = Crafted_Engraving_black position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Mount_cast_iron { type = diffuse texture = noise(a = rgb(0.0650, 0.0730, 0.0710), b = rgb(0.0592, 0.0664, 0.0646), scale = 0.028) }
+body Crafted_Mount_cast_iron { type = mesh file = "../models/crafted/the_observatory_Mount_cast_iron.obj" material = Crafted_Mount_cast_iron position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Telescope_ink_lettering { type = diffuse texture = noise(a = rgb(0.0350, 0.0250, 0.0160), b = rgb(0.0319, 0.0228, 0.0146), scale = 0.028) }
+body Crafted_Telescope_ink_lettering { type = mesh file = "../models/crafted/the_observatory_Telescope_ink_lettering.obj" material = Crafted_Telescope_ink_lettering position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Carved_walnut { type = diffuse texture = noise(a = rgb(0.2000, 0.0950, 0.0410), b = rgb(0.1820, 0.0864, 0.0373), scale = 0.028) }
+body Crafted_Carved_walnut { type = mesh file = "../models/crafted/the_observatory_Carved_walnut.obj" material = Crafted_Carved_walnut position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Furniture_brass { type = conductor metal = gold roughness = 0.24 tint = rgb(0.5500, 0.3600, 0.1300) }
+body Crafted_Furniture_brass { type = mesh file = "../models/crafted/the_observatory_Furniture_brass.obj" material = Crafted_Furniture_brass position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Candle_wax_drips { type = diffuse texture = noise(a = rgb(0.7800, 0.7100, 0.5300), b = rgb(0.7098, 0.6461, 0.4823), scale = 0.028) }
+body Crafted_Candle_wax_drips { type = mesh file = "../models/crafted/the_observatory_Candle_wax_drips.obj" material = Crafted_Candle_wax_drips position = on_terrain("Ground", 0, 0, 0) }
+material Crafted_Charred_wicks { type = diffuse texture = noise(a = rgb(0.0240, 0.0190, 0.0130), b = rgb(0.0218, 0.0173, 0.0118), scale = 0.028) }
+body Crafted_Charred_wicks { type = mesh file = "../models/crafted/the_observatory_Charred_wicks.obj" material = Crafted_Charred_wicks position = on_terrain("Ground", 0, 0, 0) }
+# END CRAFTED MODELS
+
+# BEGIN LANDSCAPE MODELS
+# Generated by tools/build_landscapes.py; existing materials, metres, world coordinates.
+body Landscape_Ground_relief { type = mesh file = "../models/landscapes/the_observatory_Ground_relief.obj" material = rock position = (0, 0, 0.0005) }
+body Landscape_Hillside_outcrops { type = mesh file = "../models/landscapes/the_observatory_Hillside_outcrops.obj" material = rock position = (0, 0, 0.0005) }
+# END LANDSCAPE MODELS
 
 # ---------------------------------------------------------------- observers
 observer Room { position = on_terrain("Ground", 3.7, -0.3, 1.66)  look_at = on_terrain("Ground", -1.6, 0.9, 1.75)
@@ -187,5 +340,9 @@ observer MoonEyepiece    { position = exit_pupil("MoonScope")  look_at = sky(250
 observer Slit { position = on_terrain("Ground", 0.1, 1.9, 1.6)  look_at = sky(170deg, 42deg, 100)
                 fov = 64deg  pupil = 6mm  resolution = (640, 640) }
 
-# The eye adapts to candlelight: display white point 2000 K (the raw image is unchanged).
-render { detector = Room  spp = 256  white_balance = 2000 }
+# Neutral display white: free exploration also includes the outdoor sky and sunlit planets.
+# A fixed candlelight correction must not follow the observer out into daylight-coloured light.
+# Guide some diffuse continuations toward the Moon to resolve reflected moonlight.
+# This changes sampling variance only: the rays still hit its actual surface, scatter,
+# and trace visibility to the sun. The other half retains full hemisphere support.
+render { detector = Room  spp = 256  white_balance = none  indirect_guide = Moon }

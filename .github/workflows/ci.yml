@@ -15,8 +15,10 @@ jobs:
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
       - name: Build
         run: cmake --build build
-      - name: Validation tests
+      - name: Validation tests (including the layering rules)
         run: ctest --test-dir build --output-on-failure
+      - name: Backends in this build
+        run: build/owe backends cpu
       - name: Smoke-render every scene
         run: |
           for s in scenes/*.owe; do
@@ -26,3 +28,43 @@ jobs:
         run: |
           printf 'render 1 1\nset Cam.f_number=8\nset Cam.focus=25 m\nrender 1 1\nquit\n' |
             build/owe studio scenes/the_temple.owe --detector Cam --resolution 48x32 --out build/studio
+      - name: Throughput and image digests on the canonical suite
+        run: build/owe bench --spp 2 --resolution 64x48
+
+  # The GPU backend on a software Vulkan device (Mesa lavapipe): the kernels run the conformance
+  # suite and are tested statistically against the CPU reference on an independent Vulkan driver.
+  gpu-linux-lavapipe:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain and a software Vulkan driver
+        run: sudo apt-get update && sudo apt-get install -y ninja-build zlib1g-dev libvulkan1 mesa-vulkan-drivers
+      - name: Configure (fetches Vulkan-Headers, volk and slangc)
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DOWE_GPU=ON
+      - name: Build
+        run: cmake --build build
+      - name: Devices
+        run: build/owe backends || true
+      - name: Tests (the conformance suite runs on lavapipe when it is usable, else gpu is skipped)
+        run: ctest --test-dir build --output-on-failure
+      - name: GPU against CPU on a scene
+        run: |
+          if build/owe backends gpu; then
+            build/owe compare scenes/glass_of_water.owe:Eye --backend gpu --spp 16 --runs 6 --resolution 32x24
+          fi
+
+  # Apple silicon: the GPU backend through MoltenVK.
+  gpu-macos-moltenvk:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain and MoltenVK
+        run: brew install ninja molten-vk vulkan-loader sdl3
+      - name: Configure (fetches Vulkan-Headers, volk and slangc)
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DOWE_GPU=ON -DOWE_VIEWER=ON
+      - name: Build
+        run: cmake --build build
+      - name: Devices
+        run: build/owe backends || true
+      - name: Tests (the conformance suite runs on gpu when the runner exposes a Metal device)
+        run: ctest --test-dir build --output-on-failure

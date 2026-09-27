@@ -1,4 +1,5 @@
-// owe — command-line front end of the Optical World Engine (CPU reference backend).
+// owe — command-line front end of the Optical World Engine. It renders through the backend registry
+// (owe/backends/registry.hpp): --backend chooses where the transport runs, nothing else changes.
 #include <algorithm>
 #include <cstdio>
 #include <unistd.h>
@@ -10,11 +11,15 @@
 #include <string>
 #include <vector>
 
-#include "owe/analysis.hpp"
-#include "owe/inspect.hpp"
-#include "owe/render.hpp"
-#include "owe/scene_loader.hpp"
-#include "owe/version.hpp"
+#include "owe/analysis/analysis.hpp"
+#include "owe/analysis/inspect.hpp"
+#include "owe/backends/compare.hpp"
+#include "owe/backends/registry.hpp"
+#include "owe/core/version.hpp"
+#include "owe/loader/scene_loader.hpp"
+#include "owe/render/output.hpp"
+#include "owe/render/record.hpp"
+#include "viewer.hpp"
 
 using namespace owe;
 
@@ -41,7 +46,9 @@ const std::map<std::string, int> kArity = {
     {"--max-depth", 1}, {"--out", 1},    {"--exposure", 1}, {"--pixel", 2},    {"--samples", 1},    {"--svg", 1},
     {"--json", 1},     {"--from", 1},    {"--dir", 1},      {"--toward", 1},   {"--cone", 1},       {"--rays", 1},
     {"--lambda", 1},   {"--plane", 1},   {"--origin", 1},   {"--fields", 1},   {"--resolution", 1}, {"--field", 1},
-    {"--bounds", 1},   {"--title", 1},      {"--fresnel-floor", 1}, {"--set", 1}, {"--white-balance", 1}};
+    {"--bounds", 1},   {"--title", 1},      {"--fresnel-floor", 1}, {"--set", 1}, {"--white-balance", 1},
+    {"--repeat", 1}, {"--backend", 1}, {"--device", 1}, {"--runs", 1}, {"--block", 1},
+    {"--view", 1}, {"--scale", 1}, {"--tour-seconds", 1}, {"--screenshot", 1}, {"--after", 1}, {"--reference", 1}};
 
 Args parse(int argc, char** argv, int start) {
     Args a;
@@ -106,6 +113,22 @@ void applyResolution(Scene& scene, int di, const Args& a) {
     scene.build();
 }
 
+// --backend NAME and --device N; an integrator the backend lacks becomes path (with a note).
+void applyBackend(RenderSettings& rs, const Args& a) {
+    if (a.has("--backend")) rs.backend = a.get("--backend");
+    if (a.has("--device")) rs.device = std::stoi(a.get("--device"));
+    std::string why;
+    if (!backend(rs.backend).available(&why)) throw std::runtime_error(rs.backend + " backend unavailable: " + why);
+    std::string note = adaptToBackend(rs);
+    if (!note.empty()) std::fprintf(stderr, "note: %s\n", note.c_str());
+}
+
+std::string backendNames() {
+    std::string names;
+    for (const Backend* b : backends()) names += (names.empty() ? "" : "|") + b->name();
+    return names;
+}
+
 int detectorIndex(const Scene& s, const Args& a) {
     std::string name = a.get("--detector", s.render.detector);
     if (name.empty()) return 0;
@@ -115,15 +138,20 @@ int detectorIndex(const Scene& s, const Args& a) {
 }
 
 void usage() {
-    std::puts(
-        "owe " OWE_VERSION " — Optical World Engine (CPU reference tracer)\n"
+    std::printf(
+        "owe " OWE_VERSION " — Optical World Engine\n"
         "\n"
         "  owe render <scene.owe> [--detector NAME] [--spp N] [--passes K] [--integrator path|light]\n"
         "                         [--seed S] [--threads T] [--max-depth D] [--resolution WxH]\n"
         "                         [--out PREFIX] [--exposure EV] [--no-auto-exposure] [--fresnel-floor P]\n"
-        "                         [--white-balance KELVIN]\n"
+        "                         [--white-balance KELVIN] [--backend %s] [--device N]\n"
         "      Progressive spectral render. Writes PREFIX.png (display), PREFIX.pfm (raw linear) and\n"
         "      PREFIX.json (reproducibility record) after every pass.\n"
+        "\n"
+        "  --backend chooses where the transport runs (render, studio, bench, view, compare):\n"
+        "      cpu  the reference: IEEE-754 double on host threads (default)\n"
+        "      gpu  portable Vulkan compute (NVIDIA, AMD, Intel; Apple silicon via MoltenVK), float32\n"
+        "      Both implement every integrator; the measurement is the same.\n"
         "\n"
         "  owe probe <scene.owe> --pixel X Y [--detector NAME] [--samples N] [--svg F] [--json F] [--plane uv]\n"
         "      Why is this pixel this colour? Ranks transport classes and shows representative paths.\n"
@@ -135,15 +163,52 @@ void usage() {
         "  owe lens <file.lens> [--fields 0,5,10] [--afocal] [--svg F] [--field DEG] [--rays N]\n"
         "      Paraxial and real-ray analysis of a lens prescription built as physical bodies.\n"
         "\n"
-        "  owe studio <scene.owe> [--detector NAME] [--resolution WxH] [--out PREFIX] [--set Block.key=value ...]\n"
-        "      Interactive session: tune aperture, focus, placement or any scene value and refine the\n"
-        "      image pass by pass (reads commands from stdin; type help).\n"
+        "  owe studio <scene.owe> [--detector NAME] [--resolution WxH] [--out PREFIX] [--backend NAME]\n"
+        "                         [--set Block.key=value ...]\n"
+        "      Interactive session: tune aperture, focus, placement, backend or any scene value and\n"
+        "      refine the image pass by pass (reads commands from stdin; type help).\n"
+        "\n"
+        "  owe view [scene.owe|directory ...] [--view file.owe:DETECTOR] [--backend NAME]\n"
+        "           [--device N] [--scale S] [--tour] [--tour-seconds S] [--set Block.key=value ...]\n"
+        "           [--screenshot FILE.png|DIRECTORY/] [--after SECONDS]\n"
+        "      Interactive window: browse scenes and detectors, watch progressive rendering.\n"
+        "      Arrow keys switch scenes/views; G changes backend; Space pauses; T tours; S saves; Q quits.\n"
+        "      Middle drag orbits; Shift+middle pans; wheel dollies; right mouse + WASD flies.\n"
+        "      Shift+F toggles flight; Esc releases the mouse; Home restores the saved view.\n"
         "\n"
         "  Every command accepts --set Block.key=value to edit the scene without rewriting it,\n"
         "  e.g. --set Cam.f_number=2.8 --set \"Cam.focus=3.5 m\".\n"
         "\n"
+        "  owe bench [scene.owe[:DETECTOR] ...] [--spp N] [--resolution WxH] [--repeat R] [--threads T]\n"
+        "                                       [--integrator path|light|hybrid] [--backend NAME] [--json F]\n"
+        "      Throughput on fixed scenes and seeds (Mpaths/s, Msegments/s) with a digest of the raw\n"
+        "      image, so a change that alters any result bit shows up. Default: the canonical suite.\n"
+        "\n"
+        "  owe compare <scene.owe>[:DETECTOR] [--backend NAME] [--reference NAME] [--integrator path|light|hybrid]\n"
+        "                                     [--spp N] [--runs K] [--resolution WxH] [--block B] [--device N]\n"
+        "      Statistical test of a backend (default: gpu) against the reference (cpu): K independent renders\n"
+        "      per backend, block means of X, Y, Z compared with their standard errors (exit 3 if inconsistent).\n"
+        "\n"
+        "  owe backends [NAME]  The backends in this build, their devices and integrators (exit 1 if NAME\n"
+        "                       is unavailable here).\n"
         "  owe glass [NAME]    Refractive index model, n at spectral lines, Abbe number.\n"
-        "  owe info <scene.owe>  The world's ontology: media, regions, boundaries, bodies, detectors.\n");
+        "  owe info <scene.owe>  The world's ontology: media, regions, boundaries, bodies, detectors.\n",
+        backendNames().c_str());
+}
+
+int cmdView(const Args& a) {
+    ViewerOptions o;
+    o.paths = a.positional;
+    o.view = a.get("--view");
+    o.backend = a.get("--backend");
+    o.device = std::stoi(a.get("--device", "-1"));
+    o.scale = std::stod(a.get("--scale", "0"));
+    o.edits = a.all("--set");
+    o.tour = a.has("--tour");
+    o.tourSeconds = std::stod(a.get("--tour-seconds", "10"));
+    o.screenshot = a.get("--screenshot");
+    o.after = std::stod(a.get("--after", "5"));
+    return runViewer(o);
 }
 
 int cmdRender(const Args& a) {
@@ -161,10 +226,13 @@ int cmdRender(const Args& a) {
     if (a.has("--fresnel-floor")) rs.fresnelFloor = std::stod(a.get("--fresnel-floor"));
     if (a.has("--white-balance")) rs.whiteBalance = std::stod(a.get("--white-balance"));
     if (a.has("--no-auto-exposure")) rs.autoExposure = false;
+    applyBackend(rs, a);
     applyResolution(scene, di, a);
     int passes = std::max(1, std::stoi(a.get("--passes", "1")));
     std::string out = a.get("--out", "render");
-    ProgressiveRenderer R(scene, di, rs);
+    auto Rp = makeRenderer(scene, di, rs);
+    Renderer& R = *Rp;
+    std::fprintf(stderr, "%s\n", R.backend().c_str());
     std::fprintf(stderr, "%s\n", scene.detectors[di]->describe().c_str());
     if (scene.notes.count(scene.detectors[di]->name)) std::fprintf(stderr, "%s\n", scene.notes[scene.detectors[di]->name].c_str());
     int done = 0;
@@ -184,7 +252,7 @@ int cmdRender(const Args& a) {
     std::fprintf(stderr, "paths %llu, segments %llu, region inconsistencies %llu, leaks %llu\n",
                  (unsigned long long)st.paths, (unsigned long long)st.segments, (unsigned long long)st.inconsistencies,
                  (unsigned long long)st.leaks);
-    if (st.inconsistencies) {
+    if (st.inconsistencies && st.first.boundary != kNone) {  // the GPU backend counts but does not record them
         const auto& f = st.first;
         std::fprintf(stderr,
                      "first inconsistency: ray in %s, last at %s, met %s (whose side there is %s) at (%.9g, %.9g, %.9g)\n",
@@ -352,6 +420,147 @@ int cmdInfo(const Args& a) {
     return 0;
 }
 
+// The backends in this build: availability, devices, integrators.
+int cmdBackends(const Args& a) {
+    std::string only = a.positional.empty() ? "" : a.positional[0];
+    if (!only.empty()) backend(only);  // unknown names are an error
+    bool ok = true;
+    for (const Backend* b : backends()) {
+        if (!only.empty() && b->name() != only) continue;
+        std::string why;
+        bool here = b->available(&why);
+        ok = ok && here;
+        std::string integrators;
+        for (auto& i : b->integrators()) integrators += (integrators.empty() ? "" : ", ") + i;
+        std::printf("%s%s — %s\n", b->name().c_str(), b == &referenceBackend() ? " (reference)" : "", b->summary().c_str());
+        std::printf("  integrators: %s\n", integrators.c_str());
+        if (!here) std::printf("  unavailable: %s\n", why.c_str());
+        for (auto& d : b->devices())
+            std::printf("  [%d] %s — %s, %s%s\n", d.index, d.name.c_str(), d.type.c_str(), d.driver.c_str(),
+                        d.portability ? ", portability (MoltenVK)" : "");
+    }
+    return only.empty() || ok ? 0 : 1;  // exit status answers "can NAME run here?"
+}
+
+// Statistical comparison of a backend with the reference on one scene.
+int cmdCompare(const Args& a) {
+    if (a.positional.empty()) throw std::runtime_error("compare: missing scene file");
+    std::string path = a.positional[0], det;
+    if (auto c = path.rfind(':'); c != std::string::npos && path.substr(c).find('/') == std::string::npos) {
+        det = path.substr(c + 1);
+        path = path.substr(0, c);
+    }
+    Scene scene = loadSceneWithEdits(path, a.all("--set"));
+    int di = det.empty() ? detectorIndex(scene, a) : scene.findDetector(det);
+    if (di < 0) throw std::runtime_error("no detector named '" + det + "'");
+    scene.useDetector(di);
+    if (!a.has("--resolution")) {
+        scene.detectors[size_t(di)]->width = 96;
+        scene.detectors[size_t(di)]->height = 64;
+        scene.build();
+    }
+    applyResolution(scene, di, a);
+    RenderSettings reference = scene.settingsFor(di);
+    reference.backend = backend(a.get("--reference", referenceBackend().name())).name();
+    reference.integrator = a.get("--integrator", "path");
+    if (a.has("--threads")) reference.threads = std::stoi(a.get("--threads"));
+    RenderSettings candidate = reference;
+    std::string other;  // default: the first backend besides the reference
+    for (const Backend* b : backends())
+        if (b != &backend(reference.backend) && other.empty()) other = b->name();
+    candidate.backend = backend(a.get("--backend", other)).name();
+    if (a.has("--device")) candidate.device = std::stoi(a.get("--device"));
+    for (RenderSettings* rs : {&reference, &candidate})
+        if (!backend(rs->backend).supports(rs->integrator))
+            throw std::runtime_error("the " + rs->backend + " backend does not implement the " + rs->integrator + " integrator");
+    int spp = std::stoi(a.get("--spp", "256")), runs = std::stoi(a.get("--runs", "8")), block = std::stoi(a.get("--block", "8"));
+    std::printf("%s [%s] %dx%d, %s integrator, %d runs × %d spp per backend, %dx%d-pixel blocks\n", path.c_str(),
+                scene.detectors[size_t(di)]->name.c_str(), scene.detectors[size_t(di)]->width,
+                scene.detectors[size_t(di)]->height, reference.integrator.c_str(), runs, spp, block, block);
+    ComparisonReport rep = compareRenderers(scene, di, reference, candidate, spp, runs, block);
+    std::fputs(rep.text().c_str(), stdout);
+    if (a.has("--verbose"))
+        for (auto& o : rep.worst)
+            std::printf("  block (%d, %d) %c: A %.6g  B %.6g  z %+.2f\n", o.bx, o.by, "XYZ"[o.channel], o.a, o.b, o.z);
+    return rep.consistent() ? 0 : 3;
+}
+
+// Throughput benchmark over fixed scenes and seeds. The digest hashes the raw XYZ accumulation,
+// so an optimisation that changes any result bit is visible at once.
+int cmdBench(const Args& a) {
+    struct Case {
+        std::string scene, detector;
+    };
+    std::vector<Case> cases;
+    for (const std::string& p : a.positional) {
+        auto c = p.rfind(':');
+        cases.push_back(c == std::string::npos ? Case{p, ""} : Case{p.substr(0, c), p.substr(c + 1)});
+    }
+    if (cases.empty())
+        cases = {{"scenes/the_lens.owe", "Eye"},          {"scenes/the_prism.owe", "Eye"},
+                 {"scenes/glass_of_water.owe", "Eye"},    {"scenes/the_statue.owe", "Magnifier"},
+                 {"scenes/the_telescope.owe", "Eyepiece"}, {"scenes/the_temple.owe", "Wide"},
+                 {"scenes/the_temple.owe", "Cam"},        {"scenes/the_observatory.owe", "SaturnEyepiece"},
+                 {"scenes/camera_obscura.owe", "Inside"}};
+    const int spp = std::stoi(a.get("--spp", "16"));
+    const std::string res = a.get("--resolution", "256x192");
+    const int repeat = std::max(1, std::stoi(a.get("--repeat", "1")));
+    auto x = res.find('x');
+    if (x == std::string::npos) throw std::runtime_error("--resolution expects WxH");
+    const int W = std::stoi(res.substr(0, x)), H = std::stoi(res.substr(x + 1));
+    std::ostringstream js;
+    js << "[\n";
+    std::printf("%-26s %-15s %9s %4s %9s %9s %8s %12s %16s\n", "scene", "detector", "res", "spp", "Mpaths/s", "Msegs/s",
+                "seconds", "mean Y", "digest");
+    std::fflush(stdout);
+    double totalPaths = 0, totalSeconds = 0;
+    for (size_t ci = 0; ci < cases.size(); ++ci) {
+        const Case& c = cases[ci];
+        Scene scene = loadSceneWithEdits(c.scene, a.all("--set"));
+        int di = c.detector.empty() ? detectorIndex(scene, a) : scene.findDetector(c.detector);
+        if (di < 0) throw std::runtime_error("no detector named '" + c.detector + "' in " + c.scene);
+        scene.useDetector(di);
+        scene.detectors[size_t(di)]->width = W;
+        scene.detectors[size_t(di)]->height = H;
+        scene.build();
+        RenderSettings rs = scene.settingsFor(di);
+        rs.integrator = a.get("--integrator", "path");
+        if (a.has("--seed")) rs.seed = std::stoull(a.get("--seed"));
+        if (a.has("--threads")) rs.threads = std::stoi(a.get("--threads"));
+        applyBackend(rs, a);
+        double best = Inf;
+        Image img;
+        TransportStats st;
+        for (int r = 0; r < repeat; ++r) {
+            auto R = makeRenderer(scene, di, rs);
+            if (ci == 0 && r == 0) std::printf("backend: %s\n", R->backend().c_str());
+            R->runPass(spp);
+            best = std::min(best, R->seconds());
+            img = R->resolve();
+            st = R->stats();
+        }
+        std::string bytes(reinterpret_cast<const char*>(img.xyz.data()), img.xyz.size() * sizeof(double));
+        char digest[32];
+        std::snprintf(digest, sizeof digest, "%016llx", (unsigned long long)fnv1a(bytes));
+        std::string name = c.scene.substr(c.scene.find_last_of('/') + 1);
+        double mp = st.paths / best * 1e-6, ms = st.segments / best * 1e-6;
+        totalPaths += double(st.paths);
+        totalSeconds += best;
+        std::printf("%-26s %-15s %9s %4d %9.3f %9.3f %8.3f %12.6g %16s\n", name.c_str(),
+                    scene.detectors[size_t(di)]->name.c_str(), res.c_str(), spp, mp, ms, best, img.meanY(), digest);
+        std::fflush(stdout);
+        js << "  {\"scene\": \"" << c.scene << "\", \"detector\": \"" << scene.detectors[size_t(di)]->name
+           << "\", \"resolution\": \"" << res << "\", \"spp\": " << spp << ", \"integrator\": \"" << rs.integrator
+           << "\", \"seconds\": " << best << ", \"paths\": " << st.paths << ", \"segments\": " << st.segments
+           << ", \"mean_Y\": " << img.meanY() << ", \"digest\": \"" << digest << "\"}"
+           << (ci + 1 < cases.size() ? "," : "") << "\n";
+    }
+    js << "]\n";
+    std::printf("total: %.3f s, %.3f Mpaths/s\n", totalSeconds, totalPaths / totalSeconds * 1e-6);
+    if (a.has("--json")) std::ofstream(a.get("--json")) << js.str();
+    return 0;
+}
+
 // Interactive session: edit the scene (aperture, focus, placement, anything), watch the
 // estimate refine pass by pass. Reads commands from stdin, so it can also be scripted.
 int cmdStudio(const Args& a) {
@@ -370,8 +579,9 @@ int cmdStudio(const Args& a) {
     }
     double exposure = 0, whiteBalance = 0;
     bool autoExp = true, userExposure = false;  // set by the exposure command; cleared by detector
+    std::string backendName = a.get("--backend");  // set by the backend command
     std::unique_ptr<Scene> scene;
-    std::unique_ptr<ProgressiveRenderer> R;
+    std::unique_ptr<Renderer> R;
     bool interactive = isatty(0);
     auto rebuild = [&] {
         R.reset();
@@ -386,13 +596,17 @@ int cmdStudio(const Args& a) {
             scene->build();
         }
         RenderSettings rs = scene->settingsFor(di);
+        if (!backendName.empty()) rs.backend = backendName;
+        if (a.has("--device")) rs.device = std::stoi(a.get("--device"));
+        std::string note = adaptToBackend(rs);
+        if (!note.empty()) std::printf("note: %s\n", note.c_str());
         whiteBalance = a.has("--white-balance") ? std::stod(a.get("--white-balance")) : rs.whiteBalance;
         if (!userExposure) {
             exposure = a.has("--exposure") ? std::stod(a.get("--exposure")) : rs.exposure;
             autoExp = rs.autoExposure && !a.has("--no-auto-exposure");
         }
-        R = std::make_unique<ProgressiveRenderer>(*scene, di, rs);
-        std::printf("%s\n", scene->detectors[size_t(di)]->describe().c_str());
+        R = makeRenderer(*scene, di, rs);
+        std::printf("%s\n%s\n", R->backend().c_str(), scene->detectors[size_t(di)]->describe().c_str());
         if (scene->notes.count(detName)) std::printf("%s\n", scene->notes[detName].c_str());
     };
     auto help = [] {
@@ -402,6 +616,7 @@ int cmdStudio(const Args& a) {
                   "  edits                   list current edits\n"
                   "  detector NAME           render another observer/camera/sensor\n"
                   "  size WxH                image size\n"
+                  "  backend NAME            where the transport runs (owe backends lists them)\n"
                   "  render [SPP] [PASSES]   refine the current estimate (edits restart it)\n"
                   "  reset                   restart accumulation\n"
                   "  exposure EV | auto      display exposure\n"
@@ -455,6 +670,13 @@ int cmdStudio(const Args& a) {
                 auto x = wh.find('x');
                 width = std::stoi(wh.substr(0, x));
                 height = std::stoi(wh.substr(x + 1));
+                rebuild();
+            } else if (cmd == "backend") {
+                std::string name;
+                ls >> name;
+                std::string why;
+                if (!backend(name).available(&why)) throw std::runtime_error(name + " unavailable: " + why);
+                backendName = name;
                 rebuild();
             } else if (cmd == "reset") {
                 rebuild();
@@ -518,6 +740,10 @@ int main(int argc, char** argv) {
         if (cmd == "glass") return cmdGlass(a);
         if (cmd == "info") return cmdInfo(a);
         if (cmd == "studio") return cmdStudio(a);
+        if (cmd == "view") return cmdView(a);
+        if (cmd == "bench") return cmdBench(a);
+        if (cmd == "backends") return cmdBackends(a);
+        if (cmd == "compare") return cmdCompare(a);
         if (cmd == "help" || cmd == "--help" || cmd == "-h") { usage(); return 0; }
         std::fprintf(stderr, "unknown command '%s'\n\n", cmd.c_str());
         usage();

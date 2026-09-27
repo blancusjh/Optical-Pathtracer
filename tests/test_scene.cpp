@@ -2,10 +2,38 @@
 #include <fstream>
 
 #include "check.hpp"
-#include "owe/prescription.hpp"
-#include "owe/scene_loader.hpp"
+#include "owe/scene/prescription.hpp"
+#include "owe/loader/scene_loader.hpp"
 
 using namespace owe;
+
+TEST(observatory_sources_use_consistent_relative_photometry) {
+    auto sc = loadScene("scenes/the_observatory.owe");
+    double sunE = sc.world.env.sunRadiance.luminance() * Pi * sqr(std::sin(sc.world.env.sunAngularRadius));
+    int checked = 0;
+    double starFlux = 0;
+    for (size_t i = 0; i < sc.world.boundaries().size(); ++i) {
+        const auto& b = sc.world.boundaries()[i];
+        if (b.emission < 0) continue;
+        const auto& e = sc.world.emissions()[b.emission];
+        const auto* sphere = dynamic_cast<const SphereShape*>(b.shape.get());
+        if (!sphere) continue;
+        std::string label = sc.world.boundaryLabel(uint32_t(i));
+        if (label.find("Flame") != std::string::npos) {
+            double intensity = e.radiance.luminance() * Pi * sqr(sphere->radius());
+            CHECK_REL(intensity / sunE, label.find("Tall") == 0 ? 2e-5 : 1e-5, 0.001);
+            ++checked;
+        }
+        if (e.distant) {
+            CHECK(e.nee);
+            double flux = e.radiance.luminance() * Pi * sqr(sphere->radius()) / lengthSq(b.toWorld.t);
+            CHECK(flux / sunE < 2.01e-11);
+            starFlux += flux;
+        }
+    }
+    CHECK(checked == 4);
+    CHECK(starFlux / sunE < 2e-8);
+}
 
 TEST(parser_handles_units_calls_tuples_and_blocks) {
     ValuePtr d = parseSceneText(R"(
@@ -99,6 +127,7 @@ world { sky = uniform(0.1)  sun { elevation = 30deg  azimuth = 0  luminance = 10
 body Box { type = box  size = (1, 1, 1)  position = (0, 5, 0)  material = white }
 observer Eye { position = (0, 0, 0)  look_at = (0, 1, 0)  resolution = (8, 8)
                exposure = 3  white_balance = none  sun_share = 0.9 }
+observer Free { position = (0, 0, 0) look_at = (0, 1, 0) resolution = (8, 8) }
 )";
     Scene a = loadSceneWithEdits(path, {"Box.position=(0, 7, 0)", "sun.nee_share=0.5", "render.spp=3"});
     CHECK(a.render.spp == 3);
@@ -110,6 +139,11 @@ observer Eye { position = (0, 0, 0)  look_at = (0, 1, 0)  resolution = (8, 8)
     CHECK(!rs.autoExposure && rs.exposure == 3 && rs.whiteBalance == 0);
     a.useDetector(0);
     CHECK_NEAR(a.world.env.sunNeeShare, 0.9, 1e-15);
+    a.useDetector(1);
+    CHECK_NEAR(a.world.env.sunNeeShare, 0.5, 1e-15);
+    a.useDetector(0);
+    a.useDetector(1);
+    CHECK_NEAR(a.world.env.sunNeeShare, 0.5, 1e-15);
     bool threw = false;
     try {
         loadSceneWithEdits(path, {"Nothing.key=1"});

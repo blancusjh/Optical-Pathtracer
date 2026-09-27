@@ -1,9 +1,9 @@
 // Interface optics against closed-form results.
 #include "check.hpp"
-#include "owe/medium.hpp"
-#include "owe/optics.hpp"
-#include "owe/scattering.hpp"
-#include "owe/spectrum.hpp"
+#include "owe/core/medium.hpp"
+#include "owe/transport/optics.hpp"
+#include "owe/transport/scattering.hpp"
+#include "owe/core/spectrum.hpp"
 
 using namespace owe;
 

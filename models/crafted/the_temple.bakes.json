@@ -1,0 +1,10 @@
+{
+  "scene": "the_temple",
+  "text": [],
+  "sculpt": [
+    {
+      "group": "Olive_bark",
+      "voxel": 0.024
+    }
+  ]
+}
