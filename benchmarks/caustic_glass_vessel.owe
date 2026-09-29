@@ -1,0 +1,16 @@
+# BENCHMARK caustic_glass_vessel — a lathe-turned tumbler of water (N-BK7, round rim, 16 mm base)
+# under a 38° sun on a white table: the wall and water focus the sun into a cusped caustic in the
+# glass's shadow; the inner wall reflects a nephroid onto the bottom, seen through the water.
+# Physical parameters: sun 38°, 1.1e5, 0.533°; N-BK7; water; table ρ = 0.8.
+# Measurement: Eye (radiance, 480×480, fixed exposure −9 EV). Reference: sppm 16384 iterations.
+units = m
+world { sky = uniform(rgb(1, 1, 1, luminance = 0.05))  sun { elevation = 38deg  azimuth = 8deg  luminance = 1.1e5 } }
+material table { type = diffuse  reflectance = 0.8 }
+body Table { type = sheet  size = (0.8, 0.8)  position = (0, 0, 0)  material = table }
+body Glass { type = vessel
+             outer = [(0, 0), (32mm, 0, 12mm), (41mm, 38mm, 40mm), (39mm, 92mm)]
+             inner = [(0, 16mm), (28mm, 16mm, 10mm), (38mm, 40mm, 38mm), (36.5mm, 92mm)]
+             rim = round  glass = N-BK7  liquid = water  level = 58mm  position = (0, 0, 0.2mm) }
+observer Eye { position = (0.02, -0.26, 0.30)  look_at = (0.01, -0.05, 0.02)  up = (0, 1, 0)  fov = 40deg  pupil = 3mm
+               focus = 0.36  resolution = (480, 480)  exposure = -9 }
+render { detector = Eye  spp = 1024  integrator = sppm }

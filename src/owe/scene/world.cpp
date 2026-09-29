@@ -63,6 +63,26 @@ void Texture::weights(const Vec3& p, const Vec3& n, double w[3]) const {
     w[0] = 1; w[1] = 0; w[2] = 0;
     switch (kind) {
         case Kind::None: return;
+        case Kind::Image: {
+            if (!image) return;
+            Vec3 c;
+            // Centred: an image of the sheet's size fills the sheet (and tiles beyond it).
+            if (mapping != Mapping::Triplanar) {
+                c = image->bilinear(0.5 + p.x / scale, 0.5 - p.y / scale);
+            } else {
+                // Triplanar: projections along x, y and z blended by the normal's fourth powers.
+                Vec3 a{std::pow(std::abs(n.x), 4), std::pow(std::abs(n.y), 4), std::pow(std::abs(n.z), 4)};
+                const double sum = a.x + a.y + a.z;
+                a = a / (sum > 0 ? sum : 1);
+                c = image->bilinear(0.5 + p.y / scale, 0.5 - p.z / scale) * a.x +
+                    image->bilinear(0.5 + p.x / scale, 0.5 - p.z / scale) * a.y +
+                    image->bilinear(0.5 + p.x / scale, 0.5 - p.y / scale) * a.z;
+            }
+            w[0] = std::clamp(c.x, 0.0, 1.0);
+            w[1] = std::clamp(c.y, 0.0, 1.0);
+            w[2] = std::clamp(c.z, 0.0, 1.0);
+            return;
+        }
         case Kind::Checker: {
             Vec3 q = p / scale;
             long s = long(std::floor(q.x + 1e-9)) + long(std::floor(q.y + 1e-9)) + long(std::floor(q.z + 1e-9));
@@ -133,8 +153,114 @@ double Environment::sky(const Vec3& dir, double l) const {
             double t = std::pow(c, 0.45);
             return horizon.eval(l) * (1 - t) + zenith.eval(l) * t;
         }
+        case Sky::Map: {
+            if (!map) return 0;
+            const Vec3 c = mapRGB(dir);
+            double w[3], br, bg, bb;
+            rgbToBasisWeights(c.x, c.y, c.z, w);
+            rgbBasis(l, br, bg, bb);
+            static const double norm = rgbIlluminantNorm();
+            return mapScale * norm * (std::max(0.0, w[0]) * br + std::max(0.0, w[1]) * bg + std::max(0.0, w[2]) * bb) *
+                   planck(l, 6504.0) * 1e-13;
+        }
     }
     return 0;
+}
+
+void Environment::mapFrame(Vec3& e1, Vec3& e2) const {
+    Vec3 u = normalize(up);
+    e1 = std::abs(u.x) < 0.9 ? normalize(Vec3(1, 0, 0) - u * u.x) : normalize(Vec3(0, 1, 0) - u * u.y);
+    e2 = cross(u, e1);
+}
+
+Vec3 Environment::mapRGB(const Vec3& dir) const {
+    Vec3 e1, e2;
+    mapFrame(e1, e2);
+    const double c = clampd(dot(dir, up), -1.0, 1.0);
+    const double phi = std::atan2(dot(dir, e2), dot(dir, e1)) - mapRotation;
+    return map->bilinear(phi / (2 * Pi), std::acos(c) / Pi);
+}
+
+void Environment::prepareMap() {
+    mapDist = {};
+    if (skyModel != Sky::Map || !map) return;
+    const int W = map->width, H = map->height;
+    mapDist.W = W;
+    mapDist.H = H;
+    mapDist.conditional.assign(size_t(H) * (W + 1), 0.0);
+    mapDist.marginal.assign(size_t(H) + 1, 0.0);
+    mapDist.rowWeight.assign(size_t(H), 0.0);
+    double sum = 0;
+    for (int j = 0; j < H; ++j) {
+        const double sinT = std::sin(Pi * (j + 0.5) / H);
+        double* cdf = &mapDist.conditional[size_t(j) * (W + 1)];
+        for (int i = 0; i < W; ++i) {
+            const Vec3 c = map->texel(i, j);
+            const double y = std::max(0.0, 0.2126 * c.x + 0.7152 * c.y + 0.0722 * c.z);
+            cdf[i + 1] = cdf[i] + y * sinT;
+        }
+        mapDist.rowWeight[size_t(j)] = cdf[W];
+        sum += cdf[W];
+    }
+    // A floor of 0.1% of the mean keeps every direction with some radiance sampleable.
+    const double floorW = 1e-3 * sum / (double(W) * H) + 1e-300;
+    sum = 0;
+    for (int j = 0; j < H; ++j) {
+        const double sinT = std::sin(Pi * (j + 0.5) / H);
+        double* cdf = &mapDist.conditional[size_t(j) * (W + 1)];
+        double acc = 0;
+        for (int i = 0; i < W; ++i) {
+            acc += (cdf[i + 1] - cdf[i]) + floorW * sinT;
+            cdf[i + 1] = acc;
+        }
+        cdf[0] = 0;
+        mapDist.rowWeight[size_t(j)] = acc;
+        sum += acc;
+        mapDist.marginal[size_t(j) + 1] = sum;
+    }
+    mapDist.total = sum;
+}
+
+bool Environment::sampleMap(double u1, double u2, Vec3& dir, double& pdf) const {
+    const auto& D = mapDist;
+    if (!(D.total > 0)) return false;
+    // Row by the marginal, column by the row's conditional, uniform within the texel.
+    const double a = u1 * D.total;
+    int j = int(std::upper_bound(D.marginal.begin(), D.marginal.end(), a) - D.marginal.begin()) - 1;
+    j = std::clamp(j, 0, D.H - 1);
+    const double rowW = D.rowWeight[size_t(j)];
+    const double* cdf = &D.conditional[size_t(j) * (D.W + 1)];
+    const double tRow = (a - D.marginal[size_t(j)]) / std::max(D.marginal[size_t(j) + 1] - D.marginal[size_t(j)], 1e-300);
+    const double b = u2 * rowW;
+    int i = int(std::upper_bound(cdf, cdf + D.W + 1, b) - cdf) - 1;
+    i = std::clamp(i, 0, D.W - 1);
+    const double tCol = (b - cdf[i]) / std::max(cdf[i + 1] - cdf[i], 1e-300);
+    const double u = (i + clampd(tCol, 0.0, 1.0)) / D.W, v = (j + clampd(tRow, 0.0, 1.0)) / D.H;
+    const double theta = Pi * v, phi = 2 * Pi * u + mapRotation;
+    Vec3 e1, e2;
+    mapFrame(e1, e2);
+    const double st = std::sin(theta);
+    dir = (e1 * std::cos(phi) + e2 * std::sin(phi)) * st + normalize(up) * std::cos(theta);
+    if (!(st > 0)) return false;
+    const double pCell = (cdf[i + 1] - cdf[i]) / D.total;
+    pdf = pCell * D.W * D.H / (2 * Pi * Pi * st);
+    return pdf > 0;
+}
+
+double Environment::mapPdf(const Vec3& dir) const {
+    const auto& D = mapDist;
+    if (!(D.total > 0)) return 0;
+    Vec3 e1, e2;
+    mapFrame(e1, e2);
+    const double c = clampd(dot(dir, up), -1.0, 1.0);
+    const double st = std::sqrt(std::max(0.0, 1 - c * c));
+    if (!(st > 0)) return 0;
+    double u = (std::atan2(dot(dir, e2), dot(dir, e1)) - mapRotation) / (2 * Pi);
+    u -= std::floor(u);
+    const double v = std::acos(c) / Pi;
+    const int i = std::clamp(int(u * D.W), 0, D.W - 1), j = std::clamp(int(v * D.H), 0, D.H - 1);
+    const double* cdf = &D.conditional[size_t(j) * (D.W + 1)];
+    return (cdf[i + 1] - cdf[i]) / D.total * D.W * D.H / (2 * Pi * Pi * st);
 }
 
 // ---------------------------------------------------------------- world
@@ -216,7 +342,7 @@ int World::addBody(const std::string& name, const std::string& kind, int assembl
     b.kind = kind;
     b.assembly = assembly;
     b.xf = xf;
-    b.ambient = ambient == kOutside ? 0 : ambient;
+    b.ambient = ambient != kOutside ? ambient : immersion_ != kOutside ? immersion_ : 0;
     bodies_.push_back(b);
     return int(bodies_.size() - 1);
 }
@@ -286,12 +412,20 @@ void World::build() {
         lightOfBoundary_[i] = int(lights_.size());
         lights_.push_back(LightEntry{LightEntry::Kind::Boundary, uint32_t(i), p});
     }
+    env.prepareMap();
+    envPower_ = computeEnvironmentPower();
+    environmentLight_ = -1;
+    if (env.skyModel == Environment::Sky::Map && envPower_ > 0) {
+        environmentLight_ = int(lights_.size());
+        lights_.push_back(LightEntry{LightEntry::Kind::Environment, kNone, envPower_});
+    }
     if (env.hasSun) {
         double p = std::max(1e-12, env.sunRadiance.luminance()) * env.sunSolidAngle() * Pi * radius * radius;
         lights_.push_back(LightEntry{LightEntry::Kind::Sun, kNone, p});
     }
     double total = 0, boundaryPower = 0, nearbyPower = 0, distantPower = 0;
     for (auto& l : lights_) {
+        if (l.kind == LightEntry::Kind::Environment) continue;  // selected by its own share below
         total += l.power;
         if (l.kind == LightEntry::Kind::Boundary) {
             boundaryPower += l.power;
@@ -306,26 +440,52 @@ void World::build() {
     // A star's physical area at astronomical distance must not starve nearby lamps.
     // Sample both groups with full support; MIS uses this same selection probability.
     if (distantPower > 0 && env.hasSun && share == 0) share = 0.5;
+    // The environment map takes its share of the combined power; the other lights share the rest
+    // as they would without it.
+    const double envShare = environmentLight_ >= 0 ? envPower_ / (envPower_ + total) : 0;
     double acc = 0;
     for (auto& l : lights_) {
-        double p = l.power / total;
+        if (l.kind == LightEntry::Kind::Environment) {
+            lightPdf_.push_back(envShare);
+            acc += envShare;
+            lightCdf_.push_back(acc);
+            continue;
+        }
+        double p = total > 0 ? l.power / total : 0;
         if (share > 0) p = l.kind == LightEntry::Kind::Sun ? share : (1 - share) * l.power / boundaryPower;
         if (distantPower > 0 && l.kind == LightEntry::Kind::Boundary) {
             bool distant = emissions_[boundaries_[l.boundary].emission].distant;
             double groupShare = nearbyPower > 0 ? 0.5 : 1;
             p = (1 - share) * groupShare * l.power / (distant ? distantPower : nearbyPower);
         }
+        p *= 1 - envShare;
         lightPdf_.push_back(p);
         acc += p;
         lightCdf_.push_back(acc);
     }
     if (!lightCdf_.empty()) lightCdf_.back() = 1.0;
-    envPower_ = computeEnvironmentPower();
     built_ = true;
 }
 
 double World::computeEnvironmentPower() const {
     if (env.skyModel == Environment::Sky::None) return 0;
+    if (env.skyModel == Environment::Sky::Map) {
+        // ∫ L_Y dω over the map (texel luminance × solid angle), times π R².
+        if (!env.map) return 0;
+        const int W = env.map->width, H = env.map->height;
+        double sum = 0;
+        static const double norm = rgbIlluminantNorm();
+        for (int j = 0; j < H; ++j) {
+            const double dOmega = (2 * Pi / W) * (Pi / H) * std::sin(Pi * (j + 0.5) / H);
+            for (int i = 0; i < W; ++i) {
+                const Vec3 c = env.map->texel(i, j);
+                sum += std::max(0.0, 0.2126 * c.x + 0.7152 * c.y + 0.0722 * c.z) * dOmega;
+            }
+        }
+        (void)norm;
+        const double R = sceneRadius();
+        return env.mapScale * sum * Pi * R * R;
+    }
     // Average luminance over the sphere of directions, times π R² · 4π.
     double sum = 0;
     int n = 0;

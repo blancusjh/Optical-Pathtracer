@@ -66,13 +66,52 @@ int buildBox(World& w, const std::string& name, const Vec3& size, const BodyMate
 int buildCylinder(World& w, const std::string& name, double radius, double height, const BodyMaterial& m,
                   int assembly, const Transform& xf);
 // Triangular prism: isosceles cross-section in the local x–y plane (apex toward +y), extruded along z.
+// A glass vessel (a tumbler, a bowl, a wine glass without its stem) turned on a lathe: outer and
+// inner profiles in the (r, z) half-plane, each a polyline from the axis at the bottom up to the rim
+// whose corners may be rounded by fillets (tangent circular arcs). Every straight piece revolves into
+// a disc, cylinder or cone, every fillet into a torus patch: exact analytic surfaces with exact
+// normals (never a mesh). The rim joins the two profiles' last points, flat or rounded (a half
+// circle). A liquid fills the inner cavity up to `level` (0: empty), with a flat surface.
+struct ProfilePoint {
+    double r = 0, z = 0, fillet = 0;
+};
+struct VesselSpec {
+    std::vector<ProfilePoint> outer, inner;
+    bool roundRim = true;
+    std::string glass = "N-BK7", liquid = "water";
+    double level = 0;  // liquid height above the vessel's origin (0: empty)
+};
+int buildVessel(World& w, const std::string& name, const VesselSpec& spec, int assembly, const Transform& xf);
+
+// A body of liquid under a wavy surface (WaveSurface): the analytic surface on top (air above), a
+// flat floor at z = −depth and four walls below z = 0. The floor and walls meet the liquid as
+// ordinary interfaces with the air, or as opaque matter (a seabed, a basin) when given optics
+// (≥ 0; diffuse, facing the liquid).
+struct WaterSpec {
+    std::vector<PlaneWave> waves;
+    double halfX = 0.5, halfY = 0.5, margin = 0.1, depth = 0.2;
+    std::string medium = "water";
+    int bottomOptics = -1, wallOptics = -1;
+    // With an opaque floor or walls the liquid fills a hole in a solid block: `rim` of ground around
+    // it at z = 0 (with the wall optics, else the floor's) and `base` of it beneath the floor, so the
+    // basin is closed matter whichever side light arrives from.
+    double rim = 0.25, base = 0.05;
+};
+int buildWater(World& w, const std::string& name, const WaterSpec& spec, int assembly, const Transform& xf);
+// A deterministic multi-frequency ripple field: `count` plane waves with wavelengths log-uniform in
+// [minWavelength, maxWavelength], directions within `spread` about `direction`, random phases, and
+// amplitudes giving each component the slope `slope / √count` (so the total r.m.s. slope ≈ slope/√2).
+std::vector<PlaneWave> rippleField(int count, uint64_t seed, double minWavelength, double maxWavelength, double slope,
+                                   double direction, double spread);
+
 int buildPrism(World& w, const std::string& name, double apexAngle, double sideLength, double length,
                const BodyMaterial& m, int assembly, const Transform& xf);
 // Two-sided sheet (screen, paper, wall) in the local z = 0 plane.
 int buildSheet(World& w, const std::string& name, double halfX, double halfY, uint32_t optics, int emission,
                int assembly, const Transform& xf, bool disk = false);
+// A closed mesh body; `shading`: its shading normals per triangle corner (empty: flat).
 int buildMesh(World& w, const std::string& name, const MeshData& mesh, const BodyMaterial& m, int assembly,
-              const Transform& xf);
+              const Transform& xf, std::vector<MeshShape::Corners> shading = {});
 // Drinking glass with water: z up, base at z = 0. Optionally a vertical rod (radius rodRadius,
 // centred at rodX, rodY, rising to rodTop) stands in it, crossing the liquid surface through a
 // matching hole so that all matter stays disjoint. rodMedium empty = opaque rod with rodOptics.

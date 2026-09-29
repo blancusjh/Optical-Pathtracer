@@ -288,6 +288,57 @@ void checkFreeEyeThroughTelescope(const std::string& backend) {
     CHECK_NEAR(renderer->resolve().meanY(), 0, 0);
 }
 
+// An eye pupil (5 mm) much wider than the telescope's exit pupil (1 mm) guides its samples to the
+// exit pupil. That changes the noise only: the measurement equals uniform pupil sampling's, at the
+// exit pupil and behind it, with far less variance.
+void checkGuidedPupilSampling(const std::string& backend) {
+    using namespace owe;
+    Scene sc;
+    Prescription p = loadPrescription("lenses/refractor_150mm.lens");
+    solveAfocal(p, p.wavelength, catalogIndex());
+    auto instrument = buildPrescription(sc.world, p, "glass", -1, Transform{}, 0.085, catalogIndex());
+    sc.world.addExitPupil({"glass", instrument.assembly, instrument.paraxial.exitPupilZ, instrument.paraxial.exitPupilRadius});
+    SurfaceOptics black; black.type = SurfaceType::Absorber;
+    Emission emission; emission.radiance = Spectrum::constant(1);
+    buildSheet(sc.world, "object", 45.5, 45.5, sc.world.addOptics(black), sc.world.addEmission(emission), -1,
+               Transform::translate({0, 0, -1e6}), true);
+    auto observer = std::make_unique<IdealObserver>();
+    observer->name = "eye";
+    observer->width = observer->height = 16;
+    observer->fovY = radians(2);
+    observer->up = {0, 1, 0};
+    observer->pupilRadius = 0.0025;
+    auto& eye = *observer;
+    sc.detectors.push_back(std::move(observer));
+    for (double behind : {0.0, 0.004}) {
+        eye.position = {0.0002, 0, instrument.paraxial.exitPupilZ + behind};
+        eye.lookAt = eye.position + Vec3(0, 0, -1);
+        sc.build();
+        CHECK(eye.guide.radius > 0);
+        CHECK(eye.describe().find("guided") != std::string::npos);
+        auto stats = [&](bool guided, double& mean, double& se) {
+            const int runs = 8;
+            double s = 0, s2 = 0;
+            for (int r = 0; r < runs; ++r) {
+                eye.prepare(sc.world);
+                if (!guided) eye.guide = {};
+                double y = render(sc, 0, backend, 64, uint64_t(100 * guided + r + 1)).meanY();
+                s += y;
+                s2 += y * y;
+            }
+            mean = s / runs;
+            se = std::sqrt(std::max(0.0, s2 / runs - mean * mean) / (runs - 1));
+        };
+        double mg, seg, mu, seu;
+        stats(true, mg, seg);
+        stats(false, mu, seu);
+        std::fprintf(stderr, "      behind %.3f m: guided %.5g ± %.2g, uniform %.5g ± %.2g\n", behind, mg, seg, mu, seu);
+        CHECK(mu > 0);
+        CHECK(std::abs(mg - mu) < 4 * std::sqrt(seg * seg + seu * seu));
+        CHECK(seg < 0.6 * seu);
+    }
+}
+
 }  // namespace
 
 // ---------------------------------------------------------------- analytic results, on every backend
@@ -357,6 +408,7 @@ TEST(backends_pinhole_irradiance_depends_on_aperture_area) { forEachBackend(chec
 TEST(backends_distant_stars_and_nearby_lamps_both_illuminate_surfaces) { forEachBackend(checkDistantAndNearbyLights); }
 TEST(backends_reflected_moonlight_illuminates_ground) { forEachBackend(checkReflectedMoonlight); }
 TEST(backends_telescope_forms_image_for_freely_placed_eyes) { forEachBackend(checkFreeEyeThroughTelescope); }
+TEST(backends_guided_eye_pupil_measures_the_same_with_less_noise) { forEachBackend(checkGuidedPupilSampling); }
 
 // Moving the eye (the viewer's navigation) restarts the estimate: the renderer after a reset equals
 // a fresh renderer of the new pose and resolution, bit for bit.
@@ -486,8 +538,10 @@ TEST(backends_every_integrator_measures_lambertian_disk_irradiance) {
 // (particles reach the eye through connections from every diffuse vertex).
 TEST(backends_every_integrator_passes_the_white_furnace) {
     forEachBackend([](const std::string& backend) {
-        for (const char* integrator : {"light", "hybrid"}) {
+        for (const char* integrator : {"light", "hybrid", "sppm", "bdpt", "vcm"}) {
             if (!findBackend(backend)->supports(integrator)) continue;
+            // Bidirectional iterations cost a fixed overhead each: fewer, over more pixels.
+            const bool bidirectional = std::string(integrator) == "bdpt" || std::string(integrator) == "vcm";
             for (double rho : {0.0, 0.5}) {
                 Scene sc;
                 SurfaceOptics o;
@@ -503,13 +557,13 @@ TEST(backends_every_integrator_passes_the_white_furnace) {
                                      sc.world.addOptics(o), sc.world.addEmission(e));
                 auto obs = std::make_unique<IdealObserver>();
                 obs->name = "eye";
-                obs->width = obs->height = 8;
+                obs->width = obs->height = bidirectional ? 32 : 8;
                 obs->position = {0.2, 0.1, -0.3};
                 obs->lookAt = {1, 0.3, 0};
                 obs->fovY = radians(70);
                 sc.detectors.push_back(std::move(obs));
                 sc.build();
-                double measured = render(sc, 0, backend, 4096, 1, integrator).meanY();
+                double measured = render(sc, 0, backend, bidirectional ? 256 : 4096, 1, integrator).meanY();
                 CHECK_NEAR(measured, 1.0 / (1 - rho), 0.02 / (1 - rho));
             }
         }

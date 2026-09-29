@@ -1,0 +1,17 @@
+# BENCHMARK double_refraction_slabs — sunlight through a 6 mm pinhole crosses two tilted 12 mm N-BK7
+# slabs (35° and −20°) before reaching a white screen: each slab shifts the beam sideways by
+# t·sin(θ − θt)/cos θt without deviating it, and its Fresnel reflections send faint ghost beams
+# off at twice the tilt. Physical parameters: sun 30° elevation along +x, 1.2e5; N-BK7.
+# Measurement: Eye (radiance, 480×320, fixed exposure −8 EV); Screen (irradiance, particles).
+units = m
+world { sun { elevation = 30deg  azimuth = 270deg  luminance = 1.2e5 } }
+material dark   { type = diffuse  reflectance = 0.05 }
+material screen { type = diffuse  reflectance = 0.85 }
+body Floor   { type = sheet  size = (1.6, 1.2)  position = (0.3, 0, -0.001)  material = dark }
+body Stop    { type = stop  aperture = 6mm  outer_diameter = 0.5  position = (-0.2, 0, 0.30)  axis = (0.866, 0, -0.5) }
+body SlabA   { type = box  size = (0.06, 0.06, 0.012)  position = (-0.05, 0, 0.214)  axis = (0.574, 0, 0.819)  medium = N-BK7 }
+body SlabB   { type = box  size = (0.06, 0.06, 0.012)  position = (0.05, 0, 0.156)   axis = (0.94, 0, -0.34)   medium = N-BK7 }
+body Wall    { type = sheet  size = (0.3, 0.3)  position = (0.25, 0, 0.07)  axis = (-0.866, 0, 0.5)  up = (0, 1, 0)  material = screen }
+observer Eye { position = (0.0, -0.45, 0.30)  look_at = (0.08, 0, 0.14)  fov = 44deg  pupil = 3mm  focus = 0.5
+               resolution = (480, 320)  exposure = -8 }
+render { detector = Eye  spp = 1024  integrator = sppm }

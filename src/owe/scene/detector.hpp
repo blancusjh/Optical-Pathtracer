@@ -51,6 +51,19 @@ public:
     std::string name;
     int width = 256, height = 256;
     uint32_t region = 0;  // region in which camera paths start
+    // Pixel response: the pixel's square convolved with a Gaussian of pixelSigma pixels (0: the
+    // square alone). Camera samples and particle splats are displaced by the same Gaussian, so the
+    // path, light and hybrid estimates measure one filtered image. With the square alone, a source
+    // smaller than a pixel images as a pixel-aligned square; the Gaussian images it as a round spot
+    // centred where it falls.
+    double pixelSigma = 0;
+    // A displacement (in pixels) drawn from the pixel response's Gaussian; none when pixelSigma is 0.
+    Vec2 filterOffset(Rng& rng) const {
+        if (!(pixelSigma > 0)) return {};
+        Draw2 u(rng);
+        Vec2 g = sampleStandardNormal2(u.u1, u.u2);
+        return {g.x * pixelSigma, g.y * pixelSigma};
+    }
 
     virtual Quantity quantity() const = 0;
     virtual std::string describe() const = 0;
@@ -67,8 +80,8 @@ public:
         return false;
     }
     // Surface sensors: pixel receiving a particle that hit `hit`.
-    virtual bool pixelOfHit(const SurfaceHit& hit, int& px, int& py, double& pixelArea) const {
-        (void)hit; (void)px; (void)py; (void)pixelArea;
+    virtual bool pixelOfHit(const SurfaceHit& hit, Rng& rng, int& px, int& py, double& pixelArea) const {
+        (void)hit; (void)rng; (void)px; (void)py; (void)pixelArea;
         return false;
     }
     virtual int boundary() const { return -1; }
@@ -77,13 +90,32 @@ public:
 
 // A virtual eye: circular pupil (radius ≥ 0) and a perfect retina mapping
 // directions (focus at infinity) or a focal plane (finite focus) to pixels.
-// It measures radiance averaged over the pupil and the pixel's angular footprint.
+// It measures radiance averaged over the pupil and the pixel's angular footprint
+// (by default a soft one: see pixelSigma).
 class IdealObserver : public Detector {
 public:
+    static constexpr double kDefaultPixelSigma = 0.4;  // with the square: ~0.5 px, the usual Gaussian reconstruction
+    IdealObserver() { pixelSigma = kDefaultPixelSigma; }
+
     Vec3 position{0, 0, 0}, lookAt{0, 1, 0}, up{0, 0, 1};
     double fovY = radians(40);
     double pupilRadius = 0;
     double focusDistance = Inf;
+
+    // Pupil sampling hint, chosen by prepare(): an eye looking into a telescope whose exit pupil is
+    // much smaller than its own pupil receives the instrument's light only through that small
+    // disk. Most pupil samples are then drawn there, and weighted by the mixture density, so the
+    // estimate is unchanged and only its noise falls.
+    struct PupilGuide {
+        Vec3 center;        // the instrument's exit pupil (world)
+        double radius = 0;  // sampled disk radius (the exit pupil's, with a margin); 0: no guide
+        double share = 0;   // fraction of pupil samples drawn from the guide
+        std::string instrument;
+    };
+    PupilGuide guide;
+    // Where rays along `dir` through the guide's centre cross the eye's pupil plane; false if that
+    // disk misses the eye's pupil.
+    bool guideCenter(const Vec3& dir, Vec3& center) const;
 
     Quantity quantity() const override { return Quantity::Radiance; }
     std::string describe() const override;
@@ -130,7 +162,7 @@ public:
     std::string describe() const override;
     void prepare(const World& world) override;
     bool generate(double px, double py, Rng& rng, Ray& ray, double& weight) const override;
-    bool pixelOfHit(const SurfaceHit& hit, int& px, int& py, double& pixelArea) const override;
+    bool pixelOfHit(const SurfaceHit& hit, Rng& rng, int& px, int& py, double& pixelArea) const override;
     int boundary() const override { return int(boundaryIndex); }
     const Transform& toWorld() const { return toWorld_; }
     Vec3 normal() const { return normal_; }

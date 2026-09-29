@@ -1,0 +1,15 @@
+# BENCHMARK caustic_seen_through_glass — the same lens caustic seen through a 5 mm N-BK7 plate
+# across the line of sight: light → lens → floor → plate → plate → eye. Its image equals the direct
+# view times the plate's transmittance (1 − R)²/(1 − R²) = 0.919
+# (tests/test_references.cpp: sppm_sees_a_caustic_through_a_glass_plate_and_in_a_mirror).
+# Measurement: Eye (radiance, 320×320, fixed exposure −9 EV).
+units = mm
+world { sun { elevation = 90deg  azimuth = 0deg  luminance = 1.2e5 } }
+material floor { type = diffuse  reflectance = 0.5 }
+body Floor { type = sheet  size = (300, 300)  position = (0, 0, 0)  material = floor }
+body Lens  { type = lens  medium = N-BK7  focal = 100  form = bi  diameter = 40  thickness = 8  rim = black
+             position = (0, 0, 100)  axis = (0, 0, 1) }
+body Plate { type = box  size = (60, 60, 5)  position = (172.2, 0, 96.3)  axis = (-0.873, 0, -0.488)  medium = N-BK7 }
+observer Eye { position = (268.3, 0, 150)  look_at = (0, 0, 0)  up = (0, 0, 1)  fov = 10deg  pupil = 2  focus = 335
+               resolution = (320, 320)  exposure = -9 }
+render { detector = Eye  spp = 1024  integrator = sppm }

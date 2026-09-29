@@ -119,9 +119,14 @@ struct Optics {
     uint type, texKind, reflectance, backAbsorbs, texA, texB, texC, conductorN, conductorK;
     float roughness, texScale, texParam;
     float4 sampleAimCenter, sampleAimNormal;
+    float4 roughMap;
+    float4 relief;
     bool isDelta() {
         return (type == kSurfDielectric || type == kSurfConductor) ? roughness < 1e-3 : type == kSurfMirror;
     }
+    // Whether scattering reads the refractive indices on either side (diffuse and mirror surfaces
+    // do not, so an interface at another wavelength needs no index evaluation).
+    bool usesIndices() { return type == kSurfDielectric || type == kSurfConductor; }
 };
 Optics loadOptics(uint id) {
     GOptics g = g_optics[id];
@@ -140,12 +145,15 @@ Optics loadOptics(uint id) {
     o.texParam = asfloat(g.c.w);
     o.sampleAimCenter = g.sampleAimCenter;
     o.sampleAimNormal = g.sampleAimNormal;
+    o.roughMap = g.roughMap;
+    o.relief = g.relief;
     return o;
 }
 
 struct Interface {
     Optics optics;
     float3 n;              // world normal pointing to the front region
+    float3 ns;             // shading normal (smooth meshes; else n): the frame scattering happens in
     float3 p;
     float nFront, nBack;   // refractive indices at `lambda`
     float lambda;
@@ -162,7 +170,31 @@ struct Interface {
     float2 conductorEta(float nMedium) {
         return float2(spectrumEval(optics.conductorN, lambda), spectrumEval(optics.conductorK, lambda)) / nMedium;
     }
+    bool smooth() { return any(ns != n); }
+    // A material map: the roughness at this point, from the texture weights (set once they are).
+    [mutating] void applyMaterialMap() {
+        if (optics.roughMap.w != 0) optics.roughness = max(0.0, dot(tex, optics.roughMap.xyz));
+    }
+    // A direction lies on the same side of the shading and the geometric surface: scattering
+    // about ns then reflects or transmits exactly where the geometry does (regions stay right).
+    bool agrees(float3 w) { return dot(w, ns) * dot(w, n) > 0; }
 };
+
+// Shading normals (Veach 1997, §5.3). Scattering is evaluated in the frame of ns, and the cosine
+// of the rendering equation is |wi·ns|; transported the other way (particles, photons), the
+// adjoint of that BSDF carries |wo·ns| |wi·n| / (|wo·n| |wi·ns|), so that both directions
+// estimate the same image. wo: toward where the path came from; wi: where it goes.
+float adjointCorrection(Interface it, float3 wo, float3 wi, uint mode) {
+    if (mode == kModeRadiance || !it.smooth()) return 1;
+    float den = abs(dot(wo, it.n)) * abs(dot(wi, it.ns));
+    return den > 0 ? abs(dot(wo, it.ns)) * abs(dot(wi, it.n)) / den : 0.0;
+}
+// The factor multiplying f(wo, wi) for a connection toward wi (next-event estimation, a particle's
+// link to the observer): |wi·ns|, times the adjoint correction for importance.
+float scatterCosine(Interface it, float3 wo, float3 wi, uint mode) {
+    if (!it.smooth()) return abs(dot(wi, it.n));
+    return abs(dot(wi, it.ns)) * adjointCorrection(it, wo, wi, mode);
+}
 
 struct ScatterSample {
     float3 wi;
@@ -237,9 +269,22 @@ float screenAimPdf(Interface it, float3 wi, bool generatingDisk = false) {
     return t * t / (abs(dn) * kPi * aim.w * aim.w);
 }
 
+bool sampleScatterIn(Interface it, float3 d, float uc, float u1, float u2, uint mode, out ScatterSample s);
+
 bool sampleScatter(Interface it, float3 d, float uc, float u1, float u2, uint mode, out ScatterSample s) {
+    if (!it.smooth()) return sampleScatterIn(it, d, uc, u1, u2, mode, s);
+    // Where the shading and the geometric surface disagree about a direction's side, the sample is
+    // lost (grazing directions on strongly curved smooth meshes): never a crossing the geometry
+    // does not make.
+    if (!it.agrees(-d) || !sampleScatterIn(it, d, uc, u1, u2, mode, s) || !it.agrees(s.wi)) return false;
+    s.weight *= adjointCorrection(it, -d, s.wi, mode);
+    return s.weight > 0;
+}
+
+// Scattering in the shading frame (ns).
+bool sampleScatterIn(Interface it, float3 d, float uc, float u1, float u2, uint mode, out ScatterSample s) {
     Optics o = it.optics;
-    Frame frame = Frame(it.n);
+    Frame frame = Frame(it.ns);
     float3 wo = frame.toLocal(-d);
     bool fromFront = wo.z > 0;
     s.wi = 0;
@@ -264,7 +309,7 @@ bool sampleScatter(Interface it, float3 d, float uc, float u1, float u2, uint mo
                     s.transmitted = false;
                 } else {
                     float3 wt;
-                    if (!refractDirection(d, it.n, ni, nt, wt)) return false;
+                    if (!refractDirection(d, it.ns, ni, nt, wt)) return false;
                     s.wi = wt;
                     s.weight = (1 - R) / (1 - pR) * (mode == kModeRadiance ? sqr(ni / nt) : 1.0);
                     s.transmitted = true;
@@ -294,7 +339,7 @@ bool sampleScatter(Interface it, float3 d, float uc, float u1, float u2, uint mo
                     float2 disk = sampleUniformDiskConcentric(u1, u2);
                     s.wi = normalize(o.sampleAimCenter.xyz + (a * disk.x + b * disk.y) * o.sampleAimCenter.w - it.p);
                 }
-                float c = dot(s.wi, it.n);
+                float c = dot(s.wi, it.ns);
                 if (c <= 0) return false;
                 s.pdf = (1 - share) * c * kInvPi + share * screenAimPdf(it, s.wi, uc < share);
                 s.weight = albedo * c * kInvPi / s.pdf;
@@ -316,7 +361,7 @@ bool sampleScatter(Interface it, float3 d, float uc, float u1, float u2, uint mo
             float2 eta = it.conductorEta(nMed);
             float3 w = fromFront ? wo : float3(wo.x, wo.y, -wo.z);
             if (o.roughness < 1e-3) {
-                float F = fresnelConductor(w.z, eta) * spectrumEval(o.reflectance, it.lambda);
+                float F = fresnelConductor(w.z, eta) * it.albedo();
                 s.wi = frame.toWorld(float3(-wo.x, -wo.y, wo.z));
                 s.weight = F;
                 s.delta = true;
@@ -327,7 +372,7 @@ bool sampleScatter(Interface it, float3 d, float uc, float u1, float u2, uint mo
             float3 wiL = reflectDir(-w, wm);
             if (wiL.z <= 0) return false;
             float pdf = mf.pdf(w, wm) / (4 * abs(dot(w, wm)));
-            float F = fresnelConductor(abs(dot(w, wm)), eta) * spectrumEval(o.reflectance, it.lambda);
+            float F = fresnelConductor(abs(dot(w, wm)), eta) * it.albedo();
             float f = mf.D(wm) * F * mf.G(w, wiL) / (4 * wiL.z * w.z);
             if (!(pdf > 0)) return false;
             if (!fromFront) wiL.z = -wiL.z;
@@ -340,12 +385,14 @@ bool sampleScatter(Interface it, float3 d, float uc, float u1, float u2, uint mo
     }
 }
 
-// f(wo, wi) of the non-delta components (wo = −d) and the pdf of sampling wi.
+// f(wo, wi) of the non-delta components (wo = −d) and the pdf of sampling wi. With shading normals,
+// f of the shading frame; the cosine (and adjoint correction) is scatterCosine's.
 float evalScatter(Interface it, float3 d, float3 wiWorld, uint mode, out float pdf) {
     pdf = 0;
     Optics o = it.optics;
     if (o.isDelta()) return 0;
-    Frame frame = Frame(it.n);
+    if (it.smooth() && !(it.agrees(-d) && it.agrees(wiWorld))) return 0;
+    Frame frame = Frame(it.ns);
     float3 wo = frame.toLocal(-d);
     float3 wi = frame.toLocal(wiWorld);
     bool fromFront = wo.z > 0;
@@ -367,7 +414,7 @@ float evalScatter(Interface it, float3 d, float3 wiWorld, uint mode, out float p
             if (dot(wm, wm) == 0) return 0;
             wm = normalize(wm);
             float nMed = fromFront ? it.nFront : it.nBack;
-            float F = fresnelConductor(abs(dot(wo, wm)), it.conductorEta(nMed)) * spectrumEval(o.reflectance, it.lambda);
+            float F = fresnelConductor(abs(dot(wo, wm)), it.conductorEta(nMed)) * it.albedo();
             pdf = mf.pdf(wo, wm) / (4 * abs(dot(wo, wm)));
             return mf.D(wm) * F * mf.G(wo, wi) / (4 * wi.z * wo.z);
         }
@@ -390,16 +437,17 @@ float secondaryScatterWeight(Interface it, float3 d, ScatterSample s, uint mode)
     if (!s.delta) {
         float pdf;
         float f = evalScatter(it, d, s.wi, mode, pdf);
-        return s.pdf > 0 ? f * abs(dot(s.wi, it.n)) / s.pdf : 0.0;
+        return s.pdf > 0 ? f * scatterCosine(it, -d, s.wi, mode) / s.pdf : 0.0;
     }
-    float cosI = abs(dot(d, it.n));
+    float cosI = abs(dot(d, it.ns));
     switch (o.type) {
-        case kSurfDielectric: return s.weight;
-        case kSurfMirror: return spectrumEval(o.reflectance, it.lambda);
+        case kSurfDielectric: return s.weight;  // (a dispersive interface ends the secondaries)
+        case kSurfMirror: return spectrumEval(o.reflectance, it.lambda) * adjointCorrection(it, -d, s.wi, mode);
         case kSurfConductor: {
             bool fromFront = dot(d, it.n) < 0;
             float nMed = fromFront ? it.nFront : it.nBack;
-            return fresnelConductor(cosI, it.conductorEta(nMed)) * spectrumEval(o.reflectance, it.lambda);
+            return fresnelConductor(cosI, it.conductorEta(nMed)) * it.albedo() *
+                   adjointCorrection(it, -d, s.wi, mode);
         }
         default: return 0;
     }

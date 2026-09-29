@@ -172,6 +172,12 @@ std::vector<Candidate> enumerate(VkInstance inst) {
         c.usable = true;
         if (p.apiVersion < VK_API_VERSION_1_1) { c.usable = false; c.why = "needs Vulkan 1.1"; }
         if (!f.shaderInt64) { c.usable = false; c.why = "no 64-bit shader integers"; }
+        // The kernels run in groups of 256 threads (every desktop GPU and Apple silicon allows 1024).
+        if (p.limits.maxComputeWorkGroupInvocations < 256 || p.limits.maxComputeWorkGroupSize[0] < 256 ||
+            p.limits.maxComputeWorkGroupSize[1] < 16) {
+            c.usable = false;
+            c.why = "compute groups of 256 threads are not supported";
+        }
         uint32_t nq = 0;
         vkGetPhysicalDeviceQueueFamilyProperties(devs[i], &nq, nullptr);
         std::vector<VkQueueFamilyProperties> qs(nq);

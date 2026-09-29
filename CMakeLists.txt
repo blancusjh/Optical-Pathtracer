@@ -26,8 +26,10 @@ add_library(owe_engine STATIC
   src/owe/core/medium.cpp
   src/owe/scene/bvh.cpp
   src/owe/scene/geometry.cpp
+  src/owe/scene/gltf.cpp
   src/owe/scene/world.cpp
   src/owe/scene/detector.cpp
+  src/owe/scene/image.cpp
   src/owe/scene/builders.cpp
   src/owe/scene/prescription.cpp
   src/owe/transport/scattering.cpp
@@ -36,11 +38,29 @@ add_library(owe_engine STATIC
   src/owe/analysis/inspect.cpp
   src/owe/loader/scene_parser.cpp
   src/owe/loader/scene_loader.cpp
+  src/owe/render/exposure.cpp
   src/owe/render/output.cpp
   src/owe/render/record.cpp
 )
 target_include_directories(owe_engine PUBLIC src)
 target_link_libraries(owe_engine PUBLIC Threads::Threads)
+
+# Image decoding for textures and environment maps (PNG, JPEG, Radiance HDR): stb_image, pinned.
+include(FetchContent)
+FetchContent_Declare(owe_stb
+  GIT_REPOSITORY https://github.com/nothings/stb.git
+  GIT_TAG 2c980bb59875b0d32144a71867fbdebb2f77cd20
+  SOURCE_SUBDIR _none)
+FetchContent_MakeAvailable(owe_stb)
+target_include_directories(owe_engine PRIVATE ${owe_stb_SOURCE_DIR})
+
+# glTF 2.0 models (textured scans; Sketchfab's own format): cgltf, pinned (v1.15).
+FetchContent_Declare(owe_cgltf
+  GIT_REPOSITORY https://github.com/jkuhlmann/cgltf.git
+  GIT_TAG 360db1a95480fe102ae9c69b27c5d101167ff5ba
+  SOURCE_SUBDIR _none)
+FetchContent_MakeAvailable(owe_cgltf)
+target_include_directories(owe_engine PRIVATE ${owe_cgltf_SOURCE_DIR})
 
 # Optional: compressed PNG output. Without zlib, PNGs use stored deflate blocks.
 find_package(ZLIB)
@@ -77,6 +97,18 @@ if(OWE_GPU)
   owe_add_kernel(owe_backend_gpu ${_kernels}/particle_kernel.slang owe_kernel_particle)
   owe_add_kernel(owe_backend_gpu ${_kernels}/path_kernel.slang owe_kernel_path_rq RAY_QUERY)
   owe_add_kernel(owe_backend_gpu ${_kernels}/particle_kernel.slang owe_kernel_particle_rq RAY_QUERY)
+  owe_add_kernel(owe_backend_gpu ${_kernels}/sppm_camera_kernel.slang owe_kernel_sppm_camera)
+  owe_add_kernel(owe_backend_gpu ${_kernels}/sppm_camera_kernel.slang owe_kernel_sppm_camera_rq RAY_QUERY)
+  owe_add_kernel(owe_backend_gpu ${_kernels}/sppm_photon_kernel.slang owe_kernel_sppm_photon)
+  owe_add_kernel(owe_backend_gpu ${_kernels}/sppm_photon_kernel.slang owe_kernel_sppm_photon_rq RAY_QUERY)
+  owe_add_kernel(owe_backend_gpu ${_kernels}/sppm_grid_kernel.slang owe_kernel_sppm_grid)
+  owe_add_kernel(owe_backend_gpu ${_kernels}/sppm_update_kernel.slang owe_kernel_sppm_update)
+  owe_add_kernel(owe_backend_gpu ${_kernels}/sppm_guide_kernel.slang owe_kernel_sppm_guide)
+  owe_add_kernel(owe_backend_gpu ${_kernels}/vcm_light_kernel.slang owe_kernel_vcm_light)
+  owe_add_kernel(owe_backend_gpu ${_kernels}/vcm_light_kernel.slang owe_kernel_vcm_light_rq RAY_QUERY)
+  owe_add_kernel(owe_backend_gpu ${_kernels}/vcm_camera_kernel.slang owe_kernel_vcm_camera)
+  owe_add_kernel(owe_backend_gpu ${_kernels}/vcm_camera_kernel.slang owe_kernel_vcm_camera_rq RAY_QUERY)
+  owe_add_kernel(owe_backend_gpu ${_kernels}/vcm_grid_kernel.slang owe_kernel_vcm_grid)
 else()
   target_sources(owe_backend_gpu PRIVATE src/owe/backends/gpu/gpu_unavailable.cpp)
 endif()
@@ -114,6 +146,10 @@ add_executable(owe_tests
   tests/test_backends.cpp
   tests/test_gpu.cpp
   tests/test_navigation.cpp
+  tests/test_references.cpp
+  tests/test_shading.cpp
+  tests/test_vcm.cpp
+  tests/test_models.cpp
 )
 target_link_libraries(owe_tests PRIVATE owe)
 add_test(NAME owe_tests COMMAND owe_tests WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

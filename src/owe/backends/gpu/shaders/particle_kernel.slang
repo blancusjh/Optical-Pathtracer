@@ -4,7 +4,7 @@
 // (particle.slang), so it does not depend on their order either.
 #include "particle.slang"
 
-static const uint kGroup = 64;
+static const uint kGroup = 256;  // as the path kernel: a register budget for more resident threads
 groupshared uint gs_stats[4];
 
 // Adds x to the 64-bit counter at words (index, index + 1) of g_counters.

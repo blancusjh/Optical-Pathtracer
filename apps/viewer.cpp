@@ -25,8 +25,10 @@
 #include <sstream>
 #include <thread>
 
+#include "owe/analysis/analysis.hpp"
 #include "owe/analysis/inspect.hpp"
 #include "owe/backends/registry.hpp"
+#include "owe/render/exposure.hpp"
 #include "owe/render/output.hpp"
 #include "owe/render/record.hpp"
 #include "owe/loader/scene_loader.hpp"
@@ -123,7 +125,8 @@ Catalog scanScenes(const std::vector<std::string>& paths) {
         std::error_code ec;
         if (fs::is_directory(p, ec)) {
             std::vector<std::string> found;
-            for (auto& de : fs::directory_iterator(p, ec))
+            // Groups of scenes live in subdirectories (scenes/glass/...).
+            for (auto& de : fs::recursive_directory_iterator(p, ec))
                 if (de.path().extension() == ".owe") found.push_back(de.path().string());
             std::sort(found.begin(), found.end());
             files.insert(files.end(), found.begin(), found.end());
@@ -176,7 +179,7 @@ struct ViewRequest {
     std::string backend = "cpu";
     int device = -1;
     double scale = 1;
-    bool pathOnly = false;  // path integrator instead of the scene's own
+    bool pathOnly = false;  // path integrator instead of the scene's own (also while exploring)
     std::optional<NavigationCamera> camera;
     std::vector<std::string> eyepieces;
 };
@@ -191,6 +194,7 @@ struct EyepieceTarget {
 struct NavigationRequest {
     NavigationCamera camera;
     bool preview = false;
+    bool accommodate = false;       // the eye focuses on what it looks at, through any optics
     std::optional<Vec2> focusPoint; // normalized image coordinates
 };
 
@@ -199,10 +203,12 @@ struct Snapshot {
     uint64_t request = 0;        // the request this state belongs to
     uint64_t version = 0;        // bumps with every new image
     std::string state = "idle";  // loading, rendering, paused, converged, error
+    std::string phase;           // while loading: what the worker is doing
     std::string error, message;
     Image image;
     NavigationCamera camera;
     bool exploring = false;
+    bool accommodated = false;   // camera.focus was set by the eye's accommodation
     double surfaceDistance = Inf;
     uint64_t focusVersion = 0;
     std::vector<EyepieceTarget> eyepieces;
@@ -214,6 +220,7 @@ struct Snapshot {
     int width = 0, height = 0;
     double exposure = 0, whiteBalance = 0;  // the scene's own display settings for this detector
     bool autoExposure = true;
+    std::string tone = "agx";
     uint64_t probeVersion = 0;
     int probeX = -1, probeY = -1;
     std::string probeText;
@@ -238,6 +245,7 @@ public:
         cv_.notify_all();
         snap_.request = ++requestId_;
         snap_.state = "loading";
+        snap_.phase = "waiting for the current pass";
         snap_.error.clear();
         snap_.message.clear();
         snap_.image = Image{};
@@ -248,9 +256,9 @@ public:
         probe_.reset();
         return requestId_;
     }
-    void navigate(const NavigationCamera& camera, bool preview) {
+    void navigate(const NavigationCamera& camera, bool preview, bool accommodate = false) {
         std::lock_guard<std::mutex> lk(m_);
-        navigation_ = NavigationRequest{camera, preview, std::nullopt};
+        navigation_ = NavigationRequest{camera, preview, accommodate, std::nullopt};
         paused_ = false;
         save_.reset();
         probe_.reset();
@@ -258,7 +266,7 @@ public:
     }
     void focus(const NavigationCamera& camera, double x, double y) {
         std::lock_guard<std::mutex> lk(m_);
-        navigation_ = NavigationRequest{camera, false, Vec2{x, y}};
+        navigation_ = NavigationRequest{camera, false, false, Vec2{x, y}};
         paused_ = false;
         cv_.notify_all();
     }
@@ -273,9 +281,9 @@ public:
         maxSpp_ = n;
         cv_.notify_all();
     }
-    void save(const std::string& prefix, double ev, bool autoEv, double wb) {
+    void save(const std::string& prefix, double ev, bool autoEv, double wb, Tone tone) {
         std::lock_guard<std::mutex> lk(m_);
-        save_ = SaveJob{prefix, ev, autoEv, wb};
+        save_ = SaveJob{prefix, ev, autoEv, wb, tone};
         cv_.notify_all();
     }
     void probe(int x, int y) {
@@ -303,6 +311,7 @@ private:
         double ev;
         bool autoEv;
         double wb;
+        Tone tone;
     };
 
     void loop() {
@@ -348,8 +357,13 @@ private:
                     std::lock_guard<std::mutex> lk(m_);
                     if (requestId_ != reqId) continue;
                 }
+                auto phase = [&](const std::string& what) {
+                    std::lock_guard<std::mutex> lk(m_);
+                    if (snap_.request == reqId) snap_.phase = what;
+                };
                 try {
                     if (!scene || scenePath != req->scenePath || sceneEdits != req->edits) {
+                        phase("reading the scene and its models");
                         scene.reset();
                         auto sc = std::make_unique<Scene>(loadSceneWithEdits(req->scenePath, req->edits));
                         explorer = -1;
@@ -380,6 +394,7 @@ private:
                         }
                         auto& eye = static_cast<IdealObserver&>(*scene->detectors[size_t(explorer)]);
                         eye.name = base.name + " (explore)";
+                        adoptPixelResponse(eye, base);
                         eye.width = nativeWidth;
                         eye.height = nativeHeight;
                         camera.apply(eye, scene->world);
@@ -390,8 +405,11 @@ private:
                     rs.backend = req->backend;
                     rs.device = req->device;
                     rs.threads = threads;
-                    if (req->pathOnly || exploring) rs.integrator = "path";
+                    // Exploring keeps the scene's integrator: caustics seen from a free eye are formed
+                    // by light tracing, as in the scene's own views, instead of rare camera paths.
+                    if (req->pathOnly) rs.integrator = "path";
                     adaptToBackend(rs);  // e.g. hybrid → path on a backend without it
+                    phase("preparing the " + rs.backend + " renderer");
                     R = makeRenderer(*scene, d, rs);
                     det = d;
                     spp = 1;
@@ -402,6 +420,7 @@ private:
                         snap_.camera = camera;
                         snap_.surfaceDistance = camera.surfaceDistance(scene->world);
                         snap_.exploring = exploring;
+                        snap_.accommodated = false;  // the view's own focus
                         snap_.eyepieces.clear();
                         for (const auto& name : req->eyepieces) {
                             int index = scene->findDetector(name);
@@ -420,6 +439,7 @@ private:
                         snap_.exposure = rs.exposure;
                         snap_.autoExposure = rs.autoExposure;
                         snap_.whiteBalance = rs.whiteBalance;
+                        snap_.tone = rs.tone;
                         snap_.spp = 0;
                         snap_.passes = 0;
                         snap_.seconds = snap_.lastPass = 0;
@@ -445,6 +465,14 @@ private:
                 try {
                     camera = nav->camera;
                     preview = nav->preview;
+                    // The eye focuses where the object's image is: through a telescope, a mirror or
+                    // a magnifier that is not the glass surface in front of it.
+                    auto accommodate = [&](const Vec3& dir) {
+                        Accommodation a = accommodation(*scene, camera.position, dir, scene->world.locate(camera.position),
+                                                        camera.pupil);
+                        if (a.found) camera.focus = a.distance;
+                        return a.found;
+                    };
                     if (nav->focusPoint) {
                         double tanY = std::tan(camera.fov * 0.5);
                         Vec3 dir = normalize(camera.forward + camera.right() * ((2 * nav->focusPoint->x - 1) * tanY * nativeWidth / nativeHeight)
@@ -453,19 +481,24 @@ private:
                         if (scene->world.intersect(Ray{camera.position, dir}, Inf, hit)) {
                             camera.forward = dir;
                             camera.up = normalize(cross(camera.right(), camera.forward));
-                            camera.distance = std::max(1e-5, hit.t);
-                            camera.focus = camera.distance;
+                            camera.distance = std::max(1e-5, hit.t);  // orbit about the surface clicked
+                            if (!accommodate(dir)) camera.focus = camera.distance;
                         }
+                    } else if (nav->accommodate && camera.pupil > 0) {
+                        accommodate(camera.forward);
                     }
                     RenderSettings rs = R->settings();
                     if (!exploring) {
                         const std::string name = R->detector().name + " (explore)";
+                        const int base = det;
                         R.reset();
                         if (explorer < 0) {
                             explorer = int(scene->detectors.size());
                             scene->detectors.push_back(std::make_unique<IdealObserver>());
                         }
                         scene->detectors[size_t(explorer)]->name = name;
+                        adoptPixelResponse(static_cast<IdealObserver&>(*scene->detectors[size_t(explorer)]),
+                                           *scene->detectors[size_t(base)]);
                         det = explorer;
                         exploring = true;
                         scene->useDetector(det);
@@ -474,7 +507,8 @@ private:
                     eye.width = preview ? std::min(nativeWidth, 320) : nativeWidth;
                     eye.height = std::max(8, int(std::lround(double(nativeHeight) * eye.width / nativeWidth)));
                     camera.apply(eye, scene->world);
-                    rs.integrator = "path";
+                    // The current integrator (the scene's, or path if asked); a free eye is an
+                    // observer, so light and hybrid both apply.
                     if (!R || !R->resetObserver()) R = makeRenderer(*scene, det, rs);
                     spp = 1;
                     paused = false;
@@ -483,8 +517,9 @@ private:
                     snap_.camera = camera;
                     snap_.surfaceDistance = camera.surfaceDistance(scene->world);
                     if (nav->focusPoint) snap_.focusVersion++;
+                    snap_.accommodated = nav->accommodate || nav->focusPoint.has_value();
                     snap_.description = eye.describe();
-                    snap_.integrator = "path";
+                    snap_.integrator = rs.integrator;
                     snap_.width = eye.width;
                     snap_.height = eye.height;
                     snap_.spp = 0;
@@ -507,12 +542,13 @@ private:
                 try {
                     fs::create_directories(fs::path(save->prefix).parent_path());
                     Image img = R->resolve();
-                    writePNG(save->prefix + ".png", img, save->ev, save->autoEv, save->wb);
+                    writePNG(save->prefix + ".png", img, save->ev, save->autoEv, save->wb, save->tone);
                     writePFM(save->prefix + ".pfm", img);
                     RenderSettings settings = R->settings();
                     settings.exposure = save->ev;
                     settings.autoExposure = save->autoEv;
                     settings.whiteBalance = save->wb;
+                    settings.tone = save->tone == Tone::AgX ? "agx" : "standard";
                     std::ofstream(save->prefix + ".json") << renderMetadataJSON(*scene, *R, settings);
                     msg = "saved " + save->prefix + ".png, .pfm, .json";
                 } catch (const std::exception& e) {
@@ -650,8 +686,17 @@ public:
             if (!backend(o.backend).available(&why)) throw std::runtime_error(o.backend + " backend unavailable: " + why);
             backend_ = o.backend;
         } else {
-            // The fastest available: a backend other than the reference when one runs here.
-            backend_ = usable_.back()->name();
+            // The fastest available: a backend other than the reference when it has a discrete GPU
+            // (or Apple silicon, through MoltenVK). A laptop's integrated GPU (Intel, AMD) is slower
+            // than the reference on its CPU cores (2-7× on an i7-12650H), so the CPU starts there;
+            // G or the Render panel still switches.
+            backend_ = referenceBackend().name();
+            for (const Backend* b : usable_) {
+                const auto& ds = devices_[b->name()];
+                if (b != &referenceBackend() &&
+                    std::any_of(ds.begin(), ds.end(), [](const DeviceInfo& d) { return d.type == "discrete" || d.portability; }))
+                    backend_ = b->name();
+            }
         }
         const auto& devices = devices_[backend_];
         if (o.device >= 0 && std::none_of(devices.begin(), devices.end(), [&](const auto& d) { return d.index == o.device; }))
@@ -708,6 +753,7 @@ private:
             if (cat_.views[size_t(vi)].eyepiece) r.eyepieces.push_back(cat_.views[size_t(vi)].detector);
         if (exploring_ && navigationReady_) r.camera = camera_;
         requestId_ = worker_.request(r);
+        requestStart_ = Clock::now();
         worker_.setPaused(paused_ = false);
     }
     void switchBackend(const std::string& name) {
@@ -745,7 +791,8 @@ private:
         if (!e || snap_.request != requestId_ || snap_.spp <= 0 || motionPending_) return;
         std::string prefix = "out/view_" + fileSafe(fs::path(sceneOf(current_)->path).stem().string()) + "_" + fileSafe(e->detector);
         if (exploring_) prefix += "_explore";
-        worker_.save(prefix, exposure_, autoExposure_, whiteBalance_);
+        // The file shows exactly what the window shows: the resolved exposure, not a new meter reading.
+        worker_.save(prefix, exposure_.resolvedEV(), false, whiteBalance_, filmic_ ? Tone::AgX : Tone::Standard);
     }
 
     void stopFlight() {
@@ -756,7 +803,12 @@ private:
         exploring_ = motionPending_ = true;
         paused_ = tour_ = false;
         lastMotion_ = Clock::now();
-        worker_.navigate(camera_, true);
+        worker_.navigate(camera_, true, accommodate_);
+    }
+    // Field of view as a zoom: the eye stays where it is; finer angular detail per pixel.
+    void zoom(double factor) {
+        camera_.fov = std::clamp(camera_.fov * factor, radians(0.1), radians(120));
+        moved();
     }
     void navigationInput(bool hovered, float imageHeight);
     int nearbyEyepiece() const {
@@ -774,10 +826,14 @@ private:
     }
     void drawNavigation();
     void refreshTexture(SDL_Renderer* ren);
-    void setAutoExposure(bool enabled) {
-        if (enabled == autoExposure_) return;
-        exposure_ = enabled ? 0 : float(exposure_ + meteredEv_);
-        autoExposure_ = enabled;
+    // Manual, Locked or Adaptive; the displayed brightness does not change at the switch.
+    void setExposureMode(ExposureMode m) {
+        exposure_.setMode(m);
+        if (m != ExposureMode::Manual) autoMode_ = m;
+        displayDirty_ = true;
+    }
+    void addExposure(double ev) {
+        exposure_.setCompensation(exposure_.compensation() + ev);
         displayDirty_ = true;
     }
     void drawSidebar(float width);
@@ -801,9 +857,15 @@ private:
     float scale_ = 1;
     int maxSppIndex_ = 2;  // 256, 1024, 4096, 16384, unlimited
     // Display.
-    bool adoptSceneDisplay_ = true, autoExposure_ = true, pixelated_ = false;
-    float exposure_ = 0, whiteBalance_ = 0;
-    double meteredEv_ = 0;
+    // Display. Exposure is display state only (owe/render/exposure.hpp): in free navigation it is
+    // locked by default, so a lamp entering the view saturates instead of re-metering the room.
+    bool adoptSceneDisplay_ = true, pixelated_ = false;
+    float whiteBalance_ = 0;
+    bool filmic_ = true;  // the display's view transform: AgX, else standard
+    ExposureControl exposure_{ExposureMode::Locked};
+    ExposureMode autoMode_ = ExposureMode::Locked;  // the automatic mode a view without a fixed exposure uses
+    Clock::time_point lastFrame_ = Clock::now();    // UI time for adaptation
+    double shownEv_ = 0;
     bool displayDirty_ = true;
     // Texture holding the displayed image.
     ImageDraw imageDraw_;
@@ -817,6 +879,7 @@ private:
     bool tour_ = false;
     float tourSeconds_ = 10;
     Clock::time_point viewStart_ = Clock::now();
+    Clock::time_point requestStart_ = Clock::now();
     bool probeOpen_ = false;
     uint64_t probeSeen_ = 0;
     uint64_t focusSeen_ = 0;
@@ -828,6 +891,7 @@ private:
     NavigationCamera camera_;
     bool navigationReady_ = false, exploring_ = false, motionPending_ = false;
     bool flight_ = false, lookHeld_ = false, imageHovered_ = false, walk_ = false;
+    bool accommodate_ = true;  // the free eye focuses on what it looks at (through any optics)
     int drag_ = 0;
     float speed_ = 1;
     float precisionFactor_ = 0.2f;
@@ -850,23 +914,33 @@ void Viewer::refreshTexture(SDL_Renderer* ren) {
         speed_ = float(std::clamp(camera_.distance * 0.5, 0.02, 10.0));
     }
     if (snap_.request == requestId_ && adoptSceneDisplay_ && snap_.state != "loading" && snap_.state != "error") {
-        // A new view starts with the scene's own display settings for its detector.
-        exposure_ = float(snap_.exposure);
-        autoExposure_ = snap_.autoExposure;
+        // A new view starts with the scene's own display settings for its detector: a fixed
+        // exposure is manual; otherwise the automatic mode in use meters the new view (once, when
+        // locked).
+        exposure_.setMode(snap_.autoExposure ? autoMode_ : ExposureMode::Manual);
+        exposure_.setCompensation(snap_.exposure);
+        exposure_.reset();
         whiteBalance_ = float(snap_.whiteBalance);
+        filmic_ = snap_.tone != "standard";
         adoptSceneDisplay_ = false;
         displayDirty_ = true;
     }
-    if (!fresh && !displayDirty_) return;
+    // The exposure advances in UI time (not render passes); it meters only images of this request.
+    const double dt = std::min(since(lastFrame_), 0.25);
+    lastFrame_ = Clock::now();
     const Image& img = snap_.image;
+    const bool imageReady = img.width > 0 && img.height > 0 && !img.xyz.empty() && snap_.request == requestId_;
+    exposure_.update(fresh && imageReady ? &img : nullptr, snap_.spp, dt);
+    if (exposure_.resolvedEV() != shownEv_) displayDirty_ = true;
+    if (!fresh && !displayDirty_) return;
     if (img.width <= 0 || img.height <= 0 || img.xyz.empty()) {
         if (tex_) SDL_DestroyTexture(tex_);
         tex_ = nullptr;
         texW_ = texH_ = 0;
         return;
     }
-    meteredEv_ = autoExposure_ ? autoExposureEV(img) : 0;
-    std::vector<unsigned char> rgb = displayRGB8(img, exposure_ + meteredEv_, false, whiteBalance_);
+    shownEv_ = exposure_.resolvedEV();
+    std::vector<unsigned char> rgb = displayRGB8(img, shownEv_, false, whiteBalance_, filmic_ ? Tone::AgX : Tone::Standard);
     if (!tex_ || texW_ != img.width || texH_ != img.height) {
         if (tex_) SDL_DestroyTexture(tex_);
         tex_ = SDL_CreateTexture(ren, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING, img.width, img.height);
@@ -893,12 +967,20 @@ void Viewer::navigationInput(bool hovered, float imageHeight) {
     }
     bool changed = false;
     double sensitivity = navigationSensitivity(io.KeyCtrl, precisionFactor_);
+    // Zoom ([ and ], or Alt + wheel): a narrower field shows finer angular detail per pixel, as
+    // a planet seen through an eyepiece needs; the eye itself does not move.
+    const bool wheelZoom = io.KeyAlt && io.MouseWheel != 0 && (hovered || flight_ || lookHeld_);
+    if (wheelZoom) zoom(std::pow(1.25, -double(io.MouseWheel)));
+    if (!io.WantCaptureKeyboard || flight_ || lookHeld_) {
+        if (ImGui::IsKeyPressed(ImGuiKey_RightBracket)) zoom(1 / 1.25);
+        if (ImGui::IsKeyPressed(ImGuiKey_LeftBracket)) zoom(1.25);
+    }
     if (flight_ || lookHeld_) {
         if (relativeX_ != 0 || relativeY_ != 0) {
             camera_.turn(-relativeX_ * 0.003 * sensitivity, -relativeY_ * 0.003 * sensitivity, false);
             changed = true;
         }
-        if (io.MouseWheel != 0) speed_ = std::clamp(speed_ * std::exp(io.MouseWheel * 0.25f), 0.00001f, 100.0f);
+        if (io.MouseWheel != 0 && !wheelZoom) speed_ = std::clamp(speed_ * std::exp(io.MouseWheel * 0.25f), 0.00001f, 100.0f);
         auto held = [](ImGuiKey key) { return ImGui::IsKeyDown(key) ? 1.0 : 0.0; };
         double x = held(ImGuiKey_D) - held(ImGuiKey_A);
         double y = held(ImGuiKey_W) - held(ImGuiKey_S);
@@ -928,7 +1010,7 @@ void Viewer::navigationInput(bool hovered, float imageHeight) {
             }
             changed = true;
         }
-        if (hovered && io.MouseWheel != 0) { camera_.dolly(io.MouseWheel * sensitivity); changed = true; }
+        if (hovered && io.MouseWheel != 0 && !wheelZoom) { camera_.dolly(io.MouseWheel * sensitivity); changed = true; }
     }
     if (changed) moved();
 }
@@ -949,7 +1031,7 @@ void Viewer::drawNavigation() {
         int nearby = nearbyEyepiece();
         if (nearby >= 0) {
             const auto& name = cat_.views[size_t(nearby)].detector;
-            ImGui::TextWrapped("Nearby: %s. Enter to look through.", name.c_str());
+            ImGui::TextWrapped("Nearby: %s. Enter to look through, or stay free and zoom with [ ].", name.c_str());
             for (const auto& target : snap_.eyepieces) if (target.detector == name) {
                 Vec3 offset = camera_.position - target.position;
                 double axial = dot(offset, target.towardObjective);
@@ -964,6 +1046,7 @@ void Viewer::drawNavigation() {
         ImGui::Separator();
     }
     ImGui::TextWrapped("Middle drag: orbit | Shift + middle: pan | Wheel: dolly");
+    ImGui::TextWrapped("[ / ] or Alt + wheel: zoom (field of view)");
     ImGui::TextWrapped("Shift + click: set orbit center and eye focus");
     ImGui::TextWrapped("Hold right mouse: look + WASD move, Q/E down/up");
     ImGui::TextWrapped("Shift: faster | Ctrl: precision move/look | Z/C: roll | Esc: release");
@@ -983,20 +1066,38 @@ void Viewer::drawNavigation() {
     ImGui::Text("Ctrl movement: %.3g mm/s", 1000 * navigationSpeed(speed_, true, false, snap_.surfaceDistance,
                                                                   precisionFactor_, slowNearSurfaces_));
     float fov = float(degrees(camera_.fov));
-    if (ImGui::SliderFloat("field of view", &fov, 1, 120, "%.1f deg")) { camera_.fov = radians(fov); moved(); }
+    if (ImGui::SliderFloat("field of view", &fov, 0.1f, 120, "%.3g deg", ImGuiSliderFlags_Logarithmic)) {
+        camera_.fov = radians(fov);
+        moved();
+    }
+    ImGui::SetItemTooltip("A zoom: the eye stays in place. Narrow it to see a planet's detail through an eyepiece.");
     float pupil = float(camera_.pupil * 2000);
     if (ImGui::SliderFloat("eye pupil", &pupil, 0, 10, "%.2f mm")) { camera_.pupil = pupil / 2000; moved(); }
     ImGui::SetItemTooltip("Eye pupil diameter. Small pupils help align with telescope exit pupils; 0 is a pinhole.");
-    bool infinity = !std::isfinite(camera_.focus);
-    if (ImGui::Checkbox("eye focus at infinity", &infinity)) {
-        camera_.focus = infinity ? Inf : camera_.distance;
+    if (ImGui::Checkbox("eye accommodates", &accommodate_)) {
+        // Manual focus continues from where the eye was focused.
+        if (!accommodate_ && snap_.request == requestId_ && snap_.accommodated) camera_.focus = snap_.camera.focus;
         moved();
     }
-    if (!infinity) {
-        float focus = float(camera_.focus);
-        if (ImGui::SliderFloat("eye focus", &focus, 0.001f, 1000, "%.4g m", ImGuiSliderFlags_Logarithmic)) {
-            camera_.focus = focus;
+    ImGui::SetItemTooltip("Like a real eye, it focuses on what is at the centre of the view. Through a telescope, "
+                          "a mirror or a magnifier that is the image they form, not the glass in front of you. "
+                          "Turn off to focus by hand.");
+    if (accommodate_) {
+        double f = snap_.request == requestId_ && snap_.accommodated ? snap_.camera.focus : camera_.focus;
+        if (std::isfinite(f)) ImGui::TextDisabled("eye focus: %.4g m", f);
+        else ImGui::TextDisabled("eye focus: infinity");
+    } else {
+        bool infinity = !std::isfinite(camera_.focus);
+        if (ImGui::Checkbox("eye focus at infinity", &infinity)) {
+            camera_.focus = infinity ? Inf : camera_.distance;
             moved();
+        }
+        if (!infinity) {
+            float focus = float(camera_.focus);
+            if (ImGui::SliderFloat("eye focus", &focus, 0.001f, 1000, "%.4g m", ImGuiSliderFlags_Logarithmic)) {
+                camera_.focus = focus;
+                moved();
+            }
         }
     }
     float distance = float(camera_.distance);
@@ -1099,13 +1200,37 @@ void Viewer::drawSidebar(float width) {
     }
 
     if (ImGui::CollapsingHeader("Display", ImGuiTreeNodeFlags_DefaultOpen)) {
-        bool automatic = autoExposure_;
-        if (ImGui::Checkbox("auto exposure", &automatic)) setAutoExposure(automatic);
-        ImGui::SetItemTooltip("Turn off to lock the current exposure while moving; turn on to meter each view.");
-        if (autoExposure_) ImGui::Text("Auto gain: %+.1f EV | total: %+.1f EV", meteredEv_, meteredEv_ + exposure_);
-        if (ImGui::SliderFloat("exposure", &exposure_, -20, 32, "%+.1f EV")) displayDirty_ = true;
+        int mode = int(exposure_.mode());
+        bool changed = ImGui::RadioButton("manual", &mode, int(ExposureMode::Manual));
+        ImGui::SetItemTooltip("A fixed exposure.");
+        ImGui::SameLine();
+        changed |= ImGui::RadioButton("locked", &mode, int(ExposureMode::Locked));
+        ImGui::SetItemTooltip("Meter each new view once, then keep that exposure while you move (L meters again).");
+        ImGui::SameLine();
+        changed |= ImGui::RadioButton("adaptive", &mode, int(ExposureMode::Adaptive));
+        ImGui::SetItemTooltip("Follow the meter gradually, at most %.1f EV/s brighter and %.1f EV/s darker.",
+                              exposure_.rates.brighten, exposure_.rates.darken);
+        if (changed) setExposureMode(ExposureMode(mode));
+        float ev = float(exposure_.compensation());
+        const bool manual = exposure_.mode() == ExposureMode::Manual;
+        if (ImGui::SliderFloat(manual ? "exposure" : "compensation", &ev, -20, 32, "%+.1f EV")) {
+            exposure_.setCompensation(ev);
+            displayDirty_ = true;
+        }
+        if (manual) {
+            ImGui::Text("shown: %+.1f EV", exposure_.resolvedEV());
+        } else {
+            ImGui::Text("meter %+.1f EV · shown %+.1f EV%s", exposure_.automaticEV(), exposure_.resolvedEV(),
+                        exposure_.adapting() ? " · adapting" : exposure_.locked() ? " · locked" : "");
+            ImGui::SameLine();
+            if (ImGui::SmallButton("meter now")) exposure_.remeter();
+        }
         if (ImGui::SliderFloat("white", &whiteBalance_, 0, 12000, whiteBalance_ > 0 ? "%.0f K" : "off")) displayDirty_ = true;
         ImGui::SetItemTooltip("white point (Planckian); 0 = none");
+        if (ImGui::Checkbox("filmic", &filmic_)) displayDirty_ = true;
+        ImGui::SetItemTooltip("AgX view transform: bright colours go gradually to white over 16.5 stops;\n"
+                              "off: linear to white with a short roll-off");
+        ImGui::SameLine();
         if (ImGui::Checkbox("pixelated", &pixelated_)) displayDirty_ = true;
         ImGui::SameLine();
         if (ImGui::Button("scene defaults")) adoptSceneDisplay_ = true;
@@ -1170,7 +1295,7 @@ void Viewer::drawSidebar(float width) {
                                (unsigned long long)snap_.stats.inconsistencies, (unsigned long long)snap_.stats.leaks);
         ImGui::TextWrapped("%s", snap_.backend.c_str());
     } else {
-        ImGui::Text("loading…");
+        ImGui::TextWrapped("loading… %s", snap_.request == requestId_ ? snap_.phase.c_str() : "");
     }
     if (!snap_.message.empty()) ImGui::TextWrapped("%s", snap_.message.c_str());
     ImGui::TextDisabled("click a pixel: why is it this colour?");
@@ -1222,14 +1347,32 @@ void Viewer::drawImage() {
     if (v) {
         std::string line = sceneOf(current_)->title + " · " + v->detector + "   " + backend_ + "   ";
         char buf[160];
-        if (!current || snap_.state == "loading")
-            std::snprintf(buf, sizeof buf, "loading…");
-        else
+        if (!current || snap_.state == "loading") {
+            double waited = since(requestStart_);
+            std::snprintf(buf, sizeof buf, "loading… %s (%.0f s)", current ? snap_.phase.c_str() : "", waited);
+            // A GPU driver compiles the kernels the first time it sees them (after an update too),
+            // alone on one core: minutes on an integrated GPU, with nothing else to show for it.
+            if (current && waited > 5 && snap_.phase.rfind("preparing the gpu", 0) == 0)
+                line += std::string(buf) + " — the GPU driver is compiling the kernels (first run after a "
+                        "driver update; minutes on an integrated GPU, cached afterwards)";
+            else
+                line += buf;
+            buf[0] = 0;
+        } else
             std::snprintf(buf, sizeof buf, "%lld spp · %.1f s%s", snap_.spp, snap_.seconds,
                           snap_.state == "paused" ? " · paused" : snap_.state == "converged" ? " · done" : "");
         line += buf;
         if (!exploring_ && v->kind == "sensor") line += "   irradiance readout";
-        if (exploring_) line += motionPending_ ? "   moving (preview)" : "   exploring";
+        if (exploring_) {
+            line += motionPending_ ? "   moving (preview)" : "   exploring";
+            char fov[48];
+            std::snprintf(fov, sizeof fov, " · fov %.3g°", degrees(camera_.fov));
+            line += fov;
+        }
+        char ev[64];
+        std::snprintf(ev, sizeof ev, "   %s %+.1f EV%s", exposureModeName(exposure_.mode()), exposure_.resolvedEV(),
+                      exposure_.adapting() ? " (adapting)" : "");
+        line += ev;
         if (flight_ || lookHeld_) line += "   WASD move | Q/E down/up | Esc release";
         if (tour_) line += "   tour";
         ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -1302,9 +1445,10 @@ void Viewer::handleKeys() {
         viewStart_ = Clock::now();
     }
     if (ImGui::IsKeyPressed(ImGuiKey_H, false)) showPanel_ = !showPanel_;
-    if (ImGui::IsKeyPressed(ImGuiKey_A, false)) setAutoExposure(!autoExposure_);
-    if (ImGui::IsKeyPressed(ImGuiKey_Equal) || ImGui::IsKeyPressed(ImGuiKey_KeypadAdd)) { exposure_ += 0.5f; displayDirty_ = true; }
-    if (ImGui::IsKeyPressed(ImGuiKey_Minus) || ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract)) { exposure_ -= 0.5f; displayDirty_ = true; }
+    if (ImGui::IsKeyPressed(ImGuiKey_A, false)) setExposureMode(ExposureMode((int(exposure_.mode()) + 1) % 3));
+    if (ImGui::IsKeyPressed(ImGuiKey_L, false)) exposure_.remeter();
+    if (ImGui::IsKeyPressed(ImGuiKey_Equal) || ImGui::IsKeyPressed(ImGuiKey_KeypadAdd)) addExposure(0.5);
+    if (ImGui::IsKeyPressed(ImGuiKey_Minus) || ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract)) addExposure(-0.5);
     if (ImGui::IsKeyPressed(ImGuiKey_Q, false)) quit_ = true;
 }
 
@@ -1423,7 +1567,7 @@ int Viewer::run() {
         }
         drawImage();
         if (motionPending_ && since(lastMotion_) > 0.25) {
-            worker_.navigate(camera_, false);
+            worker_.navigate(camera_, false, accommodate_);
             motionPending_ = false;
         }
         ImGui::End();

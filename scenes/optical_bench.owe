@@ -38,8 +38,10 @@ body Rail   { type = box  size = (30, 520, 8)  position = (0, 200, -40)  materia
 observer Eye { position = (260, -120, 160)  look_at = (0, 200, -10)  fov = 42deg  pupil = 3  focus = 380
                resolution = (480, 320) }
 
-# See the actual diffusely reflected projection from the lens-facing side of the screen.
+# See the actual diffusely reflected projection from the lens-facing side of the screen. The
+# projected F is what this view measures, so it keeps a fixed exposure that shows it unsaturated
+# (a meter would expose for the dim screen around it).
 observer ScreenView { position = (55, 300, 30)  look_at = (0, 403.8, 0)  fov = 28deg  pupil = 0
-                      resolution = (480, 320) }
+                      resolution = (480, 320)  exposure = -2.7 }
 
 render { detector = ScreenView  spp = 400  integrator = path }

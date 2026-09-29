@@ -176,7 +176,8 @@ PixelProbe probePixel(const Scene& scene, int di, int px, int py, int samples, u
         double weight;
         PathRecord rec;
         Draw2 jitter(rng);
-        if (!det.generate(px + jitter.u1, py + jitter.u2, rng, ray, weight) || weight <= 0) continue;
+        Vec2 f = det.filterOffset(rng);
+        if (!det.generate(px + jitter.u1 + f.x, py + jitter.u2 + f.y, rng, ray, weight) || weight <= 0) continue;
         tr.radiance(ray, det.region, wl, rng, st, &rec);
         size_t index = pr.records.size();
         for (const auto& c : rec.c) {

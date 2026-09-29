@@ -46,6 +46,8 @@ std::string renderMetadataJSON(const Scene& scene, const Renderer& r, const Rend
        << jsonEscape(r.detector().describe()) << "\", \"quantity\": \""
        << (r.detector().quantity() == Detector::Quantity::Radiance ? "radiance [W m^-2 sr^-1] as CIE XYZ"
                                                                     : "irradiance [W m^-2] as CIE XYZ")
+       << "\", \"pixel_response\": \"square"
+       << (r.detector().pixelSigma > 0 ? " * gaussian(sigma " + std::to_string(r.detector().pixelSigma) + " px)" : "")
        << "\"},\n";
     if (auto* eye = dynamic_cast<const IdealObserver*>(&r.detector())) {
         os << std::setprecision(17);
@@ -56,7 +58,11 @@ std::string renderMetadataJSON(const Scene& scene, const Renderer& r, const Rend
         os << ", \"fov_deg\": " << degrees(eye->fovY) << ", \"pupil_radius_m\": " << eye->pupilRadius;
         os << ", \"focus_distance_m\": ";
         if (std::isfinite(eye->focusDistance)) os << eye->focusDistance; else os << "null";
-        os << ", \"width\": " << eye->width << ", \"height\": " << eye->height << "},\n";
+        os << ", \"width\": " << eye->width << ", \"height\": " << eye->height;
+        if (eye->guide.radius > 0)  // a sampling choice (variance only), recorded for exact reproduction
+            os << ", \"pupil_guide\": {\"instrument\": \"" << jsonEscape(eye->guide.instrument)
+               << "\", \"radius_m\": " << eye->guide.radius << ", \"share\": " << eye->guide.share << "}";
+        os << "},\n";
         os << std::setprecision(6);
     }
     os << "  \"integrator\": \"" << s.integrator << "\",\n";
@@ -65,6 +71,19 @@ std::string renderMetadataJSON(const Scene& scene, const Renderer& r, const Rend
        << LambdaMax << "] nm\", \"fresnel\": \"stochastic branch selection\", \"nee\": true, \"mis\": \"power heuristic\","
        << " \"russian_roulette_depth\": " << s.rrDepth << ", \"fresnel_floor\": " << s.fresnelFloor
        << (s.integrator == "hybrid" ? ", \"partition\": \"light tracing owns eye-D-S+-light paths, path tracing all others\"" : "")
+       << (s.integrator == "sppm" ? ", \"photons\": {\"radius_pixels\": " + std::to_string(s.photonRadius) +
+                                        ", \"alpha\": " + std::to_string(s.photonAlpha) +
+                                        ", \"per_pixel_and_iteration\": " + std::to_string(s.photonsPerPixel) +
+                                        ", \"wavelengths\": \"shared by every path and photon of an iteration\"}"
+                                  : std::string())
+       << (s.integrator == "bdpt" || s.integrator == "vcm"
+               ? std::string(", \"bidirectional\": {\"light_vertex_cache\": true, \"connections_per_vertex\": 1, "
+                             "\"mis\": \"balance heuristic over all strategies\"") +
+                     (s.integrator == "vcm" ? ", \"merging\": {\"radius_pixels\": " + std::to_string(s.photonRadius) +
+                                                  ", \"alpha\": " + std::to_string(s.photonAlpha) + "}"
+                                            : std::string()) +
+                     "}"
+               : std::string())
        << "},\n";
     os << "  \"seed\": " << s.seed << ",\n";
     os << "  \"samples_per_pixel\": " << r.samplesPerPixel() << ",\n";
@@ -72,7 +91,7 @@ std::string renderMetadataJSON(const Scene& scene, const Renderer& r, const Rend
     os << "  \"max_depth\": " << s.maxDepth << ",\n";
     os << "  \"display\": {\"exposure_ev\": " << s.exposure << ", \"auto_exposure\": " << (s.autoExposure ? "true" : "false")
        << ", \"auto_gain_ev\": " << (s.autoExposure ? autoExposureEV(img) : 0)
-       << ", \"white_balance_kelvin\": " << s.whiteBalance << "},\n";
+       << ", \"white_balance_kelvin\": " << s.whiteBalance << ", \"tone\": \"" << s.tone << "\"},\n";
     os << "  \"render_seconds\": " << r.seconds() << ",\n";
     os << "  \"statistics\": {\"paths\": " << r.stats().paths << ", \"segments\": " << r.stats().segments
        << ", \"region_inconsistencies\": " << r.stats().inconsistencies << ", \"leaks\": " << r.stats().leaks;

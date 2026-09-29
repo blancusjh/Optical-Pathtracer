@@ -36,5 +36,9 @@ struct ComparisonReport {
 // (seeds differ between the two), in blocks of blockSize × blockSize pixels.
 ComparisonReport compareRenderers(const Scene& scene, int detectorIndex, const RenderSettings& a,
                                   const RenderSettings& b, int sppPerRun, int runs, int blockSize);
+// The same test between two detectors of one scene (same resolution): e.g. a freely placed eye
+// against a saved observer at the same pose, which must measure the same image.
+ComparisonReport compareMeasurements(const Scene& scene, int detectorA, const RenderSettings& a, int detectorB,
+                                     const RenderSettings& b, int sppPerRun, int runs, int blockSize);
 
 }  // namespace owe

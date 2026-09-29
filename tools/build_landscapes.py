@@ -100,7 +100,9 @@ class Landscape:
             filename=self.scene+'_'+name+'.obj';mesh.write(OUT/filename)
             # Separate flat ground from its index-matched reference boundary;
             # coincident transmissive/opaque hits could skip the visible sheet.
-            lines.append(f'body Landscape_{name} {{ type = mesh file = "../models/landscapes/{filename}" material = {self.materials[name]} position = (0, 0, 0.0005) }}')
+            # Terrain, rock and plants are curved surfaces: smooth shading normals (edges sharper
+            # than the default 30° crease, such as rock fractures, stay sharp).
+            lines.append(f'body Landscape_{name} {{ type = mesh file = "../models/landscapes/{filename}" material = {self.materials[name]} normals = smooth position = (0, 0, 0.0005) }}')
             print(f'{self.scene}/{name}: {len(mesh.faces):,} triangles',flush=True)
         lines.append('# END LANDSCAPE MODELS')
         path=ROOT/'scenes'/(self.scene+'.owe');source=path.read_text()

@@ -24,7 +24,7 @@ public:
         return ok_;
     }
     std::vector<DeviceInfo> devices() const override { return gpu::devices(); }
-    std::vector<std::string> integrators() const override { return {"path", "light", "hybrid"}; }
+    std::vector<std::string> integrators() const override { return {"path", "light", "hybrid", "sppm", "bdpt", "vcm"}; }
     std::unique_ptr<Renderer> createRenderer(const Scene& scene, int detectorIndex,
                                              const RenderSettings& settings) const override {
         std::string why;
