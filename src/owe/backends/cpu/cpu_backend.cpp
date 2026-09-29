@@ -117,7 +117,8 @@ void CpuRenderer::passPath(int spp) {
                         Ray ray;
                         double weight;
                         double px = x + rng.uniform(), py = y + rng.uniform();
-                        if (!det_->generate(px, py, rng, ray, weight) || weight <= 0) continue;
+                        Vec2 f = det_->filterOffset(rng);
+                        if (!det_->generate(px + f.x, py + f.y, rng, ray, weight) || weight <= 0) continue;
                         Spec4 L = tracer_.radiance(ray, det_->region, wl, rng, stats[tid]);
                         if (L.isZero()) continue;
                         XYZ c = wl.toXYZ(L * weight);

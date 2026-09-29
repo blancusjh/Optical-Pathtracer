@@ -2,6 +2,15 @@
 #pragma once
 #include "world.slang"
 
+// A displacement (pixels) drawn from the pixel response's Gaussian (Detector::filterOffset).
+float2 filterOffset(inout Rng rng) {
+    const float sigma = asfloat(globals().target.z);
+    if (!(sigma > 0)) return 0;
+    float u2 = rng.uniform();  // Draw2 order: last argument first
+    float u1 = rng.uniform();
+    return sampleStandardNormal2(u1, u2) * sigma;
+}
+
 // Returns false for a zero-valued sample. weight is the importance-to-pdf ratio.
 bool generateRay(float px, float py, inout Rng rng, out float3 o, out float3 d, out float weight) {
     GGlobals G = globals();
@@ -17,11 +26,30 @@ bool generateRay(float px, float py, inout Rng rng, out float3 o, out float3 d, 
         float3 dirPinhole = normalize(right * sx + up * sy + fwd);
         float3 q = 0;
         float pupil = G.lens.z, focus = G.lens.w;
+        weight = 1;
         if (pupil > 0) {
+            // IdealObserver::generate: pupil samples guided to a telescope's exit pupil.
+            const float gr = G.guide.w, share = asfloat(G.target.w);
+            float3 c = 0;
+            bool guided = false;
+            if (gr > 0) {
+                float dn = dot(dirPinhole, fwd);
+                c = G.guide.xyz - dirPinhole * (dot(G.guide.xyz, fwd) / dn);
+                guided = dn > 0 && dot(c, c) < (pupil + gr) * (pupil + gr);
+            }
+            const bool fromGuide = guided && rng.uniform() < share;
             float u2 = rng.uniform();
             float u1 = rng.uniform();
             float2 dk = sampleUniformDiskConcentric(u1, u2);
-            q = (right * dk.x + up * dk.y) * pupil;
+            q = fromGuide ? c + (right * dk.x + up * dk.y) * gr : (right * dk.x + up * dk.y) * pupil;
+            if (guided) {
+                if (fromGuide && dot(q, q) > pupil * pupil) return false;
+                float pEye = 1 / (kPi * pupil * pupil);
+                float3 e = q - c;
+                bool inGuide = fromGuide || dot(e, e) <= gr * gr;
+                float pGuide = inGuide ? 1 / (kPi * gr * gr) : 0;
+                weight = pEye / ((1 - share) * pEye + share * pGuide);
+            }
         }
         float3 dir = dirPinhole;
         if (pupil > 0 && focus > 0) {
@@ -30,10 +58,10 @@ bool generateRay(float px, float py, inout Rng rng, out float3 o, out float3 d, 
         }
         o = q;
         d = dir;
-        weight = 1;
         return true;
     }
-    // Surface sensor centred at the origin.
+    // Surface sensor centred at the origin. A filtered sample displaced beyond it measures nothing.
+    if (!(px >= 0 && py >= 0 && px < W && py < H)) return false;
     if (G.det.y != 0) px = W - px;
     if (G.det.z != 0) py = H - py;
     float3 pl = float3((2 * px / W - 1) * G.sensorSize.x, (1 - 2 * py / H) * G.sensorSize.y, 0);

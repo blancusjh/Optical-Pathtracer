@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <unistd.h>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -17,8 +18,10 @@
 #include "owe/backends/registry.hpp"
 #include "owe/core/version.hpp"
 #include "owe/loader/scene_loader.hpp"
+#include "owe/render/exposure.hpp"
 #include "owe/render/output.hpp"
 #include "owe/render/record.hpp"
+#include "navigation.hpp"
 #include "viewer.hpp"
 
 using namespace owe;
@@ -48,7 +51,8 @@ const std::map<std::string, int> kArity = {
     {"--lambda", 1},   {"--plane", 1},   {"--origin", 1},   {"--fields", 1},   {"--resolution", 1}, {"--field", 1},
     {"--bounds", 1},   {"--title", 1},      {"--fresnel-floor", 1}, {"--set", 1}, {"--white-balance", 1},
     {"--repeat", 1}, {"--backend", 1}, {"--device", 1}, {"--runs", 1}, {"--block", 1},
-    {"--view", 1}, {"--scale", 1}, {"--tour-seconds", 1}, {"--screenshot", 1}, {"--after", 1}, {"--reference", 1}};
+    {"--view", 1}, {"--scale", 1}, {"--yaw", 1}, {"--pitch", 1}, {"--frames", 1}, {"--fps", 1},
+    {"--photon-radius", 1}, {"--photon-alpha", 1}, {"--photons", 1}, {"--candidate-integrator", 1}, {"--wavelength-groups", 1}, {"--tour-seconds", 1}, {"--screenshot", 1}, {"--after", 1}, {"--reference", 1}, {"--tone", 1}};
 
 Args parse(int argc, char** argv, int start) {
     Args a;
@@ -123,6 +127,14 @@ void applyBackend(RenderSettings& rs, const Args& a) {
     if (!note.empty()) std::fprintf(stderr, "note: %s\n", note.c_str());
 }
 
+// --photon-radius R (pixel footprints), --photon-alpha A, --photons P (per pixel and iteration): SPPM.
+void applyPhotonOptions(RenderSettings& rs, const Args& a) {
+    if (a.has("--photon-radius")) rs.photonRadius = std::stod(a.get("--photon-radius"));
+    if (a.has("--photon-alpha")) rs.photonAlpha = std::stod(a.get("--photon-alpha"));
+    if (a.has("--photons")) rs.photonsPerPixel = std::stod(a.get("--photons"));
+    if (a.has("--wavelength-groups")) rs.photonWavelengthGroups = rs.vcmWavelengthGroups = std::stoi(a.get("--wavelength-groups"));
+}
+
 std::string backendNames() {
     std::string names;
     for (const Backend* b : backends()) names += (names.empty() ? "" : "|") + b->name();
@@ -141,17 +153,26 @@ void usage() {
     std::printf(
         "owe " OWE_VERSION " — Optical World Engine\n"
         "\n"
-        "  owe render <scene.owe> [--detector NAME] [--spp N] [--passes K] [--integrator path|light]\n"
+        "  owe render <scene.owe> [--detector NAME] [--spp N] [--passes K] [--integrator path|light|hybrid|sppm|bdpt|vcm]\n"
         "                         [--seed S] [--threads T] [--max-depth D] [--resolution WxH]\n"
         "                         [--out PREFIX] [--exposure EV] [--no-auto-exposure] [--fresnel-floor P]\n"
-        "                         [--white-balance KELVIN] [--backend %s] [--device N]\n"
+        "                         [--white-balance KELVIN] [--tone agx|standard] [--backend %s] [--device N]\n"
+        "                         [--photon-radius PIXELS] [--photon-alpha A] [--photons PER_PIXEL]\n"
         "      Progressive spectral render. Writes PREFIX.png (display), PREFIX.pfm (raw linear) and\n"
-        "      PREFIX.json (reproducibility record) after every pass.\n"
+        "      PREFIX.json (reproducibility record) after every pass. sppm (stochastic progressive photon\n"
+        "      mapping; spp = iterations) forms caustics also where they are seen through glass or mirrors;\n"
+        "      bdpt and vcm (bidirectional; vcm also merges, as photon mapping) combine every strategy by MIS\n"
+        "      (GPU; vcm is the robust choice for glossy surfaces with caustics).\n"
+        "      --tone chooses the display's view transform: agx (filmic; bright colours go to white over\n"
+        "      16.5 stops) or standard (linear to white, short roll-off). The PFM is never tone mapped.\n"
         "\n"
         "  --backend chooses where the transport runs (render, studio, bench, view, compare):\n"
         "      cpu  the reference: IEEE-754 double on host threads (default)\n"
         "      gpu  portable Vulkan compute (NVIDIA, AMD, Intel; Apple silicon via MoltenVK), float32\n"
         "      Both implement every integrator; the measurement is the same.\n"
+        "\n"
+        "  owe display <image.pfm> [--out PREFIX] [--exposure EV] [--no-auto-exposure] [--tone agx|standard]\n"
+        "      The display PNG of a raw render again (its record's exposure unless overridden).\n"
         "\n"
         "  owe probe <scene.owe> --pixel X Y [--detector NAME] [--samples N] [--svg F] [--json F] [--plane uv]\n"
         "      Why is this pixel this colour? Ranks transport classes and shows representative paths.\n"
@@ -173,6 +194,8 @@ void usage() {
         "           [--screenshot FILE.png|DIRECTORY/] [--after SECONDS]\n"
         "      Interactive window: browse scenes and detectors, watch progressive rendering.\n"
         "      Arrow keys switch scenes/views; G changes backend; Space pauses; T tours; S saves; Q quits.\n"
+        "      A cycles the exposure (manual, locked: metered once per view, adaptive: gradual);\n"
+        "      L meters again; + and - change the exposure.\n"
         "      Middle drag orbits; Shift+middle pans; wheel dollies; right mouse + WASD flies.\n"
         "      Shift+F toggles flight; Esc releases the mouse; Home restores the saved view.\n"
         "\n"
@@ -185,9 +208,15 @@ void usage() {
         "      image, so a change that alters any result bit shows up. Default: the canonical suite.\n"
         "\n"
         "  owe compare <scene.owe>[:DETECTOR] [--backend NAME] [--reference NAME] [--integrator path|light|hybrid]\n"
+        "                                     [--candidate-integrator NAME]\n"
         "                                     [--spp N] [--runs K] [--resolution WxH] [--block B] [--device N]\n"
         "      Statistical test of a backend (default: gpu) against the reference (cpu): K independent renders\n"
         "      per backend, block means of X, Y, Z compared with their standard errors (exit 3 if inconsistent).\n"
+        "\n"
+        "  owe pan <scene.owe> [--detector NAME] [--yaw DEG] [--pitch DEG] [--frames N] [--spp N] [--fps F]\n"
+        "                      [--scale S] [--backend NAME] [--out CSV]\n"
+        "      The free eye turns through a sweep, one render per frame; prints each frame's metered\n"
+        "      exposure against UI time (the viewer's display behaviour, measured).\n"
         "\n"
         "  owe backends [NAME]  The backends in this build, their devices and integrators (exit 1 if NAME\n"
         "                       is unavailable here).\n"
@@ -226,6 +255,9 @@ int cmdRender(const Args& a) {
     if (a.has("--fresnel-floor")) rs.fresnelFloor = std::stod(a.get("--fresnel-floor"));
     if (a.has("--white-balance")) rs.whiteBalance = std::stod(a.get("--white-balance"));
     if (a.has("--no-auto-exposure")) rs.autoExposure = false;
+    if (a.has("--tone")) rs.tone = a.get("--tone");
+    const Tone tone = toneFromName(rs.tone);
+    applyPhotonOptions(rs, a);
     applyBackend(rs, a);
     applyResolution(scene, di, a);
     int passes = std::max(1, std::stoi(a.get("--passes", "1")));
@@ -242,7 +274,7 @@ int cmdRender(const Args& a) {
         if (spp <= 0) continue;
         R.runPass(spp);
         Image img = R.resolve();
-        writePNG(out + ".png", img, rs.exposure, rs.autoExposure, rs.whiteBalance);
+        writePNG(out + ".png", img, rs.exposure, rs.autoExposure, rs.whiteBalance, tone);
         writePFM(out + ".pfm", img);
         std::ofstream(out + ".json") << renderMetadataJSON(scene, R, rs);
         std::fprintf(stderr, "pass %d/%d: %lld spp, %.2f s, mean Y %.5g\n", p + 1, passes, R.samplesPerPixel(),
@@ -252,7 +284,7 @@ int cmdRender(const Args& a) {
     std::fprintf(stderr, "paths %llu, segments %llu, region inconsistencies %llu, leaks %llu\n",
                  (unsigned long long)st.paths, (unsigned long long)st.segments, (unsigned long long)st.inconsistencies,
                  (unsigned long long)st.leaks);
-    if (st.inconsistencies && st.first.boundary != kNone) {  // the GPU backend counts but does not record them
+    if (st.inconsistencies && st.first.boundary != kNone) {
         const auto& f = st.first;
         std::fprintf(stderr,
                      "first inconsistency: ray in %s, last at %s, met %s (whose side there is %s) at (%.9g, %.9g, %.9g)\n",
@@ -465,6 +497,9 @@ int cmdCompare(const Args& a) {
     reference.integrator = a.get("--integrator", "path");
     if (a.has("--threads")) reference.threads = std::stoi(a.get("--threads"));
     RenderSettings candidate = reference;
+    // Another estimator of the same measurement on the candidate backend (e.g. sppm against hybrid).
+    candidate.integrator = a.get("--candidate-integrator", reference.integrator);
+    applyPhotonOptions(candidate, a);
     std::string other;  // default: the first backend besides the reference
     for (const Backend* b : backends())
         if (b != &backend(reference.backend) && other.empty()) other = b->name();
@@ -497,8 +532,8 @@ int cmdBench(const Args& a) {
         cases.push_back(c == std::string::npos ? Case{p, ""} : Case{p.substr(0, c), p.substr(c + 1)});
     }
     if (cases.empty())
-        cases = {{"scenes/the_lens.owe", "Eye"},          {"scenes/the_prism.owe", "Eye"},
-                 {"scenes/glass_of_water.owe", "Eye"},    {"scenes/the_statue.owe", "Magnifier"},
+        cases = {{"scenes/the_lens.owe", "Eye"},          {"scenes/prism_in_sunlight.owe", "Eye"},
+                 {"scenes/glass/glass_of_water.owe", "Eye"}, {"scenes/the_study.owe", "Magnifier"},
                  {"scenes/the_telescope.owe", "Eyepiece"}, {"scenes/the_temple.owe", "Wide"},
                  {"scenes/the_temple.owe", "Cam"},        {"scenes/the_observatory.owe", "SaturnEyepiece"},
                  {"scenes/camera_obscura.owe", "Inside"}};
@@ -527,6 +562,7 @@ int cmdBench(const Args& a) {
         rs.integrator = a.get("--integrator", "path");
         if (a.has("--seed")) rs.seed = std::stoull(a.get("--seed"));
         if (a.has("--threads")) rs.threads = std::stoi(a.get("--threads"));
+        applyPhotonOptions(rs, a);
         applyBackend(rs, a);
         double best = Inf;
         Image img;
@@ -561,6 +597,108 @@ int cmdBench(const Args& a) {
     return 0;
 }
 
+// Exposure while the free eye pans: the viewer's free observer turns through a sweep, one render
+// per frame (as the viewer's preview while moving, or converged frames with more samples), and each
+// frame's meter reading and the exposure each display mode resolves (ExposureControl, as the viewer
+// uses it) are printed against UI time. This makes the display's time course a measurement: a jump
+// shows up as a step, and the adaptive mode's rate can be read off.
+// owe display <image.pfm> [--out PREFIX] [--exposure EV] [--no-auto-exposure] [--white-balance K]
+// [--tone agx|standard]: the display image of a raw render again, with the exposure and white
+// balance its record (image.json) gives unless overridden. The raw image is only read.
+int cmdDisplay(const Args& a) {
+    if (a.positional.empty()) throw std::runtime_error("display: missing PFM file");
+    const std::string in = a.positional[0];
+    Image img = readPFM(in);
+    std::string stem = in.size() > 4 && in.substr(in.size() - 4) == ".pfm" ? in.substr(0, in.size() - 4) : in;
+    double exposure = 0, whiteBalance = 0;
+    bool autoExp = true;
+    std::string tone = "agx";
+    if (std::ifstream rec{stem + ".json"}) {  // the render's own display settings
+        std::stringstream ss;
+        ss << rec.rdbuf();
+        const std::string j = ss.str();
+        auto number = [&](const char* key, double& v) {
+            auto p = j.find(std::string("\"") + key + "\": ");
+            if (p != std::string::npos) v = std::stod(j.substr(p + std::strlen(key) + 4));
+        };
+        number("exposure_ev", exposure);
+        number("white_balance_kelvin", whiteBalance);
+        autoExp = j.find("\"auto_exposure\": true") != std::string::npos;
+        if (auto p = j.find("\"tone\": \""); p != std::string::npos) tone = j.substr(p + 9, j.find('"', p + 9) - p - 9);
+    }
+    if (a.has("--exposure")) { exposure = std::stod(a.get("--exposure")); autoExp = false; }
+    if (a.has("--no-auto-exposure")) autoExp = false;
+    if (a.has("--white-balance")) whiteBalance = std::stod(a.get("--white-balance"));
+    if (a.has("--tone")) tone = a.get("--tone");
+    const std::string out = a.get("--out", stem + "_" + tone);
+    writePNG(out + ".png", img, exposure, autoExp, whiteBalance, toneFromName(tone));
+    std::fprintf(stderr, "%s.png: %s, %+.2f EV%s\n", out.c_str(), tone.c_str(), exposure, autoExp ? " + auto" : "");
+    return 0;
+}
+
+int cmdPan(const Args& a) {
+    if (a.positional.empty()) throw std::runtime_error("pan: missing scene file");
+    Scene scene = loadSceneWithEdits(a.positional[0], a.all("--set"));
+    int di = detectorIndex(scene, a);
+    scene.useDetector(di);
+    RenderSettings rs = scene.settingsFor(di);
+    if (a.has("--integrator")) rs.integrator = a.get("--integrator");
+    if (a.has("--seed")) rs.seed = std::stoull(a.get("--seed"));
+    applyPhotonOptions(rs, a);
+    applyBackend(rs, a);
+    const double sweep = radians(std::stod(a.get("--yaw", "90")));
+    const double pitch = radians(std::stod(a.get("--pitch", "0")));
+    const int frames = std::max(2, std::stoi(a.get("--frames", "61")));
+    const int spp = std::max(1, std::stoi(a.get("--spp", "1")));
+    const double fps = std::stod(a.get("--fps", "15"));
+    const double scale = std::stod(a.get("--scale", "0.4"));
+    const Detector& base = *scene.detectors[size_t(di)];
+    NavigationCamera cam = NavigationCamera::from(base, &scene.world);
+    scene.detectors.push_back(std::make_unique<IdealObserver>());
+    const int ei = int(scene.detectors.size()) - 1;
+    auto& eye = static_cast<IdealObserver&>(*scene.detectors[size_t(ei)]);
+    eye.name = base.name + " (pan)";
+    eye.width = std::max(8, int(std::lround(base.width * scale)));
+    eye.height = std::max(8, int(std::lround(base.height * scale)));
+    cam.turn(-sweep / 2, pitch, false);
+    cam.apply(eye, scene.world);
+    scene.useDetector(ei);
+    std::unique_ptr<Renderer> R = makeRenderer(scene, ei, rs);
+    std::fprintf(stderr, "%s\n%s, %d frames at %.0f fps, %d spp per frame\n", R->backend().c_str(), eye.describe().c_str(),
+                 frames, fps, spp);
+    std::ostream* out = &std::cout;
+    std::ofstream file;
+    if (a.has("--out")) {
+        file.open(a.get("--out"));
+        out = &file;
+    }
+    *out << "frame,t_s,yaw_deg,mean_Y,p50_Y,p99_Y,max_Y,meter_ev,locked_ev,adaptive_ev\n";
+    ExposureControl locked(ExposureMode::Locked), adaptive(ExposureMode::Adaptive);
+    for (int f = 0; f < frames; ++f) {
+        if (f > 0) {
+            cam.turn(sweep / (frames - 1), 0, false);
+            cam.apply(eye, scene.world);
+            if (!R->resetObserver()) R = makeRenderer(scene, ei, rs);
+        }
+        R->runPass(spp);
+        Image img = R->resolve();
+        locked.update(&img, locked.lockSamples, 1 / fps);  // the view's first frame locks
+        adaptive.update(&img, f == 0 ? adaptive.lockSamples : spp, 1 / fps);
+        std::vector<double> Y;
+        Y.reserve(img.xyz.size() / 3);
+        for (size_t i = 1; i < img.xyz.size(); i += 3) Y.push_back(img.xyz[i]);
+        std::sort(Y.begin(), Y.end());
+        auto q = [&](double p) { return Y[size_t(p * double(Y.size() - 1))]; };
+        char row[256];
+        std::snprintf(row, sizeof row, "%d,%.4f,%.2f,%.6g,%.6g,%.6g,%.6g,%.3f,%.3f,%.3f\n", f, f / fps,
+                      degrees(-sweep / 2 + sweep * f / (frames - 1)), img.meanY(), q(0.5), q(0.99), Y.back(),
+                      autoExposureEV(img), locked.resolvedEV(), adaptive.resolvedEV());
+        *out << row;
+        out->flush();
+    }
+    return 0;
+}
+
 // Interactive session: edit the scene (aperture, focus, placement, anything), watch the
 // estimate refine pass by pass. Reads commands from stdin, so it can also be scripted.
 int cmdStudio(const Args& a) {
@@ -578,6 +716,7 @@ int cmdStudio(const Args& a) {
         height = std::stoi(r.substr(x + 1));
     }
     double exposure = 0, whiteBalance = 0;
+    Tone tone = Tone::AgX;
     bool autoExp = true, userExposure = false;  // set by the exposure command; cleared by detector
     std::string backendName = a.get("--backend");  // set by the backend command
     std::unique_ptr<Scene> scene;
@@ -601,6 +740,7 @@ int cmdStudio(const Args& a) {
         std::string note = adaptToBackend(rs);
         if (!note.empty()) std::printf("note: %s\n", note.c_str());
         whiteBalance = a.has("--white-balance") ? std::stod(a.get("--white-balance")) : rs.whiteBalance;
+        tone = toneFromName(a.has("--tone") ? a.get("--tone") : rs.tone);
         if (!userExposure) {
             exposure = a.has("--exposure") ? std::stod(a.get("--exposure")) : rs.exposure;
             autoExp = rs.autoExposure && !a.has("--no-auto-exposure");
@@ -686,7 +826,7 @@ int cmdStudio(const Args& a) {
                 autoExp = v == "auto";
                 if (!autoExp) exposure = std::stod(v);
                 userExposure = true;
-                writePNG(out + ".png", R->resolve(), exposure, autoExp, whiteBalance);
+                writePNG(out + ".png", R->resolve(), exposure, autoExp, whiteBalance, tone);
             } else if (cmd == "info") {
                 std::printf("%s\n", R->detector().describe().c_str());
                 if (scene->notes.count(detName)) std::printf("%s\n", scene->notes[detName].c_str());
@@ -699,7 +839,7 @@ int cmdStudio(const Args& a) {
                 for (int p = 0; p < passes; ++p) {
                     R->runPass(spp);
                     Image img = R->resolve();
-                    writePNG(out + ".png", img, exposure, autoExp, whiteBalance);
+                    writePNG(out + ".png", img, exposure, autoExp, whiteBalance, tone);
                     writePFM(out + ".pfm", img);
                     std::ofstream(out + ".json") << renderMetadataJSON(*scene, *R, R->settings());
                     std::printf("  %lld spp  %.1f s  mean Y %.5g  -> %s.png\n", R->samplesPerPixel(), R->seconds(), img.meanY(),
@@ -744,6 +884,8 @@ int main(int argc, char** argv) {
         if (cmd == "bench") return cmdBench(a);
         if (cmd == "backends") return cmdBackends(a);
         if (cmd == "compare") return cmdCompare(a);
+        if (cmd == "pan") return cmdPan(a);
+        if (cmd == "display") return cmdDisplay(a);
         if (cmd == "help" || cmd == "--help" || cmd == "-h") { usage(); return 0; }
         std::fprintf(stderr, "unknown command '%s'\n\n", cmd.c_str());
         usage();

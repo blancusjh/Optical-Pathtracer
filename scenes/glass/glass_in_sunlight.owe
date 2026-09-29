@@ -1,0 +1,40 @@
+# GLASS IN SUNLIGHT — a tumbler of water standing in a patch of window sunlight on a concrete
+# floor, seen from close above with the sun behind it. The glass's long shadow holds a bright cusped
+# caustic (the water and glass cylinder focusing the sun); inside the glass the wall reflects the
+# light into a cusped nephroid on its bottom, seen through the water. The patch's edges are soft
+# by the width of the sun's 0.53° disc at the window's distance. Vertex connection and merging
+# (VCM) forms the caustics, including those seen through the water and glass.
+# (After "Glass of water with sunlight reflection", Wikimedia Commons, 2021.)
+units = m
+
+world {
+    sky = uniform(rgb(1.0, 0.97, 0.92, luminance = 0.07))   # the dim room around the window light
+    sun { elevation = 38deg  azimuth = 8deg  luminance = 1.1e5 }
+}
+
+material concrete { type = diffuse  texture = noise(a = rgb(0.46, 0.45, 0.42), b = rgb(0.30, 0.29, 0.27), scale = 11mm)
+                    relief = noise(scale = 3mm, depth = 0.25mm, octaves = 3) }   # trowelled, with pores
+material wall     { type = diffuse  reflectance = rgb(0.30, 0.28, 0.26) }
+
+body Floor { type = sheet  size = (2.4, 2.4)  position = (0, 0, 0)  material = concrete }
+
+# The wall with the window, 0.6 m from the glass toward the sun: four panels around a 24 × 31 cm
+# opening. Its light falls on the floor from just behind the glass (y = +5 cm) to 35 cm in front of
+# it, and from 9 cm to its left to 15 cm to its right.
+body WallLeft   { type = sheet  size = (0.91, 2.0)   position = (-0.545, 0.6, 1.0)  axis = (0, -1, 0)  up = (0, 0, 1)  material = wall }
+body WallRight  { type = sheet  size = (0.85, 2.0)   position = (0.575, 0.6, 1.0)   axis = (0, -1, 0)  up = (0, 0, 1)  material = wall }
+body WallBelow  { type = sheet  size = (0.24, 0.43)  position = (0.03, 0.6, 0.215)  axis = (0, -1, 0)  up = (0, 0, 1)  material = wall }
+body WallAbove  { type = sheet  size = (0.24, 1.258) position = (0.03, 0.6, 1.371)  axis = (0, -1, 0)  up = (0, 0, 1)  material = wall }
+
+# A round-bellied soda-lime tumbler (N-BK7 stands in: n_d 1.517 against 1.52) with a heavy 16 mm base,
+# turned from its profile (rounded corners are exact torus patches), filled with water to 58 mm.
+body Glass { type = vessel
+             outer = [(0, 0), (32mm, 0, 12mm), (41mm, 38mm, 40mm), (39mm, 92mm)]
+             inner = [(0, 16mm), (28mm, 16mm, 10mm), (38mm, 40mm, 38mm), (36.5mm, 92mm)]
+             rim = round  glass = N-BK7  liquid = water  level = 58mm  position = (0, 0, 0.2mm) }   # 0.2 mm above the floor: wider than a float ray offset on a 2.4 m floor
+
+# Close above the glass and a little in front, as the photograph was taken (a phone's wide lens).
+observer Eye { position = (0.008, -0.17, 0.19)  look_at = (0.004, -0.02, 0.03)  up = (0, 0, 1)
+               fov = 62deg  pupil = 4mm  focus = 0.22  resolution = (720, 960) }
+
+render { detector = Eye  spp = 1024  integrator = vcm }

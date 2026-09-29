@@ -1,0 +1,13 @@
+# BENCHMARK physical_lens_free_observer — a loose f = 100 mm N-BK7 lens between a small lamp (30 mm
+# above the axis, 600 mm before the lens) and an ordinary eye 400 mm behind it, focused on the
+# aerial image: the lamp appears inverted, 6 mm below the axis at 120 mm behind the lens, with no
+# instrument mode (tests/test_navigation.cpp: free_eye_sees_a_loose_lens_form_an_inverted_image_…).
+# Measurement: Eye (radiance, 256×256, fixed exposure 0 EV); the centroid gives the image angle.
+units = mm
+body Lamp { type = sheet  size = (6, 6)  position = (0, 0, 30)  axis = (0, 1, 0)  up = (0, 0, 1)
+            material = black  emission = blackbody(4500K, 2000) }
+body Lens { type = lens  medium = N-BK7  focal = 100  form = bi  diameter = 40  thickness = 6  rim = black
+            position = (0, 600, 0)  axis = (0, 1, 0) }
+observer Eye { position = (0, 1000, 0)  look_at = (0, 600, 0)  up = (0, 0, 1)  fov = 16deg  pupil = 3  focus = 280
+               resolution = (256, 256)  exposure = 0 }
+render { detector = Eye  spp = 256  integrator = path }

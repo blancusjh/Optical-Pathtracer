@@ -1,0 +1,18 @@
+{
+  "engine": "optical-world-engine 0.1.0",
+  "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+  "scene": {"path": "scenes/prism_in_sunlight.owe", "fnv1a64": "5862374b87b05f10", "edits": []},
+  "detector": {"name": "Eye", "description": "ideal observer 'Eye' 960x640, fovY=62 deg, pupil diameter=4 mm, focus=0.370000 m, pixel filter gaussian(0.4)", "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ", "pixel_response": "square * gaussian(sigma 0.400000 px)"},
+  "observer_pose": {"position_m": [0.12, -0.26000000000000001, 0.20000000000000001], "look_at_m": [0.050000000000000003, 0.059999999999999998, 0], "up": [0, 0, 1], "fov_deg": 62, "pupil_radius_m": 0.002, "focus_distance_m": 0.37, "width": 960, "height": 640},
+  "integrator": "vcm",
+  "sampling": {"wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm", "fresnel": "stochastic branch selection", "nee": true, "mis": "power heuristic", "russian_roulette_depth": 6, "fresnel_floor": 0, "bidirectional": {"light_vertex_cache": true, "connections_per_vertex": 1, "mis": "balance heuristic over all strategies", "merging": {"radius_pixels": 2.000000, "alpha": 0.666667}}},
+  "seed": 1,
+  "samples_per_pixel": 1024,
+  "passes": 1,
+  "max_depth": 64,
+  "display": {"exposure_ev": 0, "auto_exposure": true, "auto_gain_ev": 4.0327, "white_balance_kelvin": 0, "tone": "agx"},
+  "render_seconds": 147.107,
+  "statistics": {"paths": 1258291200, "segments": 2863258242, "region_inconsistencies": 1970, "leaks": 818, "first_inconsistency": {"boundary": "CardA.face", "ray_region": "Prism.interior[N-SF11]"}},
+  "mean_Y": 0.00192941,
+  "world": {"media": [{"name": "air", "index": "ciddor-air", "n_d": 1.00028}, {"name": "N-SF11", "index": "sellmeier(B1=1.7376 C1=0.0131887, B2=0.313747 C2=0.0623068, B3=1.89878 C3=155.236) rel. air", "n_d": 1.78521}], "regions": 2, "boundaries": 4, "bodies": 4, "assemblies": 0}
+}

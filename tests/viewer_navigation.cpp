@@ -116,6 +116,26 @@ int main(int argc, char** argv) {
         fresh->runPass(1); fresh->runPass(1);
         require(walked.image.xyz == fresh->resolve().xyz,
                 "walking from the room differs from independent physical eye transport");
+
+        // An accommodating eye at the eyepiece focuses on Saturn's image, which the afocal
+        // telescope forms at infinity; Shift+click on the eyepiece does the same, not on the glass.
+        worker.navigate(camera, false, true);
+        auto relaxed = until(worker, [&](const Snapshot& s) { return s.exploring && s.accommodated && s.spp >= 2; });
+        require(!std::isfinite(relaxed.camera.focus), "an eye at the eyepiece must focus Saturn's image at infinity");
+        worker.focus(camera, 0.5, 0.5);
+        auto clicked = until(worker, [&](const Snapshot& s) { return s.focusVersion > relaxed.focusVersion && s.spp >= 2; });
+        require(!std::isfinite(clicked.camera.focus), "focusing on the eyepiece must focus through it, not on its glass");
+        camera.position = room.camera.position;
+        camera.forward = room.camera.forward;
+        camera.up = room.camera.up;
+        worker.navigate(camera, false, true);
+        auto wall = until(worker, [&](const Snapshot& s) {
+            return s.exploring && s.accommodated && s.spp >= 2 && length(s.camera.position - camera.position) < 1e-12;
+        });
+        SurfaceHit hit;
+        require(independent.world.intersect(Ray{camera.position, camera.forward}, Inf, hit) &&
+                    std::abs(wall.camera.focus - hit.t) < 1e-9 * hit.t,
+                "with nothing in between, the eye focuses on the surface it looks at");
         std::puts("Viewer navigation: preview, coalesced movement, refinement, reset and sensor preservation passed.");
         return 0;
     } catch (const std::exception& e) {

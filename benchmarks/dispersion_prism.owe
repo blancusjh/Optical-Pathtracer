@@ -1,0 +1,21 @@
+# BENCHMARK dispersion_prism — sunlight at 11° through a 12 mm slit onto an upright 60° N-SF11 prism
+# near minimum deviation; the spectrum lands on a white screen 0.35 m along the deviated beam.
+# Deviation per wavelength matches the two-face Snell trace to 1e-9 rad
+# (tests/test_references.cpp: reference_prism_deviates_each_wavelength_as_snell_predicts).
+# Physical parameters: sun 11°, azimuth 270° (light along +x), 1.2e5; N-SF11; screen ρ = 0.85.
+# Measurement: Eye (radiance, 640×400, fixed exposure −6 EV). Reference: sppm 16384 iterations.
+units = m
+world { sun { elevation = 11deg  azimuth = 270deg  luminance = 1.2e5 } }
+material dark   { type = diffuse  reflectance = 0.06 }
+material screen { type = diffuse  reflectance = 0.85 }
+material card   { type = diffuse  reflectance = 0.03 }
+body Floor  { type = sheet  size = (2.0, 2.0)  position = (0.2, 0, 0)  material = dark }
+body CardA  { type = sheet  size = (1.0, 0.30)  position = (-0.25,  0.506, 0.15)  axis = (-1, 0, 0)  up = (0, 0, 1)  material = card }
+body CardB  { type = sheet  size = (1.0, 0.30)  position = (-0.25, -0.506, 0.15)  axis = (-1, 0, 0)  up = (0, 0, 1)  material = card }
+body Prism  { type = prism  apex = 60deg  side = 50mm  length = 80mm  medium = N-SF11
+              position = (0, 0, 0.0402)  rotate = (0, 0, -33.2deg) }
+body Screen { type = sheet  size = (0.30, 0.16)  position = (0.14, 0.32, 0.08)  axis = (-0.40, -0.92, 0)  up = (0, 0, 1)
+              material = screen }
+observer Eye { position = (0.05, -0.20, 0.28)  look_at = (0.10, 0.22, 0.05)  fov = 50deg  pupil = 3mm  focus = 0.5
+               resolution = (640, 400)  exposure = -6 }
+render { detector = Eye  spp = 1024  integrator = sppm }

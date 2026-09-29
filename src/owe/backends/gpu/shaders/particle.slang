@@ -83,8 +83,9 @@ bool connectObserver(float3 x, inout Rng rng, out float3 q, out int px, out int 
         sy = dot(om, up) / c;
     }
     const float W = float(G.limits.z), H = float(G.limits.w);
-    float fx = (sx / G.lens.x + 1) * 0.5 * W;
-    float fy = (1 - sy / G.lens.y) * 0.5 * H;
+    float2 f = filterOffset(rng);  // a direction just outside the field still reaches the border pixels
+    float fx = (sx / G.lens.x + 1) * 0.5 * W + f.x;
+    float fy = (1 - sy / G.lens.y) * 0.5 * H + f.y;
     if (!(fx >= 0 && fy >= 0 && fx < W && fy < H)) return false;
     px = min(int(fx), int(W) - 1);
     py = min(int(fy), int(H) - 1);
@@ -94,13 +95,16 @@ bool connectObserver(float3 x, inout Rng rng, out float3 q, out int px, out int 
 }
 
 // SurfaceSensor::pixelOfHit on the sensor's own boundary (local coordinates).
-bool sensorPixel(float3 pLocal, out int px, out int py, out float pixelArea) {
+bool sensorPixel(float3 pLocal, inout Rng rng, out int px, out int py, out float pixelArea) {
     GGlobals G = globals();
     const float W = float(G.limits.z), H = float(G.limits.w);
     float fx = (pLocal.x / G.sensorSize.x + 1) * 0.5 * W;
     float fy = (1 - pLocal.y / G.sensorSize.y) * 0.5 * H;
     if (G.det.y != 0) fx = W - fx;
     if (G.det.z != 0) fy = H - fy;
+    float2 f = filterOffset(rng);
+    fx += f.x;
+    fy += f.y;
     px = py = 0;
     pixelArea = (2 * G.sensorSize.x / W) * (2 * G.sensorSize.y / H);
     if (!(fx >= 0 && fy >= 0 && fx < W && fy < H)) return false;
@@ -133,7 +137,7 @@ void connectVertex(SurfaceHit hit, bool surface, HitInterface base, float3 d, fl
             f[i] = evalScatter(i == 0 ? base.it : atWavelength(base, wl.lambda[i]), d, wc, kModeImportance, pdfDummy);
         }
         if (isZero(f)) return;
-        cosX = abs(dot(wc, hit.n));
+        cosX = scatterCosine(base.it, -d, wc, kModeImportance);
         startRegion = dot(wc, hit.n) > 0 ? base.front : base.back;
         origin = offsetOrigin(hit.p, hit.n, wc, hit.scale);
     }
@@ -143,38 +147,87 @@ void connectVertex(SurfaceHit hit, bool surface, HitInterface base, float3 d, fl
     deposit(px, py, beta * f * Tr * (cosX * factor), wl);
 }
 
-// Emits one particle (four wavelengths; secondaries may be terminated at dispersive interfaces) and
-// splats its contributions. stats: paths, segments, region inconsistencies, leaks.
-void traceParticle(inout Wavelengths wl, inout Rng rng, inout uint4 stats) {
-    GGlobals G = globals();
-    const bool partition = (pc.flags & kFlagPartition) != 0;
-    const bool observer = G.counts.w == 0;
-    const int maxDepth = G.limits.x, rrDepth = G.limits.y;
-    const uint ambient = G.counts.z;
-    const float pSky = G.emit.x;
-    stats.x++;
-
+// A particle leaving an emitter: its first ray, region and throughput (flux per particle).
+struct Emitted {
     float3 o, d;
     uint region;
     float4 beta;
-    float scale = 0;
-    uint emitter = kGpuNone;
+    float scale;
+    uint guideCell;  // photon guiding: the emission cell of a sun photon from the uniform share, else kGpuNone
+    bool distant;    // from the sun or sky: its origin is on a disc beyond the world
+};
+
+// A ray from the disc beyond the world (sun and sky particles) meets it with the float error of its
+// far origin, microns along the ray at tens of metres: enough to start the next segment under the
+// surface it scatters from. The hit is found again from just before it, where float is precise.
+void refineDistantHit(float3 d, inout SurfaceHit hit) {
+    const float back = 1e-5 * (1 + maxAbsComponent(hit.p));
+    SurfaceHit h;
+    if (intersectWorld(hit.p - d * back, d, 4 * back, h)) hit = h;
+}
+
+#ifdef OWE_PHOTON_GUIDE
+// Photon guiding (SPPM): a map over the sun's emission disc (kGuideRes² cells over its bounding
+// square) counts where photons from the uniform share turned out useful, i.e. reached a visible
+// point. A share kGuideShare of sun photons is then drawn from the map, the rest uniformly over the
+// disc; every photon is weighted by the mixture density, so the estimate is unchanged (the uniform
+// share keeps full support) and only its noise falls. It learns indirect geometry too: a lens far
+// from the caustic it forms, a window a room is lit through.
+// Layout of g_guide: counts [0, N), normalised CDF [N, 2N) (float bits), total [2N] (float bits).
+[[vk::binding(22, 0)]] RWStructuredBuffer<uint> g_guide;
+static const uint kGuideRes = 128, kGuideCells = kGuideRes * kGuideRes;
+static const float kGuideShare = 0.75;
+float guideTotal() { return asfloat(g_guide[2 * kGuideCells]); }
+uint guideSample(float u) {  // first cell whose CDF exceeds u
+    uint lo = 0, len = kGuideCells;
+    while (len > 0) {
+        uint half = len / 2;
+        if (asfloat(g_guide[kGuideCells + lo + half]) <= u) { lo += half + 1; len -= half + 1; }
+        else len = half;
+    }
+    return min(lo, kGuideCells - 1);
+}
+float guideCellProbability(uint c) {
+    float hi = asfloat(g_guide[kGuideCells + c]), lo = c > 0 ? asfloat(g_guide[kGuideCells + c - 1]) : 0.0;
+    return hi - lo;
+}
+#endif
+
+// Samples an emission: a light (area emitter, sun) or the sky, by power. With connectToObserver, an
+// area emitter's own point is also connected to a virtual observer (the emitter seen directly), in
+// the random-number order of Tracer::traceParticle. False when nothing is emitted.
+bool emitParticle(Wavelengths wl, inout Rng rng, bool connectToObserver, out Emitted e) {
+    GGlobals G = globals();
+    const uint ambient = G.counts.z;
+    const float pSky = G.emit.x;
+    e = (Emitted)0;
+    e.guideCell = kGpuNone;
     bool fromSky = rng.uniform() < pSky;
     uint li = 0;
     if (!fromSky) li = pickLight(rng.uniform());
     GLight L = g_lights[li];
+    // An environment map is both the sky and a light: either way a sky photon, emitted with the
+    // combined probability of the two choices (Tracer::traceParticle).
+    const uint envLight = G.envMap.w;
+    if (!fromSky && li == envLight) fromSky = true;
+    const float pSkyPhoton = pSky + (envLight != kGpuNone ? (1 - pSky) * g_lights[envLight].pdf : 0.0);
     if (fromSky || L.kind == 1) {
         // Distant emission (sky dome or sun): pick a direction, then a disk covering the world.
         float R = G.misc.w * 1.001;
         float3 toward;  // direction from which the light arrives
         float pdfDir, sel;
+        float4 beta;
         if (fromSky) {
             float u2 = rng.uniform();
             float u1 = rng.uniform();
-            toward = sampleUniformSphere(u1, u2);
-            pdfDir = 1 / (4 * kPi);
+            if (G.sky.x == 3) {
+                if (!sampleEnvMap(u1, u2, toward, pdfDir)) return false;
+            } else {
+                toward = sampleUniformSphere(u1, u2);
+                pdfDir = 1 / (4 * kPi);
+            }
             [ForceUnroll] for (int i = 0; i < NW; ++i) beta[i] = envSky(toward, wl.lambda[i]);
-            sel = pSky;
+            sel = pSkyPhoton;
         } else {
             Frame f = Frame(G.sunDir.xyz);
             float u2 = rng.uniform();
@@ -187,28 +240,62 @@ void traceParticle(inout Wavelengths wl, inout Rng rng, inout uint4 stats) {
         float3 dir = -toward;
         float3 a1, a2;
         orthonormalBasis(dir, a1, a2);
-        float v2 = rng.uniform();
-        float v1 = rng.uniform();
-        float2 dk = sampleUniformDiskConcentric(v1, v2);
-        o = G.emit.yzw - dir * (1.01 * R) + (a1 * dk.x + a2 * dk.y) * R;
-        d = dir;
-        region = ambient;
-        beta *= kPi * R * R / (pdfDir * sel);
-        scale = maxAbsComponent(o);
+        const float3 c0 = G.emit.yzw - dir * (1.01 * R);  // the world's disc, upstream of it
+#ifdef OWE_PHOTON_GUIDE
+        if (!fromSky && guideTotal() > 0) {
+            const bool guided = rng.uniform() < kGuideShare;
+            float v2 = rng.uniform();
+            float v1 = rng.uniform();
+            const float cell = 2 * R / float(kGuideRes);
+            float2 q;  // position in the disc's plane, relative to its centre
+            if (guided) {
+                uint c = guideSample(v1);
+                q = float2(float(c % kGuideRes) + v2, float(c / kGuideRes) + rng.uniform()) * cell - R;
+            } else {
+                q = sampleUniformDiskConcentric(v1, v2) * R;
+            }
+            int2 ci = int2(floor((q + R) / cell));
+            const bool inGrid = all(ci >= 0) && all(ci < int(kGuideRes));
+            const uint c = inGrid ? uint(ci.y) * kGuideRes + uint(ci.x) : 0u;
+            const float pdfA = (inGrid ? kGuideShare * guideCellProbability(c) / (cell * cell) : 0) +
+                               (dot(q, q) <= R * R ? (1 - kGuideShare) / (kPi * R * R) : 0);
+            if (!(pdfA > 0)) return false;
+            e.o = c0 + a1 * q.x + a2 * q.y;
+            e.beta = beta * (1 / (pdfDir * sel * pdfA));
+            if (!guided && inGrid) e.guideCell = c;  // the uniform share teaches the map
+        } else
+#endif
+        {
+            float v2 = rng.uniform();
+            float v1 = rng.uniform();
+            float2 dk = sampleUniformDiskConcentric(v1, v2);
+            e.o = c0 + (a1 * dk.x + a2 * dk.y) * R;
+            e.beta = beta * (kPi * R * R / (pdfDir * sel));
+#ifdef OWE_PHOTON_GUIDE
+            if (!fromSky) {  // before the map has learnt anything every sun photon teaches it
+                int2 ci = int2(floor((dk * R + R) / (2 * R / float(kGuideRes))));
+                if (all(ci >= 0) && all(ci < int(kGuideRes))) e.guideCell = uint(ci.y) * kGuideRes + uint(ci.x);
+            }
+#endif
+        }
+        e.d = dir;
+        e.region = ambient;
+        e.distant = true;
+        e.scale = maxAbsComponent(e.o);
     } else {
         float sel = (1 - pSky) * L.pdf;
         GBoundary b = g_boundaries[L.boundary];
-        GEmission e = g_emissions[b.links.w];
-        float4 Le = wl.eval(e.radiance);
+        GEmission em = g_emissions[b.links.w];
+        float4 Le = wl.eval(em.radiance);
         float u3 = rng.uniform();  // Draw3 order: last argument first
         float u2 = rng.uniform();
         float u1 = rng.uniform();
         float3 pL, nL;
-        if (!sampleArea(b, u1, u2, u3, pL, nL)) return;
+        if (!sampleArea(b, u1, u2, u3, pL, nL)) return false;
         float3 p = xfPoint(b.toWorld, pL), n = normalize(xfVector(b.toWorld, nL));
         float pdfA = 1 / b.misc.y;
         // Emitter seen directly by a virtual observer (path tracing owns this under the partition).
-        if (observer && !partition) {
+        if (connectToObserver) {
             float3 q;
             int px, py;
             float factor;
@@ -217,7 +304,7 @@ void traceParticle(inout Wavelengths wl, inout Rng rng, inout uint4 stats) {
                 float dist = length(wv);
                 float3 wc = wv / dist;
                 float cosL = dot(n, wc);
-                if ((cosL > 0 && e.front != 0) || (cosL < 0 && e.back != 0)) {
+                if ((cosL > 0 && em.front != 0) || (cosL < 0 && em.back != 0)) {
                     uint startRegion = cosL > 0 ? b.links.x : b.links.y, endRegion;
                     float3 from = offsetOrigin(p, n, wc, b.misc.x);
                     float4 Tr = transmittance(from, startRegion, wc, dist - dot(from - p, wc), wl, b.misc.x, endRegion);
@@ -227,8 +314,8 @@ void traceParticle(inout Wavelengths wl, inout Rng rng, inout uint4 stats) {
             }
         }
         float sidePdf = 1;
-        bool front = e.front != 0;
-        if (e.front != 0 && e.back != 0) {
+        bool front = em.front != 0;
+        if (em.front != 0 && em.back != 0) {
             front = rng.uniform() < 0.5;
             sidePdf = 0.5;
         }
@@ -238,22 +325,41 @@ void traceParticle(inout Wavelengths wl, inout Rng rng, inout uint4 stats) {
         float c1 = rng.uniform();
         float3 dir = f.toWorld(sampleCosineHemisphere(c1, c2));
         // β = Le·cos / (sel · pdfA · sidePdf · cos/π)
-        beta = Le * (kPi / (sel * pdfA * sidePdf));
-        o = offsetOrigin(p, n, dir, b.misc.x);
-        scale = b.misc.x;
-        d = dir;
-        region = front ? b.links.x : b.links.y;
-        emitter = L.boundary;
+        e.beta = Le * (kPi / (sel * pdfA * sidePdf));
+        e.o = offsetOrigin(p, n, dir, b.misc.x);
+        e.scale = b.misc.x;
+        e.d = dir;
+        e.region = front ? b.links.x : b.links.y;
     }
-    beta = maskTerminated(wl, beta);
-    if (isZero(beta)) return;
+    e.beta = maskTerminated(wl, e.beta);
+    return !isZero(e.beta);
+}
+
+// Emits one particle (four wavelengths; secondaries may be terminated at dispersive interfaces) and
+// splats its contributions. stats: paths, segments, region inconsistencies, leaks.
+void traceParticle(inout Wavelengths wl, inout Rng rng, inout uint4 stats) {
+    GGlobals G = globals();
+    const bool partition = (pc.flags & kFlagPartition) != 0;
+    const bool observer = G.counts.w == 0;
+    const int maxDepth = G.limits.x, rrDepth = G.limits.y;
+    const uint ambient = G.counts.z;
+    stats.x++;
+
+    Emitted em;
+    if (!emitParticle(wl, rng, observer && !partition, em)) return;
+    float3 o = em.o, d = em.d;
+    uint region = em.region;
+    float4 beta = em.beta;
+    float scale = em.scale;
     const float hero = wl.hero();
     const uint target = G.target.x;
     int nonDeltaEvents = 0, deltaEvents = 0;
+    uint lastBoundary = kGpuNone;
 
     for (int depth = 0;; ++depth) {
         SurfaceHit hit;
         bool found = intersectWorld(o, d, infinity(), hit);
+        if (found && depth == 0 && em.distant) refineDistantHit(d, hit);
         stats.y++;
         uint med = mediumOf(region);
         float seg = found ? hit.t : infinity();
@@ -305,8 +411,10 @@ void traceParticle(inout Wavelengths wl, inout Rng rng, inout uint4 stats) {
         uint other = fromFront ? b.links.y : b.links.x;
         if (inc != region) {
             stats.z++;
+            noteInconsistency(hit.boundary, region, inc, lastBoundary, hit.p);
             region = inc;
         }
+        lastBoundary = hit.boundary;
         uint surfType = g_optics[b.links.z].a.x;
         if (surfType == kSurfNull) {
             region = other;
@@ -320,7 +428,7 @@ void traceParticle(inout Wavelengths wl, inout Rng rng, inout uint4 stats) {
         if (fromFront && hit.boundary == target) {
             int px, py;
             float area;
-            if (sensorPixel(hit.pLocal, px, py, area)) deposit(px, py, beta * (1 / area), wl);
+            if (sensorPixel(hit.pLocal, rng, px, py, area)) deposit(px, py, beta * (1 / area), wl);
         }
         if (surfType == kSurfDetector || surfType == kSurfAbsorber) break;
         HitInterface hi = makeInterface(hit, hero);

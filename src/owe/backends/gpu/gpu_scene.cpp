@@ -7,6 +7,7 @@
 #include <mutex>
 #include <stdexcept>
 
+#include "owe/core/parallel.hpp"
 #include "owe/scene/geometry.hpp"
 
 namespace owe::gpu {
@@ -28,6 +29,11 @@ float bitsAsFloat(uint32_t u) {
     std::memcpy(&f, &u, 4);
     return f;
 }
+uint32_t floatBits(float f) {
+    uint32_t u;
+    std::memcpy(&u, &f, 4);
+    return u;
+}
 
 // Box rounded outward to float, with a margin of a few float ulps of its own magnitude: a float
 // ray reaching a primitive near the box face must still be inside the box.
@@ -48,19 +54,24 @@ void exportRows(const Mat3& R, const Vec3& t, float out[12]) {
 }
 
 void exportBvh(const Bvh& bvh, const Vec3& origin, uint32_t slotBase, std::vector<GNode>& out) {
-    uint32_t base = uint32_t(out.size());
-    for (const BvhNode& n : bvh.nodes()) {
-        GNode g{};
-        exportBox(n.box, origin, g.lo, g.hi);
-        if (n.count > 0) {
-            g.a = slotBase + n.start;
-            g.b = n.count;
-        } else {
-            g.a = base + n.start;
-            g.b = kNodeInner | n.axis;
+    const uint32_t base = uint32_t(out.size());
+    const auto& nodes = bvh.nodes();
+    out.resize(base + nodes.size());
+    parallelFor(nodes.size(), 1 << 15, [&](size_t begin, size_t end) {
+        for (size_t i = begin; i < end; ++i) {
+            const BvhNode& n = nodes[i];
+            GNode g{};
+            exportBox(n.box, origin, g.lo, g.hi);
+            if (n.count > 0) {
+                g.a = slotBase + n.start;
+                g.b = n.count;
+            } else {
+                g.a = base + n.start;
+                g.b = kNodeInner | n.axis;
+            }
+            out[base + i] = g;
         }
-        out.push_back(g);
-    }
+    });
 }
 
 void set3(float out[4], const Vec3& v, float w);
@@ -78,7 +89,21 @@ GTriangle exportTriangle(const Vec3& a, const Vec3& b, const Vec3& c, uint32_t p
     }
     t.v0[3] = bitsAsFloat(prim);
     t.v1[3] = bitsAsFloat(owner);
+    t.v2[3] = bitsAsFloat(kGpuNone);
     return t;
+}
+
+// A unit vector in octahedral coordinates, 16-bit snorm each (shaders/geometry.slang decodes it).
+uint32_t octEncode(const Vec3& n) {
+    double s = std::abs(n.x) + std::abs(n.y) + std::abs(n.z);
+    double x = n.x / s, y = n.y / s;
+    if (n.z < 0) {
+        double fx = (1 - std::abs(y)) * (x >= 0 ? 1 : -1), fy = (1 - std::abs(x)) * (y >= 0 ? 1 : -1);
+        x = fx;
+        y = fy;
+    }
+    auto q = [](double v) { return uint32_t(int32_t(std::lround(std::clamp(v, -1.0, 1.0) * 32767.0)) & 0xFFFF); };
+    return q(x) | (q(y) << 16);
 }
 
 // A boundary's frames relative to the camera-relative origin, its box, and the float error scale
@@ -131,17 +156,23 @@ std::shared_ptr<const MeshGroups> buildMeshGroups(const World& w) {
         g->ext = std::max(g->ext, std::max(maxAbsComponent(lb.lo), maxAbsComponent(lb.hi)));
     }
     for (MeshGroup& g : out->groups) {
-        std::vector<AABB> boxes;
-        std::vector<std::pair<uint32_t, uint32_t>> refs;  // (boundary, triangle)
+        size_t total = 0;
+        for (uint32_t i : g.members) total += static_cast<const MeshShape&>(*bs[i].shape).triangles().size();
+        std::vector<AABB> boxes(total);
+        std::vector<std::pair<uint32_t, uint32_t>> refs(total);  // (boundary, triangle)
+        size_t first = 0;
         for (uint32_t i : g.members) {
             const auto& m = static_cast<const MeshShape&>(*bs[i].shape);
-            for (uint32_t prim = 0; prim < m.triangles().size(); ++prim) {
-                const auto& t = m.triangles()[prim];
-                AABB box;
-                for (int k = 0; k < 3; ++k) box.expand(m.positions()[t[k]]);
-                boxes.push_back(box);
-                refs.push_back({i, prim});
-            }
+            parallelFor(m.triangles().size(), 1 << 15, [&](size_t begin, size_t end) {
+                for (size_t prim = begin; prim < end; ++prim) {
+                    const auto& t = m.triangles()[prim];
+                    AABB box;
+                    for (int k = 0; k < 3; ++k) box.expand(m.positions()[t[k]]);
+                    boxes[first + prim] = box;
+                    refs[first + prim] = {i, uint32_t(prim)};
+                }
+            });
+            first += m.triangles().size();
         }
         Bvh bvh;
         bvh.build(boxes, 4);
@@ -149,12 +180,47 @@ std::shared_ptr<const MeshGroups> buildMeshGroups(const World& w) {
         g.triBase = uint32_t(out->triangles.size());
         g.triCount = uint32_t(refs.size());
         exportBvh(bvh, Vec3(), g.triBase, out->nodes);
-        for (uint32_t slot = 0; slot < refs.size(); ++slot) {
+        out->triangles.resize(g.triBase + total);
+        // Corner words in leaf order (only smooth or textured meshes take space): three normal
+        // words, then six texture-coordinate words, each present or not as the flags say.
+        std::vector<uint32_t> cornerWord(total, kGpuNone);
+        size_t words = out->normals.size();
+        for (size_t slot = 0; slot < total; ++slot) {
             auto [i, prim] = refs[bvh.order()[slot]];
             const auto& m = static_cast<const MeshShape&>(*bs[i].shape);
-            const auto& t = m.triangles()[prim];
-            out->triangles.push_back(exportTriangle(m.positions()[t[0]], m.positions()[t[1]], m.positions()[t[2]], prim, i));
+            bool smooth = !m.shadingNormals().empty(), uv = !m.uvs().empty();
+            if (smooth) {
+                const auto& c = m.shadingNormals()[prim];
+                smooth = length(c[0]) > 0 && length(c[1]) > 0 && length(c[2]) > 0;  // degenerate: flat
+            }
+            if (!smooth && !uv) continue;
+            if (words > kCornerIndex) throw std::runtime_error("GPU scene: too many smooth or textured triangles");
+            cornerWord[slot] = uint32_t(words) | (smooth ? kCornerNormals : 0u) | (uv ? kCornerUvs : 0u);
+            words += (smooth ? 3 : 0) + (uv ? 6 : 0);
         }
+        out->normals.resize(words);
+        parallelFor(total, 1 << 15, [&](size_t begin, size_t end) {
+            for (size_t slot = begin; slot < end; ++slot) {
+                auto [i, prim] = refs[bvh.order()[slot]];
+                const auto& m = static_cast<const MeshShape&>(*bs[i].shape);
+                const auto& t = m.triangles()[prim];
+                GTriangle& out3 = out->triangles[g.triBase + slot];
+                out3 = exportTriangle(m.positions()[t[0]], m.positions()[t[1]], m.positions()[t[2]], prim, i);
+                const uint32_t cw = cornerWord[slot];
+                if (cw == kGpuNone) continue;
+                size_t at = cw & kCornerIndex;
+                if (cw & kCornerNormals) {
+                    const auto& c = m.shadingNormals()[prim];
+                    for (int k = 0; k < 3; ++k) out->normals[at++] = octEncode(c[k]);
+                }
+                if (cw & kCornerUvs)
+                    for (const auto& uv : m.uvs()[prim]) {
+                        out->normals[at++] = floatBits(uv[0]);
+                        out->normals[at++] = floatBits(uv[1]);
+                    }
+                out3.v2[3] = bitsAsFloat(cw);
+            }
+        });
     }
     return out;
 }
@@ -268,6 +334,20 @@ public:
             r.roughness = float(o.roughness);
             r.texScale = float(o.texture.scale);
             r.texParam = float(o.texture.param);
+            if (o.texture.kind == Texture::Kind::Image && o.texture.image) {
+                // The image record, with the mapping in the top bits (31: triplanar, 30: uv).
+                uint32_t rec = imageRecord(*o.texture.image);
+                if (o.texture.mapping == Texture::Mapping::Triplanar) rec |= 0x80000000u;
+                if (o.texture.mapping == Texture::Mapping::UV) rec |= 0x40000000u;
+                std::memcpy(&r.texParam, &rec, 4);
+            }
+            if (o.roughnessMap.size() == 3 && o.texture.kind != Texture::Kind::None)
+                for (int k = 0; k < 4; ++k) r.roughMap[k] = k < 3 ? float(o.roughnessMap[size_t(k)]) : 1.0f;
+            if (o.reliefDepth > 0) {
+                r.relief[0] = float(o.reliefScale);
+                r.relief[1] = float(o.reliefDepth);
+                r.relief[2] = float(o.reliefOctaves);
+            }
             if (o.sampleAimShare > 0) {
                 set3(r.sampleAimCenter, o.sampleAimCenter - origin, float(o.sampleAimRadius));
                 set3(r.sampleAimNormal, o.sampleAimNormal, float(o.sampleAimShare));
@@ -276,6 +356,35 @@ public:
         }
         for (const Emission& e : w_.emissions())
             g_.emissions.push_back({spectrum(e.radiance), e.front ? 1u : 0u, e.back ? 1u : 0u, e.nee ? 1u : 0u});
+    }
+
+    // Images are appended to the texel buffer once each; returns the image's record (header) index.
+    std::vector<const ImageRGB*> images_;
+    uint32_t imageRecord(const ImageRGB& img) {
+        for (size_t i = 0; i < images_.size(); ++i)
+            if (images_[i] == &img) return uint32_t(i);
+        images_.push_back(&img);
+        return uint32_t(images_.size() - 1);
+    }
+    void finishImages() {
+        const size_t header = 4 * images_.size();
+        g_.texels.assign(std::max<size_t>(header, 4), 0);
+        for (size_t i = 0; i < images_.size(); ++i) {
+            const ImageRGB& img = *images_[i];
+            g_.texels[4 * i] = uint32_t(g_.texels.size());
+            g_.texels[4 * i + 1] = uint32_t(img.width);
+            g_.texels[4 * i + 2] = uint32_t(img.height);
+            g_.texels[4 * i + 3] = img.srgb8.empty() ? 1u : 0u;
+            if (!img.srgb8.empty()) {
+                g_.texels.insert(g_.texels.end(), img.srgb8.begin(), img.srgb8.end());
+            } else {
+                for (float f : img.rgb) {
+                    uint32_t u;
+                    std::memcpy(&u, &f, 4);
+                    g_.texels.push_back(u);
+                }
+            }
+        }
     }
 
     void push4(double a, double b = 0, double c = 0, double d = 0) {
@@ -311,6 +420,27 @@ public:
         } else if (auto* d = dynamic_cast<const DomeShape*>(&sh)) {
             r.shape = kShapeDome;
             push4(d->radius(), d->slitAzimuth(), d->slitWidth(), d->slitTop());
+        } else if (auto* cn = dynamic_cast<const ConeShape*>(&sh)) {
+            r.shape = kShapeCone;
+            push4(cn->r0(), cn->z0(), cn->r1(), cn->z1());
+        } else if (auto* tp = dynamic_cast<const TorusPatchShape*>(&sh)) {
+            r.shape = kShapeTorus;
+            push4(tp->majorRadius(), tp->zc(), tp->rho(), 0);
+            push4(tp->a0(), tp->a1(), tp->rMax(), 0);
+            push4(tp->zMin(), tp->zMax());
+        } else if (auto* wv = dynamic_cast<const WaveSurface*>(&sh)) {
+            r.shape = kShapeWaves;
+            // (hx, hy, margin, waves), (amplitude bound, slope bound, dx, dy), (nx, ny, sampled, -), then
+            // the waves (a, kx, ky, φ) or the spline nodes (h, ∂h/∂x·dx, ∂h/∂y·dy, ∂²h/∂x∂y·dx·dy).
+            push4(wv->halfX(), wv->halfY(), wv->margin(), double(wv->waves().size()));
+            push4(wv->amplitudeBound(), wv->slopeBound(), wv->spacingX(), wv->spacingY());
+            push4(double(wv->nodesX()), double(wv->nodesY()), wv->sampled() ? 1.0 : 0.0);
+            if (wv->sampled()) {
+                const double dx = wv->spacingX(), dy = wv->spacingY();
+                for (const auto& n : wv->nodes()) push4(n[0], n[1] * dx, n[2] * dy, n[3] * dx * dy);
+            } else {
+                for (const PlaneWave& w : wv->waves()) push4(w.amplitude, w.kx, w.ky, w.phase);
+            }
         } else if (auto* m = dynamic_cast<const MeshShape*>(&sh)) {
             r.shape = kShapeMesh;
             meshes.push_back(m);
@@ -367,6 +497,7 @@ public:
         }
         // Group triangles first (their BLAS leaves index them directly), then sampling copies.
         g_.triangles = groups_->triangles;
+        g_.normals = groups_->normals;
         for (size_t i = 0; i < nb; ++i)
             if (meshes[i] && w_.boundaries()[i].emission >= 0) samplingCopy(*meshes[i], uint32_t(i), g_.boundaries[i]);
         // Group records and the top-level entries.
@@ -419,8 +550,8 @@ public:
             double p = w_.lightSelectPdf(i);
             acc += p;
             GLight r{};
-            r.kind = L.kind == LightEntry::Kind::Sun ? 1u : 0u;
-            r.boundary = L.kind == LightEntry::Kind::Sun ? kGpuNone : L.boundary;
+            r.kind = L.kind == LightEntry::Kind::Sun ? 1u : L.kind == LightEntry::Kind::Environment ? 2u : 0u;
+            r.boundary = L.kind == LightEntry::Kind::Boundary ? L.boundary : kGpuNone;
             r.pdf = float(p);
             r.cdf = float(acc);
             g_.lights.push_back(r);
@@ -453,8 +584,17 @@ size_t GpuScene::bytes() const {
     return sizeof(globals) + nodes.size() * sizeof(GNode) + boundaries.size() * sizeof(GBoundary) +
            shapeData.size() * 4 + triangles.size() * sizeof(GTriangle) + regions.size() * 4 +
            media.size() * sizeof(GMedium) + spectra.size() * sizeof(GSpectrum) + scalars.size() * 4 +
-           optics.size() * sizeof(GOptics) + emissions.size() * sizeof(GEmission) + lights.size() * sizeof(GLight);
+           optics.size() * sizeof(GOptics) + emissions.size() * sizeof(GEmission) + lights.size() * sizeof(GLight) +
+           texels.size() * 4 + normals.size() * 4;
 }
+
+namespace {
+// The observer's pupil guide, relative to the eye (the camera-relative origin).
+void setGuide(GGlobals& G, const IdealObserver& o) {
+    set3(G.guide, o.guide.center - o.position, float(o.guide.radius));
+    G.guideShare = float(o.guide.share);
+}
+}  // namespace
 
 GpuScene flattenScene(const Scene& scene, int detectorIndex, const RenderSettings& settings) {
     if (detectorIndex < 0 || detectorIndex >= int(scene.detectors.size())) throw std::runtime_error("no such detector");
@@ -474,6 +614,7 @@ GpuScene flattenScene(const Scene& scene, int detectorIndex, const RenderSetting
         G.tanY = float(o->tanY());
         G.pupilRadius = float(o->pupilRadius);
         G.focusDistance = std::isfinite(o->focusDistance) ? float(o->focusDistance) : -1.0f;
+        setGuide(G, *o);
     } else if (auto* s = dynamic_cast<const SurfaceSensor*>(&det)) {
         g.origin = s->toWorld().t;
         G.detectorKind = kDetSensor;
@@ -497,6 +638,7 @@ GpuScene flattenScene(const Scene& scene, int detectorIndex, const RenderSetting
     }
     set3(G.detPos, Vec3());
     G.detRegion = det.region;
+    G.pixelSigma = float(det.pixelSigma);
     G.width = det.width;
     G.height = det.height;
 
@@ -505,6 +647,33 @@ GpuScene flattenScene(const Scene& scene, int detectorIndex, const RenderSetting
     ex.optics(g.origin);
     ex.boundaries(g.origin);
     ex.lights();
+    // The environment map, its sampling distribution and the RGB basis (sky model 3).
+    G.envLight = w.environmentLight() >= 0 ? uint32_t(w.environmentLight()) : kGpuNone;
+    if (w.env.skyModel == Environment::Sky::Map && w.env.map) {
+        const auto& D = w.env.mapDist;
+        G.envRecord = ex.imageRecord(*w.env.map);
+        auto pushAll = [&](const std::vector<double>& v) {
+            uint32_t at = uint32_t(g.scalars.size());
+            for (double x : v) g.scalars.push_back(float(x));
+            return at;
+        };
+        G.envMarginal = pushAll(D.marginal);
+        G.envConditional = pushAll(D.conditional);
+        G.envRowWeight = pushAll(D.rowWeight);
+        G.envRotation = float(w.env.mapRotation);
+        G.envScale = float(w.env.mapScale);
+        G.envTotal = float(D.marginal.empty() ? 0.0 : D.marginal.back());
+        G.envNorm = float(rgbIlluminantNorm());
+        Vec3 e1, e2;
+        w.env.mapFrame(e1, e2);
+        set3(G.envE1, e1, float(D.W));
+        set3(G.envE2, e2, float(D.H));
+    }
+    double A[3][3];
+    rgbBasisMatrix(A);
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j) G.rgbA[i][j] = float(A[i][j]);
+    ex.finishImages();
 
     const Environment& env = w.env;
     G.boundaryCount = uint32_t(w.boundaries().size());
@@ -537,6 +706,7 @@ GpuScene flattenScene(const Scene& scene, int detectorIndex, const RenderSetting
 
     // Kernels index these arrays unconditionally; keep every buffer non-empty.
     if (g.triangles.empty()) g.triangles.push_back({});
+    if (g.normals.empty()) g.normals.push_back(0);
     if (g.lights.empty()) g.lights.push_back({});
     if (g.emissions.empty()) g.emissions.push_back({});
     if (g.scalars.empty()) g.scalars.push_back(0);
@@ -559,6 +729,8 @@ void updateObserver(GpuScene& g, const World& w, const IdealObserver& o) {
     G.tanY = float(o.tanY());
     G.pupilRadius = float(o.pupilRadius);
     G.focusDistance = std::isfinite(o.focusDistance) ? float(o.focusDistance) : -1.0f;
+    G.pixelSigma = float(o.pixelSigma);
+    setGuide(G, o);
     // Rebase from the original double-precision world each time, never from previous float data.
     g.origin = o.position;
     setCentre(G, w.sceneCenter() - g.origin);

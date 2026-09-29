@@ -51,10 +51,20 @@ BlockStats blockStats(const Scene& sc, int det, int spp, const std::string& inte
     }
     return b;
 }
-// Two unbiased estimators of the same image must agree within 4 combined standard errors.
+// Two unbiased estimators of the same image must agree: the image mean within 4 combined
+// standard errors, and the 12 blocks as a sample (few seeds make block z-scores Student-t, so one
+// block past 4 is chance; a bias shows in many blocks and in the sum of squares).
 void checkAgreement(const BlockStats& a, const BlockStats& b) {
     CHECK_NEAR(a.imageMean, b.imageMean, 4 * std::hypot(a.imageSe, b.imageSe) + 1e-12);
-    for (int i = 0; i < 12; ++i) CHECK_NEAR(a.mean[i], b.mean[i], 4 * std::hypot(a.se[i], b.se[i]) + 1e-12);
+    int beyond = 0;
+    double chi2 = 0;
+    for (int i = 0; i < 12; ++i) {
+        double z = (a.mean[i] - b.mean[i]) / (std::hypot(a.se[i], b.se[i]) + 1e-300);
+        beyond += std::abs(z) > 4;
+        chi2 += z * z;
+    }
+    CHECK(beyond <= 1);
+    CHECK(chi2 / 12 < 3);
 }
 }  // namespace
 
@@ -288,7 +298,18 @@ TEST(diffuse_screen_records_irradiance_and_reflects_toward_observers) {
     sc.detectors.push_back(std::move(eye)); sc.build();
     double expected = 0.7 * diskIrradiance(2, 0.3, 0.5, 0) / Pi;
     CHECK_REL(renderScene(sc, 1, 1024).meanY(), expected, 0.02);
-    CHECK_REL(renderScene(sc, 1, 4096, "light").meanY(), expected, 0.04);
+    // Light tracing reaches this 2 cm patch with few particles (~8% noise per render): judge the
+    // mean of several seeds by its own standard error, plus 1% for the patch's irradiance falloff.
+    double s = 0, s2 = 0;
+    const int seeds = 12;
+    for (int k = 0; k < seeds; ++k) {
+        double y = renderScene(sc, 1, 4096, "light", 0, 1 + uint64_t(k)).meanY();
+        s += y;
+        s2 += y * y;
+    }
+    double mean = s / seeds, se = std::sqrt(std::max(0.0, s2 / seeds - mean * mean) / (seeds - 1));
+    CHECK(se < 0.04 * expected);
+    CHECK_NEAR(mean, expected, 4 * se + 0.01 * expected);
 
     // The SAME illuminated patch has the same radiance throughout its front hemisphere.
     // A small field keeps the footprint near the centre even at 85 degrees from the normal.

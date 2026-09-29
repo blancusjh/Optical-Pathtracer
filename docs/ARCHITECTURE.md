@@ -41,9 +41,15 @@ implements and which estimates the same image (`adaptToBackend`, which says so).
 |---|---|---|
 | Where | host threads | Vulkan compute: NVIDIA, AMD, Intel; Apple silicon via MoltenVK |
 | Arithmetic | IEEE-754 double | float32, camera-relative (XIV) |
-| Integrators | path, light, hybrid | path, light, hybrid |
+| Integrators | path, light, hybrid | path, light, hybrid, sppm, bdpt, vcm |
+| Mesh shading | flat | flat or smooth normals |
+| Material maps | first roughness | roughness and tint per texture component |
 | Reproducibility | bitwise for a seed, any thread count or compiler | bitwise on a given device and driver |
 | Code | `backends/cpu` + the reference transport | `backends/gpu` (C++ host + Slang kernels) |
+
+**Development.** New transport (SPPM, shading normals, and the estimators still to come) is built
+on the GPU backend alone; the CPU reference keeps what it has, and scenes using GPU-only features
+render there without them (meshes flat; `sppm` falls back to `path`).
 
 **Independence.** Each backend depends on the scene model and the render interface only; neither
 includes the other, and the GPU backend does not include the reference transport — it is a port
@@ -96,8 +102,14 @@ relative to air (absolute index = n_rel · n_air(λ)). Planned: birefringence.
 ellipsoid, hyperboloid caps) with closed-form intersection, even aspheres with bracketed
 root finding, triangle meshes (OBJ import), apertures (disk, annulus, rectangle, ellipse,
 off-centre hole). Mechanical extent and clear aperture are separate. Physical rims and edge
-steps are generated for every lens. Planned: cones, full closed quadrics, XY/Zernike
-freeforms, general trimming curves.
+steps are generated for every lens. Lathe surfaces for glassware (`type = vessel`): outer and
+inner (r, z) profiles with filleted corners revolve into discs, cylinders, cone frusta and torus
+patches, all analytic with exact normals (torus patches are bracketed along the ray from the slab
+entry, so a sun photon arriving from metres away keeps float precision at a fillet). Liquid
+surfaces (`type = waves`): an analytic sum of plane waves, or for many waves its C¹ bicubic Hermite
+spline with exact nodal slopes, intersected by a Lipschitz-bounded march that cannot skip a
+crossing, closed by a floor and walls or cut into a solid basin; bodies can stand inside another's
+medium (`in = Sea`). Planned: full closed quadrics, XY/Zernike freeforms, general trimming curves.
 
 **VI. Lens definition — done.** `body X { type = lens ... }` with front/back surfaces or a
 surface list with media (cemented groups), plus `focal =` design helpers. Sequential tables
@@ -115,9 +127,28 @@ and `the_observatory.owe` are built this way. Detailed scene models — jointed 
 olives, cypresses and conifers, brick-and-stone architecture, bound books, a woven carpet,
 engraved instruments, slope-grounded landscapes — are generated deterministically into `models/`
 by `tools/` and loaded as ordinary meshes; where a detailed relief replaces a procedural terrain,
-the terrain stays as a `reference_only` height field for placements, adding no overlapping matter. Not yet: image textures, smooth shading normals,
-clouds, participating atmosphere over large scenes (`the_temple.owe` fakes distant haze with
-the sky's below-horizon colour).
+the terrain stays as a `reference_only` height field for placements, adding no overlapping matter.
+Photographs texture surfaces (`image(...)`, planar, triplanar, or by a glTF model's texture
+coordinates; linear RGB through the smooth RGB reflectance basis) and light worlds (`sky = map("sky.hdr")`, an equirectangular HDR
+environment sampled in proportion to luminance × sin θ, with MIS). Meshes shade with smooth
+normals where asked (`normals = smooth | file`, GPU): scattering happens in the frame of the
+interpolated normal while the geometric normal decides sides, and a sample the two disagree about
+(grazing directions on strongly curved coarse meshes) is dropped, never a region crossed that the
+geometry does not cross; particles and photons carry Veach's adjoint correction
+(|wo·ns| |wi·n| / |wo·n| |wi·ns|), and photon gathers the camera's |wi·ns| over the photons'
+|wi·n| per geometric area. Verified (tests/test_shading.cpp): a 32 × 16 UV sphere shades like the
+sphere (L1 0.2% against 3.2% flat); a two-triangle square with leaning corner normals, lit only by
+a mirrored sunbeam, draws (wi·ns)/(wi·n) to 0.3% (SPPM) and 0.1% (particles), against 60% and 49%
+off without the corrections; path, particle and photon estimators agree on a coarse smooth ball;
+a smooth glass ball's caustic is the analytic ball's, with no region inconsistencies. Textures
+are material maps too (GPU): a roughness per texture component, mixed like the colour, and a
+conductor's tint per component (on a checker map of polished and rough silver, each set of squares
+matches the all-polished or all-rough sheet within 1%). A procedural relief (`relief = noise(...)`,
+GPU) tilts the shading normal by the analytic gradient of its height; seen from above under a 30°
+sun, 4 × 4 pixel blocks match (ns·s)/(n·s) predicted from the reference's own noise within 1.2%
+(the relief varies them by 7.3%). Not yet:
+clouds, participating atmosphere over large scenes (`the_temple.owe` fakes distant haze with the
+sky's below-horizon colour).
 
 **VIII. Instruments inside the world — done.** A camera is lens + housing + mounts + stop +
 sensor (`addPhysicalCamera`); `f_number` rescales the physical stop through the paraxial
@@ -129,29 +160,114 @@ of the uncoated lens leaves the rear element outside the pupil — so the mixtur
 telescope is an assembly built from its prescription; observers are placed with
 `exit_pupil("Name")`; `the_observatory.owe` has three telescopes aimed at the Moon, Jupiter
 and Saturn, each with an eye at its exit pupil. `the_telescope.owe` shows the world naked,
-through the eyepiece, and from beside the instrument, with no change of physics. Planned: a
-physical eye model (cornea, lens, curved retina) replacing the ideal observer.
+through the eyepiece, and from beside the instrument, with no change of physics. An afocal
+instrument registers its exit pupil with the world; an observer whose pupil is much wider than
+an exit pupil it looks into (a 5 mm eye at a 1 mm Ramsden disc receives the image through 4% of
+its pupil) draws 90% of its pupil samples from that disc, projected along each pixel's direction
+onto the eye's pupil, and weights them by the mixture density: the same measurement, ~10× less
+variance (conformance test `backends_guided_eye_pupil_...`). Eyes whose pupil already matches
+(the eyepiece presets) are unchanged. `accommodation()` (owe/analysis) finds where an eye must
+focus to see a line of sight sharply: it follows the line through the smooth surfaces to the first
+surface that scatters or emits, and solves for the vergence at which paraxial rays from the pupil
+meet it again there — the object itself, or its image in a mirror, a magnifier or a telescope
+(Saturn through the refractor: infinity; the statue through the 16× telescope: its image 1.78 m
+away at the d line, L/M²). The eye focuses on the light it receives: lines of sight are traced
+across the pupil and grouped by what they reach, each group is weighted by its luminance (a few
+radiance samples) and its share of the pupil, and the winner's central line is solved. An eye 2 mm
+beside the refractor's 1 mm exit pupil thus focuses on Saturn, which its pupil's edge receives,
+and not on the black tube its pupil centre looks into (which had blurred the planet into a disc). Planned: a physical eye model (cornea, lens, curved retina) replacing
+the ideal observer.
 
 **IX. Multiple detectors — partial.** Any number of ideal observers and surface sensors;
 sensors are matter. They absorb by default; diffuse measurement screens record incident
 irradiance while reflecting light toward observers. Screen aperture guides use a full-support
-mixture on CPU and GPU. Planned: curved sensors, spectral detectors (per-band films),
+mixture on CPU and GPU. A pixel's response is its square, optionally convolved with a Gaussian
+(`pixel_filter`; observers default to σ = 0.4 px, ~0.5 px in all, the usual reconstruction
+width): camera samples are displaced by the Gaussian, and particle splats by the same Gaussian
+before they are binned, so path, light and hybrid still estimate one image. With the square
+alone, anything smaller than a pixel — a star, a focused caustic — images as a pixel-aligned
+square whose shape depends on where it falls; with the Gaussian it images as a round spot at its
+true sub-pixel position. Sensors keep the square (a physical pixel integrates its area). Planned: curved sensors, spectral detectors (per-band films),
 photodiode arrays, detailed sensor coatings.
 
 **X. Rendering algorithm — partial.** Progressive spectral path tracing with NEE, MIS (power
 heuristic), stochastic Fresnel branching (with an optional unbiased branch-probability floor
 for ghost exploration), Russian roulette, deterministic seeds, raw linear output; particle
-tracing; a hybrid estimator with a disjoint path-space partition. Planned: Tier II BDPT,
-Tier III VCM (the camera obscura's inside view is the motivating hard case), Tier IV path
-guiding, ReSTIR, manifold NEE.
+tracing; a hybrid estimator with a disjoint path-space partition; stochastic progressive photon
+mapping (`sppm`, GPU; Hachisuka & Jensen 2009): a camera pass finds each pixel's first non-specular
+point through any chain of glass, mirrors and water (direct light there by NEE and one
+scatter-sampled segment, MIS-weighted, as the path tracer), photons deposit only after a scattering
+event (no double counting) on a disc in the point's tangent plane with a matching orientation (no
+leakage), found through a multi-level spatial hash (radii from millimetres to kilometres), with
+exact fixed-point flux accumulation (bitwise reproducible) and progressive radii. Spectra: an
+iteration splits its paths and photons into wavelength groups whose hero wavelengths interleave; a
+point the eye sees directly takes every photon at the photon's own wavelengths, a point seen
+through glass (its wavelengths fixed by dispersion) only its group's, scaled accordingly. Sun
+photons are guided: a map over the sun's emission disc counts where photons from the uniform share
+proved useful, and three quarters of later photons are drawn from it, weighted by the mixture
+density (unbiased; it learns windows and lenses far from the caustics they form: colour speckle
+in a window-lit caustic vanished at the same time budget). Verified: white furnace; the image
+mean against the unbiased estimators (bias −0.6% at 256, −0.3% at 4096 iterations on a coarse
+96×64 image, shrinking as r² ∝ i^(−1/3)); a lens caustic seen through a glass plate and in a
+mirror equals the direct view times Fresnel transmittance (0.9269 against 0.9187) and the
+reflectance (0.9000 against 0.9); caustics neither path nor light tracing can find. Forward-light
+references (particles onto sensors, both backends) match analytic power budgets within 1%: a lens
+(Fresnel losses at the actual incidences), a water surface (Fresnel and Pope–Fry absorption), a
+concave mirror; ripple caustics match the Monte-Carlo-integrated Jacobian of the surface-to-floor
+ray map (L1 difference 1.4% over 160 bins, peak 9.2 E₀ against 9.1). Bidirectional path tracing
+(`bdpt`) and vertex connection and merging (`vcm`, Georgiev et al. 2012) run on the GPU with a
+light vertex cache (Davidovič et al. 2014): per iteration one light subpath per pixel caches its
+non-specular vertices with the partial MIS quantities of Georgiev's recursive formulation and
+splats to the eye; each camera vertex then takes next-event estimation, a connection to one vertex
+drawn from the cache (weighted by the cache's size per light path), and, for `vcm`, merges the
+cached vertices within a radius of a few pixel footprints at its distance from the eye (a function
+of position, so both path ends evaluate merging's MIS factor alike; it shrinks as SPPM's). Every
+strategy is weighted by the balance heuristic, next-event pdfs of sphere lights (cone sampling)
+are evaluated from the actual first light vertex, distances accumulate across null boundaries,
+and shading normals enter as in path tracing. Verified: BDPT draws the path tracer's image (mean
+1.0000, worst 4 × 4 block 0.05%), VCM converges to it (0.9998, 0.15%); a lens caustic seen through
+a glass plate is 0.913 of the direct view (Fresnel 0.919); on a glossy silver plate VCM's error is
+7.5× the path tracer's lower at equal samples, where SPPM (gathering at the glossy plate) is 20×
+worse than path tracing. On the caustic benchmarks VCM matches or beats SPPM where the caustic is
+seen through glass or in a mirror, and trails it for dispersion (an iteration's paths share four
+wavelengths; SPPM spreads sixteen). Sun light subpaths are guided as SPPM's photons (the same map
+over the emission disc, taught by light paths whose vertices were splatted, connected or merged;
+the camera side evaluates the mixture density where its ray crosses the disc, so MIS stays exact):
+on the prism benchmark this took VCM's error from 6.5 to 0.089 (SPPM 0.29). An iteration traces
+`photons` light subpaths per pixel; the cache is sized by a counting pass for every light path
+meeting the world (what guiding tends to), with 30% to spare. Sun and sky particles re-find their
+first hit from just before it: from a disc tens of metres out, float error left photons starting
+under the surface they scattered from (the study's region inconsistencies fell 6×). Scattering
+media are not handled by `bdpt`/`vcm`. Planned: wavelength groups for VCM, ReSTIR, manifold NEE.
 
 **XI. Interactive convergence — partial.** `--passes` refines an unbiased accumulation;
-display processing (exposure, white balance) never touches the raw data. `owe studio` is a
+display processing (exposure, white balance, gamut mapping) never touches the raw data. Exposure is
+display state with three modes (`owe/render/exposure.hpp`): manual, locked (meter a new view once,
+then keep it while navigating; the viewer's default) and adaptive (follow the meter in UI time, rate
+limited in EV/s, with a dead band and smoothed readings). The meter is robust by construction (block
+means, a percentile band in log luminance with a smooth centre weight; only lit surfaces, not
+directly seen emitters, pull it down, in proportion to their area) and continuous in what the image
+shows; exports use the resolved exposure the window shows. Every monochromatic colour lies outside
+sRGB: the display reduces such a colour's chroma at constant Oklab lightness and hue instead of
+clipping its negative component, which had collapsed whole wavelength ranges into one hue (a
+spectrum showed as a few bands). The view transform is AgX by default (a filmic sigmoid over 16.5
+stops in log2, with an inset of the primaries): colours beyond the display's range go gradually to
+white, as a caustic's core or a sun glint does on film, where the standard curve (linear to white,
+a short roll-off) clips them 4 stops sooner; middle grey shows the same in both. `owe display`
+redisplays a raw PFM with its record's exposure and any view transform. `owe studio` is a
 command-line session that edits any scene value (aperture, focus, placement, glass, backend),
 rebuilds the world and refines the image pass by pass, writing it after each pass. `owe view`
 is a window over every scene and detector: progressive refinement on either backend, scene
-edits, pixel probes, and a free virtual eye (orbit, pan, fly) that looks through instruments
-by light transport alone. There is no denoiser.
+edits, pixel probes, and a free virtual eye (orbit, pan, fly, zoom) that looks through
+instruments by light transport alone. The free eye accommodates (`accommodation()`, VIII), so
+walking up to an eyepiece brings the planet into focus rather than the glass, and it keeps the
+scene's integrator, so caustics stay formed by light tracing. The free eye takes the pixel response
+of the view it starts from, so at a saved observer's pose it is that observer (tested block by block
+over independent runs). Free-view image formation is verified quantitatively: a loose lens seen
+from either side forms its inverted image where paraxial optics puts it, a magnifier its upright
+virtual image, a concave mirror its real image, and an eye walking across a telescope's exit pupil
+sees the image dim as the overlap of the two discs (measured 0.693, 0.386, 0.139, 0 against 0.692,
+0.395, 0.146, 0) and return bit for bit when it walks back. There is no denoiser.
 
 **XII. Performance — partial.** `owe bench` measures throughput (M paths/s, M segments/s) on a
 fixed suite of scenes and seeds and prints a digest of the raw image, so an optimisation that
@@ -161,10 +277,16 @@ deferred BVH nodes against the closest hit found since, skipping quadric root re
 roots that cannot enter (tmin, tmax), shared lattice hashes in the value noise, and texture
 weights computed once per hit — 1.19× on the suite at 960×540 (up to 1.33× on mesh- and
 instrument-heavy scenes; 16 threads, i7-12650H). On the suite with the detailed models (up to
-9 M triangles per scene) the GPU backend (XIII) is 13× faster than the 16-thread CPU with its
-portable software traversal and 32× with hardware traversal (RTX 4060 Laptop; 134.8 s → 10.1 s →
-4.2 s). Planned: wavefront GPU kernels (material sorting), a parallel build of the merged mesh
-hierarchies, SIMD/wide BVH on the CPU.
+9 M triangles per scene) the GPU backend (XIII) is 14× faster than the 16-thread CPU with its
+portable software traversal and 35× with hardware traversal (RTX 4060 Laptop; 134.8 s → 9.6 s →
+3.8 s). Setup is parallel and exact: OBJ files are parsed in chunks split at line breaks and
+joined in file order (`std::from_chars`), and hierarchies are built from compact records
+partitioned in place — upper levels split level by level with parallel binning and a parallel
+partition that makes the same exchanges as the two-pointer sweep, subtrees below on all threads,
+the SAH evaluated with prefix sweeps — laid out depth-first in one copy. Every hierarchy is
+identical to the sequential build's (tested against it), so no image changes: the telescope's
+7.7 M-triangle landscape loads in 1.2 s instead of 6.8 s and its first GPU renderer takes 1.8 s
+instead of 5.0 s. Planned: wavefront GPU kernels (material sorting), SIMD/wide BVH on the CPU.
 
 **XIII. GPU architecture — partial.** One of the backends described above (`-DOWE_GPU=ON`, `--backend gpu`):
 Vulkan compute, so it runs on NVIDIA, AMD and Intel GPUs and on Apple silicon through MoltenVK,
@@ -198,11 +320,17 @@ hits on triangles are re-solved against the triangle's plane as in software. Ins
 camera-relative; null boundaries have their own mask. Elsewhere the portable software traversal
 runs — a variant of the same kernels, selected per renderer. (3) Shadow rays ask only whether any
 matter blocks them (first hit ends the search), and are traced after the scatter direction is
-drawn so the surface interface is not live across their traversal. None of this changes an image.
+drawn so the surface interface is not live across their traversal. (4) Kernels run in groups of
+256 threads: the driver sets a kernel's register budget from its group size (NVIDIA: 168 per
+thread for 64-thread groups, 128 for 256), and the larger group keeps a third more threads
+resident to hide latency, for a small spill (−5% time with hardware traversal, −7% software).
+(5) The hardware-traversal kernels leave out the software mesh traversal: a mesh never reaches
+the analytic shape code there, but that code, inlined at every traversal site with its stacks,
+had spilled ~4 KB of local memory per thread (now 0.1–0.4 KB). None of this changes an image.
 (Path regeneration — a lane starting its next sample as soon as its path ends — measured ~5%
-faster with hardware traversal, but its interleaved loop is miscompiled by Mesa's Intel compiler,
-which loses the device; portability wins, so a pixel's samples run one after another.)
-`OWE_GPU_STATS=1` prints each kernel's compiled statistics (registers,
+faster with hardware traversal, less than (4) and (5), but its interleaved loop is miscompiled
+by Mesa's Intel compiler, which loses the device; portability wins, so a pixel's samples run
+one after another.) `OWE_GPU_STATS=1` prints each kernel's compiled statistics (registers,
 local memory) where the driver offers them. Validation: `owe compare` renders a scene
 with both backends over independent seeds and tests block means of X, Y and Z against their
 standard errors, and the conformance suite runs every analytic check on it. Planned: wavefront kernels, hardware
@@ -232,8 +360,8 @@ Saturn at 1.28·10¹² m through the 150 mm refractor renders consistently with 
 reference. Planned: optics-aware LOD (only exact geometry exists today, so there is nothing to
 LOD).
 
-**XV. Fractal statue — done.** `fractal_statue` builds exact nested spheres; `the_statue.owe`
-observes it directly, up close, through a hand lens in the world and through a telescope.
+**XV. Fractal statue — done.** `fractal_statue` builds exact nested spheres; `the_telescope.owe`
+places one on a mountain shoulder 450 m away, observed with the naked eye and through the telescope.
 
 **XVI. Inspection — partial.** Paths with λ, n, θ_i, θ_t, R, T, regions and OPL from the exact
 rendering state; SVG path drawings over a sliced cross-section of the world; JSON export.
@@ -257,8 +385,13 @@ Petzval-type objective, simple magnifier, achromats. Planned: Newtonian (parabol
 flat diagonal already exist as bodies), Cooke triplet, Double-Gauss, Tessar, microscope.
 
 **XXI. Natural phenomena — partial.** Underwater refraction (n² law validated), prism
-dispersion, glass/water, caustics, internal reflections, lens ghosts. Planned: rainbows and
-halos (need droplet/crystal ensembles), mirages (need GRIN).
+dispersion (deviation of every wavelength equal to an independent two-face Snell trace to
+10⁻⁹ rad: 74.90° at 404.7 nm to 64.67° at 706.5 nm for 60° N-SF11), glass/water, caustics,
+internal reflections, lens ghosts; ripple caustic networks with dispersion fringes
+(`the_shallows.owe`), a tumbler of water in window sunlight (`glass/glass_in_sunlight.owe`), a prism in
+sunlight with its beams grazing the floor (`prism_in_sunlight.owe`), a glass of tea whose caustic
+is amber by Beer–Lambert absorption (`glass/tea_glass.owe`). Planned: rainbows and halos (need
+droplet/crystal ensembles), mirages (need GRIN).
 
 **XXII. GRIN media — planned.** The transport loop's segment step is the extension point:
 replace straight segments by an eikonal integrator inside regions flagged as graded.
@@ -284,13 +417,13 @@ agreement with the reference for the others; `owe compare` on any scene); a back
 run on the machine is reported as skipped. External comparisons with PBRT/Mitsuba/LuxCore are
 planned.
 
-**XXVII. Canonical demonstrations.** Implemented: The Lens, The Statue, The Telescope/The
-Mountain Observatory, The Camera Obscura, The Prism, The Glass of Water, The Optical Bench,
-The Ghost; plus The Temple (a physical 85 mm camera with tunable aperture and focus) and The
-Observatory at night (planets and the Moon through refractors). For the uncoated Petzval objective in `the_ghost.owe`, double-reflection ghosts
-are present (an emission probe finds ~0.4% of the lantern's flux in them) but spread over the
-whole frame as a veil; a sharper demonstration needs a design with compact ghosts plus
-BDPT. Not yet: The City Through Glass.
+**XXVII. Canonical demonstrations.** Implemented: The Lens, The Telescope/The Mountain
+Observatory, The Camera Obscura, The Glass of Water, The Optical Bench; the caustic studies after
+photographs (a prism, glasses of water and tea, rippled shallows); The Temple (a physical 85 mm
+camera with tunable aperture and focus); The Observatory at night (planets and the Moon through
+refractors); and The Study, all of it in one room. Lens ghosts (double Fresnel reflections inside
+an objective) are physical paths in every camera but, for the Petzval designs here, spread over
+the frame as a faint veil. Not yet: The City Through Glass.
 
 **XXVIII–XXX. User experience and the whole.** The command-line tools expose the same world
 to rendering, inspection and design; `owe view` is the interactive window. Choosing where the
@@ -304,7 +437,12 @@ transport runs is one setting, never a different program.
 * The light tracer covers directly visible emitters and connections to ideal observers, not
   to surface sensors behind lenses (those receive particles directly).
 * The holed-disk aperture cannot be sampled by next-event estimation.
-* Mesh normals are geometric (faceted shading).
+* Pipelines compile from cold in the driver after every kernel change (the VCM kernels take about
+  a minute on an RTX 4060); later runs start in under a second from the driver's cache. See
+  docs/ROADMAP.md.
+* Smooth mesh normals are GPU-only; like every shading-normal renderer, a coarse smooth mesh
+  keeps its polygonal silhouette and loses a little light at grazing directions where the
+  interpolated and the geometric surface disagree (the shadow-terminator band).
 * The sun is a directional source with its irradiance at Earth, so the albedos of Jupiter and
   Saturn in `the_observatory.owe` carry the (1 AU / r)² factor explicitly.
 * Diffraction is not modelled: a telescope's resolution is set by its geometric aberrations

@@ -1,0 +1,11 @@
+# BENCHMARK concave_mirror_image — a concave mirror (R = 400 mm) facing a lamp 600 mm away, 20 mm above
+# its axis: a real inverted image forms 300 mm in front of it, 10 mm below the axis, seen by an eye
+# on the axis 900 mm away (tests/test_navigation.cpp: free_eye_sees_the_real_image_a_concave_mirror_forms).
+# Measurement: Eye (radiance, 256×256, fixed exposure 0 EV).
+units = mm
+body Lamp   { type = sheet  size = (6, 6)  position = (0, 600, 20)  axis = (0, -1, 0)  up = (0, 0, 1)
+              material = black  emission = blackbody(4500K, 2000) }
+body Mirror { type = mirror  surface = sphere(R = 400)  diameter = 80  position = (0, 0, 0)  axis = (0, 1, 0) }
+observer Eye { position = (0, 900, 0)  look_at = (0, 0, 0)  up = (0, 0, 1)  fov = 8deg  pupil = 3  focus = 600
+               resolution = (256, 256)  exposure = 0 }
+render { detector = Eye  spp = 256  integrator = path }

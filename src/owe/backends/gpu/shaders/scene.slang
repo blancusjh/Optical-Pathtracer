@@ -10,8 +10,13 @@ static const uint kShapeCylinder = 4;
 static const uint kShapeRoundWall = 5;
 static const uint kShapeDome = 6;
 static const uint kShapeMesh = 7;
+static const uint kShapeWaves = 8;
+static const uint kShapeCone = 9;
+static const uint kShapeTorus = 10;
 
 static const uint kGpuNone = 0xFFFFFFFFu;
+// A triangle's corner words (GTriangle.v2.w): three normals, then three texture coordinates.
+static const uint kCornerNormals = 0x80000000u, kCornerUvs = 0x40000000u, kCornerIndex = 0x3FFFFFFFu;
 static const uint kNodeInner = 0x80000000u;
 
 // SurfaceType
@@ -40,8 +45,8 @@ struct GBoundary {
 
 struct GTriangle {
     float4 v0;  // w: original index (bits)
-    float4 v1;
-    float4 v2;
+    float4 v1;  // w: the owning boundary (bits)
+    float4 v2;  // w: first corner word in g_normals, with kCorner flags (bits; kGpuNone: flat, untextured)
 };
 
 struct GMedium {
@@ -61,6 +66,8 @@ struct GOptics {
     uint4 c;  // conductorK, roughness, texScale, texParam (floats as bits)
     float4 sampleAimCenter; // camera-relative centre, radius
     float4 sampleAimNormal; // normal, mixture share
+    float4 roughMap;        // material map: roughness of texture components a, b, c; w: 1 if mapped
+    float4 relief;          // relief: scale, depth, octaves (depth 0: none)
 };
 
 struct GEmission {
@@ -91,7 +98,15 @@ struct GGlobals {
     float4 focusCenter;
     float4 emit;         // particles: x: the sky's share of emitted power; yzw: scene centre (camera-relative)
     uint4 target;        // x: the sensor's own boundary (particles deposit on it), or kGpuNone;
-                         // y: the scene has null boundaries
+                         // y: the scene has null boundaries; z: pixel filter sigma (float bits);
+                         // w: share of pupil samples from the guide (float bits)
+    float4 guide;        // observer: pupil guide centre (camera-relative), radius (0: none)
+    uint4 envMap;        // environment map: image record, marginal CDF, conditional CDFs (scalars), light
+    float4 envParams;    // rotation, scale, distribution total, RGB illuminant norm
+    float4 envE1;        // the map's frame: e1 | width
+    float4 envE2;        // e2 | height
+    uint4 envMore;       // x: row weights (scalars)
+    float4 rgbA[3];      // RGB → basis weights (rows)
 };
 
 // Per-pixel state carried across dispatches of one pass.
@@ -108,6 +123,7 @@ struct PushConstants {
     uint pass, spp, sampleBase, sampleCount;  // particles: sampleBase is the low word of the first index
     uint seedLo, seedHi, width, height;
     uint flags, baseHi, pad0, pad1;
+    uint4 extra;  // integrator-specific (SPPM: wavelength rotation, alpha, radius scale, pixel angle)
 };
 
 [[vk::push_constant]] ConstantBuffer<PushConstants> pc;
@@ -127,14 +143,20 @@ struct PushConstants {
 [[vk::binding(12, 0)]] RWStructuredBuffer<PixelState> g_pixels;
 // Particle splats: per pixel and XYZ channel, kSplatBins exact 64-bit fixed-point bins (lo, hi words).
 [[vk::binding(13, 0)]] RWStructuredBuffer<uint> g_splat;
-// Particle statistics of a pass: paths, segments, inconsistencies, leaks as 64-bit (lo, hi) words.
+// Statistics of a pass: paths, segments, inconsistencies, leaks as 64-bit (lo, hi) words (particles),
+// then the first region inconsistency (transport.slang's noteInconsistency).
 [[vk::binding(14, 0)]] RWStructuredBuffer<uint> g_counters;
 // Top-level leaf entries → boundary records (world boundaries, then mesh groups).
 [[vk::binding(15, 0)]] StructuredBuffer<uint> g_top;
+// Images (gpu_scene.hpp): a header (offset, width, height, flags) per image, then the texels.
+[[vk::binding(23, 0)]] StructuredBuffer<uint> g_texels;
+// Smooth meshes' shading normals (gpu_scene.hpp): three octahedral words per smooth triangle.
+[[vk::binding(24, 0)]] StructuredBuffer<uint> g_normals;
 #ifdef OWE_RAY_QUERY
 // The same top-level entries as hardware acceleration structures (gpu_accel.hpp); instance IDs
-// are boundary records, masks separate matter from null boundaries.
-[[vk::binding(16, 0)]] RaytracingAccelerationStructure g_scene;
+// are boundary records, masks separate matter from null boundaries. Binding 32, above every
+// kernel's storage buffers (integrators add their own from 16).
+[[vk::binding(32, 0)]] RaytracingAccelerationStructure g_scene;
 static const uint kMaskMatter = 1, kMaskNull = 2;
 #endif
 

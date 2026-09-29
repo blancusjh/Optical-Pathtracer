@@ -17,7 +17,7 @@ TEST(gpu_scene_layout_is_flat_and_aligned) {
     static_assert(sizeof(gpu::GTriangle) == 48);
     static_assert(sizeof(gpu::GMedium) == 48);
     static_assert(sizeof(gpu::GSpectrum) == 32);
-    static_assert(sizeof(gpu::GOptics) == 80);
+    static_assert(sizeof(gpu::GOptics) == 112);
     static_assert(sizeof(gpu::GLight) == 16);
     static_assert(sizeof(gpu::GGlobals) % 16 == 0);
     Scene sc = loadScene("scenes/the_telescope.owe");

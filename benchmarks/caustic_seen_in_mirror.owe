@@ -1,0 +1,17 @@
+# BENCHMARK caustic_seen_in_mirror — a lens caustic on a white floor (sun overhead, f = 100 mm N-BK7
+# lens 100 mm up) seen only in a vertical flat mirror (reflectance 0.9): the path
+# light → lens → floor → mirror → eye, which neither path tracing nor particles connected to the
+# eye can sample. SPPM's image of it equals the direct view times 0.9
+# (tests/test_references.cpp: sppm_sees_a_caustic_through_a_glass_plate_and_in_a_mirror).
+# Measurement: Eye (radiance, 320×320, fixed exposure −9 EV).
+units = mm
+world { sun { elevation = 90deg  azimuth = 0deg  luminance = 1.2e5 } }
+material floor   { type = diffuse  reflectance = 0.5 }
+material coating { type = mirror  reflectance = 0.9 }
+body Floor  { type = sheet  size = (300, 300)  position = (0, 0, 0)  material = floor }
+body Lens   { type = lens  medium = N-BK7  focal = 100  form = bi  diameter = 40  thickness = 8  rim = black
+              position = (0, 0, 100)  axis = (0, 0, 1) }
+body Mirror { type = flat_mirror  size = (80, 80)  position = (250, 0, 125)  axis = (-1, 0, 0)  up = (0, 0, 1)  material = coating }
+observer Eye { position = (200, 0, 150)  look_at = (500, 0, 0)  up = (0, 0, 1)  fov = 10deg  pupil = 2  focus = 335
+               resolution = (320, 320)  exposure = -9 }
+render { detector = Eye  spp = 1024  integrator = sppm }

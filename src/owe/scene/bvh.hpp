@@ -78,8 +78,6 @@ public:
     }
 
 private:
-    uint32_t buildRecursive(const std::vector<AABB>& b, const std::vector<Vec3>& c, uint32_t begin, uint32_t end,
-                            uint32_t maxLeaf, int depth);
     std::vector<BvhNode> nodes_;
     std::vector<uint32_t> order_;
 };

@@ -78,6 +78,12 @@ inline Vec2 sampleUniformDiskConcentric(double u1, double u2) {
     return {r * std::cos(phi), r * std::sin(phi)};
 }
 
+// Two independent standard normal deviates (Box–Muller).
+inline Vec2 sampleStandardNormal2(double u1, double u2) {
+    double r = std::sqrt(-2 * std::log(1 - u1)), phi = 2 * Pi * u2;
+    return {r * std::cos(phi), r * std::sin(phi)};
+}
+
 inline Vec3 sampleCosineHemisphere(double u1, double u2) {
     Vec2 d = sampleUniformDiskConcentric(u1, u2);
     double z = safeSqrt(1 - d.x * d.x - d.y * d.y);

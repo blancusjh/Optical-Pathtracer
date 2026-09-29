@@ -110,9 +110,10 @@ class Mesh:
 
 
 class Model:
-    def __init__(self, name, terrain=True, variants=()):
+    def __init__(self, name, terrain=True, variants=(), folder=''):
         # variants: other scenes built in the same room, which share this crafted section.
-        self.name, self.terrain, self.variants = name, terrain, variants
+        # folder: the scene's group under scenes/ (scenes/glass/...), '' for scenes/ itself.
+        self.name, self.terrain, self.variants, self.folder = name, terrain, variants, folder
         self.meshes=defaultdict(Mesh)
         self.colors={}
         self.rng=random.Random(7301)
@@ -150,11 +151,12 @@ class Model:
             pos='on_terrain("Ground", 0, 0, 0)' if self.terrain else '(0, 0, 0)'
             scale=' scale = 1000' if self.name=='optical_bench' else ''
             finish='medium = N-BK7 closed = true' if name=='Window_glass' else f'material = Crafted_{name}'
-            lines.append(f'body Crafted_{name} {{ type = mesh file = "../models/crafted/{stem}.obj" {finish} position = {pos}{scale} }}')
+            up='../'*(2 if self.folder else 1)
+            lines.append(f'body Crafted_{name} {{ type = mesh file = "{up}models/crafted/{stem}.obj" {finish} position = {pos}{scale} }}')
             total+=len(m.faces)
         lines.append('# END CRAFTED MODELS')
         for scene in (self.name,)+tuple(self.variants):
-            path=ROOT/'scenes'/f'{scene}.owe'
+            path=ROOT/'scenes'/self.folder/f'{scene}.owe'
             source=path.read_text()
             start=source.index('# BEGIN CRAFTED MODELS')
             end=source.index('# END CRAFTED MODELS')+len('# END CRAFTED MODELS')
@@ -460,7 +462,7 @@ def camera_obscura_floor():
     # Boards lie on the room's floor slab (top at z = 0), above the garden lawn (z = -0.001), which
     # stays hidden inside the slab: a board top level with the lawn would leave two coincident
     # surfaces for the renderer to choose between. The first row stops 0.5 mm short of the back wall.
-    m=Model('camera_obscura',False,variants=('camera_obscura_lens',))
+    m=Model('camera_obscura',False)
     boards=m.palette('Worn_floorboards',(.07,.047,.03),5,.1)
     for j in range(21):
         for i in range(3):
@@ -469,13 +471,11 @@ def camera_obscura_floor():
 
 
 def other_floors():
-    m=Model('the_statue',False)
-    paving(m,(-7,7,-7,7),-.001,cell=(.85,.6),name='Plaza_stone');m.save()
     camera_obscura_floor()
     # The telescope's slope-grounded terrain/forest is owned by build_landscapes.py.
     # Joinery for close-up demonstrations: board tops stay at the old support plane.
-    for scene,width,depth,ycenter in (('the_lens',1.4,.9,0),('glass_of_water',1.2,.8,.1)):
-        m=Model(scene,False);rng=m.rng
+    for scene,folder,width,depth,ycenter in (('the_lens','',1.4,.9,0),('glass_of_water','glass',1.2,.8,.1)):
+        m=Model(scene,False,folder=folder);rng=m.rng
         wood=m.palette('Table_boards',(.42,.255,.13),6,.055)
         for j in range(6):
             wood[j].box((0,ycenter-depth/2+(j+.5)*depth/6,-.014),(width,depth/6-.0006,.028),.0006)
@@ -488,25 +488,10 @@ def other_floors():
             length=min(rng.uniform(.02,.14),width/2-x-.005)
             grain.polygon([(x,y,.000001),(x+length,y+.00008,.000001),(x+length*.3,y+.00022,.000001)])
         m.save()
-    m=Model('the_prism',False)
-    frame=m.part('Table_edge',(.06,.065,.07))
-    for x in (-.795,.795): frame.box((x,.2,-.018),(.025,1.6,.032),.004)
-    for y in (-.595,.995): frame.box((0,y,-.018),(1.6,.025,.032),.004)
-    m.save()
     m=Model('optical_bench',False)
     table=m.part('Bench_top',(.14,.145,.15));table.box((0,.20,-.070),(.48,.68,.04),.006)
     feet=m.part('Bench_feet',(.25,.27,.28))
     for y in (-.015,.415): feet.box((0,y,-.046),(.125,.043,.014),.003)
-    m.save()
-    m=Model('the_ghost',False);rng=m.rng
-    stone=m.palette('Curb_granite',(.27,.255,.24),5,.07)
-    for side in (-1,1):
-        for i in range(60):
-            rng.choice(stone).box((side*2.6,-29.5+i,.065),(.27,.98,.17),.02,wear=.008,rng=rng)
-    grit=m.palette('Road_aggregate',(.115,.117,.12),4,.16)
-    for _ in range(7500):
-        x=rng.uniform(-2.4,2.4);y=rng.uniform(-10,30);r=rng.uniform(.006,.018)
-        rng.choice(grit).polygon([(x-r,y-r,.0005),(x+r,y-r,.0006),(x,y+r,.0015)])
     m.save()
 
 

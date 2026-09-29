@@ -7,11 +7,16 @@
 // as soon as its path ends (path regeneration) was ~5% faster with hardware traversal, but the
 // interleaved loop is miscompiled by at least one driver (Mesa's Intel compiler loses the device),
 // so samples run one after another.
+//
+// Groups are 16×16 pixels: the driver gives a kernel a register budget from its group size, and
+// 256 threads get 128 registers per thread (64 threads get 168), so more threads stay resident to
+// hide memory and traversal latency. The small spill this costs is the better trade (~5% on
+// hardware traversal, ~7% on software, measured on an RTX 4060).
 #include "detector.slang"
 #include "transport.slang"
 
 [shader("compute")]
-[numthreads(8, 8, 1)]
+[numthreads(16, 16, 1)]
 void main(uint3 tid : SV_DispatchThreadID) {
     if (tid.x >= pc.width || tid.y >= pc.height) return;
     const uint pixel = tid.y * pc.width + tid.x;
@@ -38,9 +43,10 @@ void main(uint3 tid : SV_DispatchThreadID) {
         Wavelengths wl = Wavelengths.sample(u - floor(u));
         float px = float(tid.x) + rng.uniform();
         float py = float(tid.y) + rng.uniform();
+        float2 f = filterOffset(rng);
         float3 o, d;
         float weight;
-        if (!generateRay(px, py, rng, o, d, weight) || weight <= 0) continue;
+        if (!generateRay(px + f.x, py + f.y, rng, o, d, weight) || weight <= 0) continue;
         PathState path = startPath(o, d, globals().det.x, wl, weight);
         stats.x++;
         while (stepPath(path, rng, stats)) {}
