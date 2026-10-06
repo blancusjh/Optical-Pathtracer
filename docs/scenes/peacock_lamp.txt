@@ -1,0 +1,188 @@
+THE PEACOCK LAMP — scene/material handoff, 5 October 2026
+
+Deliverables
+  scenes/the_peacock_lamp.owe — desired future-material scene, unchanged by previews.
+  models/crafted/the_peacock_lamp.gltf — scan node selection, source geometry/UV intact.
+  previews/peacock_lamp.py — preparation, physical stand-ins, bounded GPU renders.
+  out/scenes/peacock_lamp/{layout,lit}.owe — runnable stand-in scenes.
+  out/scenes/peacock_lamp/photometry.json — reproducible scale calculations.
+  out/scenes/peacock_lamp/structure.log — successful stand-in ontology inspection.
+  out/scenes/peacock_lamp/layout_room_vcm_17.log — actual GPU failure.
+  No PNGs: no hardware GPU is exposed. Visual acceptance and critique remain pending.
+
+Art direction
+  Wright, A Philosopher Lecturing on the Orrery (1766): light as the focal subject.
+  La Tour, Magdalene with the Smoking Flame (c. 1642–44): single-source restraint.
+  Hammershoi, Interior with Young Woman Seen from the Back (1903–04): quiet planes.
+  First notice the shade's amber eyes and teal feather barbs. Then notice its softly
+  coloured light on warm grey plaster. Last read the desk and bindings in shadow.
+  A folio anchors the foreground, the lamp sits in the middle ground, the panelling
+  and black window close the background. All eyes are level: plumb verticals.
+  Room 56deg; Shade 30deg; Wall 54deg; optional Window 60deg (engine vertical FOV).
+  White balance 3000K preserves some 2100K warmth rather than neutralising the lamp.
+  The three painted references establish intent; no rendered visual match is claimed.
+
+Lamp evidence and choices
+  CMA: https://www.clevelandart.org/art/2018.281
+  Current record: c. 1902, Clara Wolcott Driscoll / Tiffany Studios. 65cm overall,
+  48cm diameter. Original kerosene reservoir/double-wick/chimney AND electric
+  armature survive. This is an electric configuration, not a claim of a later
+  conversion. The scan shows three bulbs, a dismantled oil assembly lying beside
+  the base, a display ground and nearly coincident Shade/Inner/Shell surfaces.
+  The selected glTF removes the ground, the separate oil apparatus and duplicate
+  shade surfaces from active scene traversal; its accessors/buffers stay unchanged.
+  Parts selected by the scene: Lamp_Material (copper conductor with UV patina),
+  Shade, Bulb_Glass (crown dielectric), Filament_Material (dark metal ferrules).
+  The ferrule parts are chunky supports, not fine hot filaments. A geometric
+  3mm-radius, .08mm-wire carbon loop inside the first bulb is the one real emitter.
+  Two sockets are unlit, an explicit scene choice. No emissive shade/shell/bulb,
+  no supplementary lights, no glTF emission factors adopted from the viewer.
+  fit_height=65cm measures the same selected whole model for every part; the
+  resulting shade diameter is about 47.5cm, consistent with the museum's 48cm.
+
+  Carbon temperature: 2100K, based on NBS Museum working-standard description:
+  https://nvlpubs.nist.gov/nistpubs/Legacy/IR/nbsir76-1125.pdf
+  Rating: choose the 4 mean-horizontal candlepower carbon bulb listed in Table 3:
+  https://www.govinfo.gov/content/pkg/GOVPUB-C13-4ed3e0af3f8fbdbed1c8f03c529b9581/pdf/GOVPUB-C13-4ed3e0af3f8fbdbed1c8f03c529b9581.pdf
+  That specification gives mean spherical / horizontal intensity = .825.
+  Approximate historical candles as cd: flux = 4*.825*4*pi = 41.469 lm.
+  Therefore 16cp is ~165.88lm, not ~50lm; ~50 is its wattage (16*3.1 W).
+  These sources establish period possibilities, not this object's actual bulb rating.
+  Loop radiance Y = flux/(pi*area*14713) = 94.689477 scene units.
+  Area is 4*pi^2*.003*.00008 = 9.47482e-6 m2 (analytic torus; the polygon mesh
+  approximates this area, giving a small discretisation error in luminous flux).
+
+Stained-glass syntax: common contract with the chapel
+  Inspected scenes/the_chapel.owe. Its actual syntax is:
+    type = stained_glass
+    transmittance = image("...", mapping = uv)
+    gain = ... density = ... thickness = 3mm index = constant(1.52) haze = 0
+    glass_mask = image("...", mapping = uv) mask_threshold = .5
+    stone_material = ...
+  This lamp now uses the SAME type, transmittance, gain, density, thickness, index
+  and haze spellings. The lamp adds reflectance, reflection_scale and roughness;
+  haze=.90 specifies the opalescent limit. Masks/stone delegation are unnecessary
+  because Shade is already a separate part, with lead encoded as dark texels.
+  Earlier draft called these transmission_scale and diffuse_transmission. Final
+  scene adopts gain and haze to avoid a competing syntax. Chapel defaults remain
+  haze=0, no diffuse reflection, roughness=0; its straight transmission is preserved.
+
+  Normative lamp proposal (wavelength by wavelength; reciprocal, two-sided slab):
+  * transmittance supplies normal INTERNAL tau, sRGB decoded to linear reflectance
+    spectra, not emitted radiance. tau0=clamp(gain*image_spectrum,0,1)^density.
+    Defaults gain=1, density=1, thickness=3mm. density scales optical depth.
+    tau0 is specified THROUGH thickness, so thickness is descriptive/reference
+    thickness, not a second absorption multiplier. Other thicknesses require new
+    tau0/density. This is an ideal thin slab without positional ray displacement.
+  * index is the glass refractive index. At incident angle theta, Snell gives
+    theta_t; tau=tau0^(1/abs(cos(theta_t))). Fresnel reflection at BOTH faces,
+    with incoherent infinite inter-reflections. For symmetric air surroundings:
+      Ts=(1-F)^2*tau/(1-F^2*tau^2)
+      Rs=F + (1-F)^2*F*tau^2/(1-F^2*tau^2)
+    Use continuous limiting values at grazing incidence. No medium stack entry.
+  * haze=h in [0,1] sends (1-h)*Ts straight through, and h*Ts into a cosine-weighted
+    hemisphere on the opposite face: normalized Lambertian diffuse transmission.
+    h is constant, symmetric front/back and reciprocal; h=0 clear cathedral glass,
+    h=1 fully opalescent transmission. It redistributes power, never generates it.
+    This is a surface transport closure, not a scattering world/volume medium;
+    VCM must classify the diffuse branch as connectable and mergeable.
+  * reflectance supplies the diffuse reflected COLOUR, rho=reflection_scale*image
+    spectrum. Rdiff=(1-Rs-Ts)*clamp(rho,0,1); remaining budget is absorbed. This
+    allocation guarantees Rs+Ts+Rdiff<=1 at every wavelength/angle. Both faces
+    use the same rho unless a future back_reflectance override is explicitly given.
+    With rho=0 there is only Fresnel reflection, preserving the chapel model.
+  * roughness broadens the specular reflection lobe using a reciprocal normalized
+    GGX closure; it must not silently convert the straight branch to a refracted
+    thick-solid ray. roughness=0 is the chapel limit. Neither haze nor roughness
+    changes total branch power. All branches participate in MIS and photon transport.
+  * Black lead texels give tau~0 and rho~0, absorbing rather than emitting. This
+    scan's lead is photographic, so residual highlights are a known approximation.
+  * Mask semantics, where needed by the chapel, delegate masked-out stone to its
+    opaque material; do not interpret stone as low-transmission glass.
+
+Lit versus unlit appearance / texture audit
+  Shade_baseColor.png, Shade_emissive.jpeg and Shell_baseColor.png largely repeat
+  the SAME photographed atlas; one island is markedly brighter than the other.
+  Inner_baseColor.jpeg is another photograph with a different UV layout. It is
+  not a registered unlit reflection measurement for the Shade mesh.
+  Shade_transmission.png is a packed glTF scalar transmission-channel mask with
+  cyan RGB, not a measured RGB transmission spectrum. The emissive map is a
+  viewer presentation aid, not the source of the lamp's real radiance.
+  Accordingly the scene uses ONE Shade colour atlas with independent strengths
+  gain=.55 and reflection_scale=.18, plus haze=.90. An unlit view gets coloured
+  diffuse reflection and Fresnel reflection; an internally lit view also receives
+  diffuse coloured transmission. Light-state changes do not switch images.
+  This is an explicitly uncalibrated material estimate. No evidence justifies two
+  independent measured textures, or treating the bright atlas as measured tau.
+  Baked highlights/unequal capture brightness cannot be recovered from this scan.
+  Better measurements would replace the two material inputs without changing syntax.
+
+Photometry: estimates, not measurements
+  Same scale as the Observatory: 14713 photometric SI units per scene Y, anchored
+  to its solar normal irradiance (6.7967 scene units for 100000 lux).
+  Qwantani HDR upper-hemisphere solid-angle-weighted RGB Y=.890121381.
+  HDR scale 7.635711866e-9 -> target upper-sky luminance 0.0001 cd/m2.
+  This normalizes an uncalibrated photograph to a chosen moonless-night luminance,
+  not a claim that Poly Haven delivered a photometrically calibrated HDR file.
+  The engine's spectral RGB reconstruction makes the RGB normalization approximate.
+  Sky background through crown window glass ~0.000092 cd/m2, direction-dependent;
+  reflection of the room in the glass is additional, physically legitimate radiance.
+  At a .55m lamp-to-wall distance, bare isotropic equivalent intensity is 3.3cd.
+  With wall rho=.52, unfiltered upper-bound luminance is rho*3.3/(pi*.55^2)=1.81cd/m2.
+  If local directional throughput of the shade is .05–.30, direct-wall luminance is
+  .09–.54cd/m2; shadows lower, interreflection adds. Around 1m, .027–.164cd/m2.
+  Thus nearby wall highlights are of order tenths to one cd/m2; a uniform 1cd/m2
+  room is not justified by this dim lamp and dark wood. Actual throughput is unknown.
+  Ceiling is farther away and dimmer. Haze changes the angular distribution, so
+  these inverse-square figures are only a sanity envelope, not a transport result.
+
+  Observer    exposure(log2 gain)    white balance     design purpose
+  Room        +11.4                 3000K            room and glowing shade
+  Shade       +6.5                  3000K            preserve transmitted feather colour
+  Wall        +12.4                 3000K            soft wall/ceiling accent
+  Window      +25.0                 none             sky-adapted optional eye
+  At Room gain a 1cd/m2 wall maps to ~.184 pre-tonemap Y; 0.0001 sky maps to
+  ~1.84e-5 (ratio 10000, 13.29 stops). It should appear black. At Window gain the
+  sky maps to ~.228, while the same 1cd/m2 wall would map to ~2281 and saturate.
+  Shade luminance and the suitability of +6.5 must be measured once transport exists.
+  The scratch layout turns the carbon loop off and uses gain +25 for all eyes,
+  viewing the diffuse stand-in in the existing physical sky light. It is a
+  sky-adapted scale/layout check, not the intended illuminated-room exposure.
+  The lit scratch has an opaque diffuse shade: it cannot show glass glow or wall
+  colour. Do not judge the missing optical effect or claim its noise from it.
+
+Previews, validation, timings and hardware
+  python previews/peacock_lamp.py --prepare-only
+  python previews/peacock_lamp.py --mode layout --views Room Shade Wall
+  python previews/peacock_lamp.py --mode lit --views Room --compare
+  Every render invokes build/owe render ... --backend gpu --resolution 320x200
+  --spp 16. A 115s process limit keeps individual trials under two minutes.
+  --compare warms both pipelines, then compares two independent VCM estimates
+  against averages of path batches at approximately equal wall-clock budgets
+  (overshoot <= one path batch). It saves timings and pair-difference XYZ noise
+  RMS; loading/output count toward time, compilation warmup does not. This does
+  not measure estimator bias. Stand-in transport is not stained-glass transport.
+  Actual first trial: layout Room VCM, 3.326s, exit 2, no image.
+  Peak VRAM: unavailable; nvidia-smi cannot reach a driver, /dev/dri is absent.
+  Equal-time VCM/path noise comparison: unavailable, no transport could run.
+  Stand-in info command successfully loads geometry, UV and all four observers.
+  Both generated glTF selections share one scale/origin and exclude duplicate shade
+  surfaces. No engine code, existing scene, tests or build artifacts were edited.
+
+Concrete critique loop status
+  No render succeeded, so there is no PNG to open and no honest post-preview
+  critique. Pending checks: (1) desk/book foreground balance and frame clearance,
+  (2) shade colour retention vs wall separation at physical flux, (3) whether the
+  bronze patina remains a metal at preview resolution. Adjust geometry/materials/
+  manual exposure in response, then record three specific critiques after EACH
+  successful preview. Never substitute a CPU image or declare visual acceptance now.
+
+Engine/environment problems (no fixes made)
+  1. Missing required surface model. Repro:
+     ./build/owe info scenes/the_peacock_lamp.owe --backend gpu
+     -> line 31: unknown material type 'stained_glass'.
+  2. Hardware unavailable in this workspace (environment, not demonstrated engine bug).
+     Repro: ./build/owe render out/scenes/peacock_lamp/layout.owe --backend gpu
+       --detector Room --resolution 320x200 --spp 16 --integrator vcm
+       --out out/scenes/peacock_lamp/repro
+     -> gpu backend unavailable: no Vulkan device found.
