@@ -34,6 +34,7 @@ const char* opticsColor(SurfaceType t) {
         case SurfaceType::Conductor: return "#7d7d7d";
         case SurfaceType::Detector: return "#1f8a4c";
         case SurfaceType::Null: return "#c8c8c8";
+        case SurfaceType::StainedGlass: return "#8a3fa0";
     }
     return "#000";
 }

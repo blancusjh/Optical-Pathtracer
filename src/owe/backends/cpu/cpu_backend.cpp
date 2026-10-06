@@ -215,6 +215,9 @@ public:
     std::vector<std::string> integrators() const override { return {"path", "light", "hybrid"}; }
     std::unique_ptr<Renderer> createRenderer(const Scene& scene, int detectorIndex,
                                              const RenderSettings& settings) const override {
+        for (const SurfaceOptics& o : scene.world.optics())
+            if (o.type == SurfaceType::StainedGlass)
+                throw std::runtime_error("material '" + o.name + "' is stained glass, which only the GPU backend renders (--backend gpu)");
         return std::make_unique<CpuRenderer>(scene, detectorIndex, settings);
     }
 };

@@ -273,6 +273,11 @@ void traceSppmPhoton(inout Wavelengths wl, uint group, inout Rng rng, inout uint
             if (depth >= 4 * maxDepth) break;
             continue;
         }
+        if (surfType == kSurfStainedGlass && passStainedGlass(hit, d, wl, beta, rng)) {
+            o = offsetOrigin(hit.p, hit.n, d, hit.scale);
+            if (depth >= 4 * maxDepth) break;
+            continue;
+        }
         if (surfType == kSurfDetector || surfType == kSurfAbsorber) break;
         HitInterface hi = makeInterface(hit, hero);
         if (!hi.it.optics.isDelta() && events >= 1) useful = gatherPhoton(hit, d, beta, wl, group) || useful;

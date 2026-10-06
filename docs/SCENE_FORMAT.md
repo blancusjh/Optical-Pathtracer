@@ -113,7 +113,9 @@ at night, when the sun lights only the Moon and planets and the candles need the
 ### `body Name { type = … }`
 
 A transparent body takes `medium = …` (its surfaces are Fresnel interfaces, `roughness = α`
-for frosted glass); an opaque one takes `material = …`. Any solid can emit:
+for frosted glass; `surface = null` for a medium matched to its surroundings, such as haze or smoke
+in air, whose boundary only changes the region, so light and shadow rays cross it); an opaque one
+takes `material = …`. Any solid can emit:
 `emission = <spectrum>`, `emission_sides = front | back | both`. `in = Name` places a body inside
 another body's transparent medium (stones under water), defined earlier.
 

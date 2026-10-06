@@ -34,6 +34,9 @@ enum ShapeKind : uint32_t {
     kShapeTorus = 10,    // torus patch (lathe profile fillets)
 };
 constexpr uint32_t kGpuNone = 0xFFFFFFFFu;
+// Boundaries a shadow ray crosses rather than stops at (it then walks the segment in order): null
+// boundaries and stained glass, whose straight transmission attenuates it.
+inline bool passable(SurfaceType t) { return t == SurfaceType::Null || t == SurfaceType::StainedGlass; }
 constexpr uint32_t kNodeInner = 0x80000000u;
 
 struct alignas(16) GNode {  // BVH node; inner: a = right child (left is next), b = kNodeInner | axis
