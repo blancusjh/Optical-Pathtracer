@@ -1,0 +1,107 @@
+# THE INVISIBLE WINDOW — a cabinet of optics; light carries the picture.
+# Art references (light, palette and restraint, not depicted content):
+# Johannes Vermeer, Woman Holding a Balance, c.1664, National Gallery of Art:
+# https://www.nga.gov/artworks/1236-woman-holding-balance
+# Vilhelm Hammershoi, Interior, Sunlight on the Floor, 1906, Tate N04509:
+# https://www.tate.org.uk/art/artworks/hammershoi-interior-sunlight-on-the-floor-n04509
+# Intent: the luminous Sacred Heart is first; a dark walnut shutter anchors the
+# near plane, the empty stone chamber holds the middle, and white plaster receives
+# the light. Warm mineral neutrals, subdued walnut, daylight white balance 5800K.
+# No stained image or target texture is present anywhere in this scene.
+# Source: assets/caustic_panel/cristo-vidriera.jpg supplied locally. Photographer,
+# source, church and licence UNKNOWN. Not cleared for the README gallery.
+# Cropped lancet is about 1:2.91, not 2:3; the supplied photo cuts off its foot.
+# Product FROZEN: models/caustic/sacred_heart_panel.obj and .json.
+# One-time solver: Dylan Missuwe (MIT), Yue et al. TOG 2014. See sidecar for
+# version, patches, linear target, timings, resolution and SHA-256.
+# Dimensions 0.300000012 x 0.874218785 m; minimum web 0.012000000 m;
+# maximum thickness 0.025616480 m; design throw 1.200000000 m.
+# Design n=1.492818522874 at 546.074 nm,
+# engine PMMA. Back local z=0, relief toward +z; normal collimated incidence.
+# The receiving surface is x=1.2256164802, exactly highest relief + throw.
+# Scene uses only this product. A changed size or throw requires a new Phase A.
+# Sun radiance gives 120000 lux direct-normal illuminance (5778 K).
+# Real sun diameter 0.53deg. Geometric blur at the screen is about
+# 11.10 mm, accepted; spectral PMMA may make faint fringes.
+# 's Gravesande's 18th-century heliostat supplies the optical arrangement;
+# the engineered PMMA pane is the explicitly contemporary experiment.
+# Clear air has no visible beam: Room shows its endpoints and optical alignment.
+# Sensor check was made ONCE; its upper-centre post shadow exposed an
+# incorrectly centred cylinder. The post base and pivot were corrected afterward;
+# no sensor rerun. See out/scenes/invisible_window/sensor_comparison.json.
+# The original check also used a dimmer sun; radiance was corrected afterward
+# without changing the spectrum or geometry of the sunlight.
+# Check reproduction (original post base was z=0.55 and height=1.10): build/owe render scenes/the_invisible_window.owe --backend gpu
+# --device 1 --detector Check --integrator light --resolution 320x200 --spp 32
+# --out out/scenes/invisible_window/sensor
+units = m
+world { sun { elevation = 90deg azimuth = 0deg luminance = 1785615664.1164162159 angular_diameter = 0.53deg } }
+
+material lime { type = diffuse reflectance = rgb(0.82, 0.805, 0.77)
+                 relief = noise(scale = 4mm, depth = 0.07mm) }
+material stone { type = diffuse texture = noise(a = rgb(0.50, 0.48, 0.435), b = rgb(0.45, 0.43, 0.385), scale = 6cm)
+                  relief = noise(scale = 12mm, depth = 0.25mm) }
+material walnut { type = diffuse texture = wood(a = rgb(0.10, 0.078, 0.052), b = rgb(0.064, 0.051, 0.034), scale = 5mm, turbulence = 0.25) relief = noise(scale = 7mm, depth = 0.08mm) }
+material endgrain { type = diffuse reflectance = rgb(0.085, 0.065, 0.04) }
+material brass { type = conductor metal = copper tint = rgb(0.66, 0.55, 0.30) roughness = 0.16 }
+material silver { type = conductor metal = silver roughness = 0 }
+
+# A small, shuttered stone chamber. Its closed roof excludes direct overhead sun.
+body Floor { type = box size = (1.425616480, 2.50, 0.12) position = (0.612808240, 0, -0.06) material = stone }
+body Ceiling { type = box size = (1.305616480, 2.50, 0.12) position = (0.652808240, 0, 2.06) material = stone }
+# A side doorway frames Room; overhead sunlight still meets the closed roof.
+body DoorNearJamb { type = box size = (0.16, 0.12, 2.0) position = (0.02, -1.25, 1.0) material = stone }
+body DoorFarJamb { type = box size = (0.16, 0.12, 2.0) position = (1.225616480, -1.25, 1.0) material = stone }
+body DoorLintel { type = box size = (1.265616480, 0.12, 0.22) position = (0.612808240, -1.25, 1.89) material = stone }
+body RightWall { type = box size = (1.425616480, 0.12, 2.0) position = (0.612808240, 1.25, 1.0) material = stone }
+# The whole receiving wall is plaster, not a mounted picture. Check sits flush
+# in the wall opening; its diffuse material is physically visible to observers.
+body WallL { type = box size = (0.08, 1.099999994, 2.0) position = (1.2656164802, -0.700000003, 1.0) material = lime }
+body WallR { type = box size = (0.08, 1.099999994, 2.0) position = (1.2656164802, 0.700000003, 1.0) material = lime }
+body WallBelow { type = box size = (0.08, 0.300000012, 0.662890608) position = (1.2656164802, 0, 0.331445304) material = lime }
+body WallAbove { type = box size = (0.08, 0.300000012, 0.462890608) position = (1.2656164802, 0, 1.768554696) material = lime }
+sensor Check { size = (0.300000012, 0.874218785) position = (1.2256164802, 0, 1.1)
+               axis = (-1, 0, 0) up = (0, 0, 1) material = lime resolution = (240, 699)
+               white_balance = 5800K tone = standard }
+
+# Four shutter leaves make one exact rectangular clear opening. No photographic
+# mask: the inverse design directs flux out of the corners above the arch.
+body ShutterL { type = box size = (0.06, 1.099999994, 2.0) position = (-0.031, -0.700000003, 1.0) material = walnut }
+body ShutterR { type = box size = (0.06, 1.099999994, 2.0) position = (-0.031, 0.700000003, 1.0) material = walnut }
+body ShutterBelow { type = box size = (0.06, 0.300000012, 0.662890608) position = (-0.031, 0, 0.331445304) material = walnut }
+body ShutterAbove { type = box size = (0.06, 0.300000012, 0.462890608) position = (-0.031, 0, 1.768554696) material = walnut }
+body Panel { type = mesh file = "../models/caustic/sacred_heart_panel.obj"
+              medium = PMMA closed = true normals = file
+              position = (0, 0, 1.1) axis = (1, 0, 0) up = (0, 0, 1) }
+# Thin inside retaining slips sit beside, never over, the illuminated clear area.
+body FrameL { type = box size = (0.014, 0.025, 0.924218785) position = (0.008, -0.163000006, 1.1) material = endgrain }
+body FrameR { type = box size = (0.014, 0.025, 0.924218785) position = (0.008, 0.163000006, 1.1) material = endgrain }
+body FrameBelow { type = box size = (0.014, 0.300000012, 0.025) position = (0.008, 0, 0.650390608) material = endgrain }
+body FrameAbove { type = box size = (0.014, 0.300000012, 0.025) position = (0.008, 0, 1.550109392) material = endgrain }
+
+# Flat heliostat outside the shutter; its illuminated footprint slightly exceeds
+# the panel, including the true solar disc. Silver is a reflecting surface.
+body Heliostat { type = flat_mirror size = (0.335000012, 1.292900604)
+                  position = (-0.522109392, 0, 1.1) axis = (1, 0, 1) up = (-1, 0, 1) material = silver }
+body MirrorBacking { type = box size = (0.355000012, 1.321184876, 0.016)
+                      position = (-0.534109392, 0, 1.088000000) axis = (1, 0, 1) up = (-1, 0, 1) material = walnut }
+body MirrorStand { type = cylinder radius = 0.027 height = 1.055000000
+                    position = (-0.562109392, 0, 0.045) material = walnut }
+body MirrorFoot { type = box size = (0.34, 0.40, 0.045) position = (-0.562109392, 0, 0.0225) rotate = (0, 0, 4deg) material = walnut }
+body MirrorPivot { type = cylinder radius = 0.017 height = 0.370000012
+                    position = (-0.562109392, -0.185000006, 1.100000000) axis = (0, 1, 0) material = brass }
+
+body ExteriorStone { type = box size = (0.40, 0.46, 0.08) position = (-0.562109392, 0, -0.04) material = stone }
+
+# GPU SPPM forms these specular-to-diffuse paths without the VCM cache.
+# VCM preview overflow and boundary-contact diagnostics are recorded in out/.
+# All views are level, with plumb verticals. The hero is an oblique catalogue
+# detail of the banderole, face and hands in light on plaster. Room includes
+# the complete lancet and both optical endpoints.
+observer Wall { position = (0.55, -0.21, 1.245) look_at = (1.2256164802, 0.025, 1.245) up = (0, 0, 1)
+                fov = 35deg pupil = 2mm focus = 0.715 resolution = (640, 400) white_balance = 5800K exposure = -17 }
+observer Room { position = (0.576039746, -1.75, 0.85) look_at = (0.551527416, 0, 0.85) up = (0, 0, 1)
+                fov = 58deg pupil = 3mm focus = 1.85 resolution = (640, 400) white_balance = 5800K exposure = -14 }
+observer Panel { position = (-0.42, -0.45, 1.10) look_at = (0.008, 0, 1.10) up = (0, 0, 1)
+                 fov = 35deg pupil = 2mm focus = 0.616 resolution = (640, 400) white_balance = 5800K exposure = -12.5 }
+render { detector = Wall integrator = sppm spp = 32 photons = 16 max_depth = 10 }
