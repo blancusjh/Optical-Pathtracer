@@ -148,7 +148,8 @@ glass as two bodies with `part =`, each with its own material; `model_up`, `fit_
 measure the whole model, so the parts stay together. The engine does not read glTF materials:
 give the body a material, and for a scan's photograph use
 `texture = image("textures/…_baseColor.jpeg", mapping = uv)` (the file beside the model).
-`owe` prints the parts and their images when a `part` name is wrong.
+`owe model <file>` lists a model's parts with their triangles, extents and images, and the paths a
+scene writes to load them; `owe` prints the parts too when a `part` name is wrong.
 
 Mesh shading normals: a mesh is flat by default, each triangle its own plane. `normals = smooth`
 gives every corner the angle-weighted mean normal of the triangles around its vertex that meet

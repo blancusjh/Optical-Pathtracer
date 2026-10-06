@@ -251,6 +251,7 @@ build/owe probe  scenes/the_lens.owe --pixel 320 110 --svg why.svg  # why is thi
 build/owe emit   scenes/prism_in_sunlight.owe --from -0.3,0,0.098 --dir 0.9816,0,-0.1908 --cone 0.25 --svg beam.svg
 build/owe lens   lenses/kepler_16x.lens --afocal --fields 0,0.3,0.6
 build/owe glass  N-SF11
+build/owe model  assets/sketchfab/<slug>/scene.gltf                 # a model's parts, sizes and textures
 build/owe info   scenes/the_telescope.owe                           # the world's ontology
 build/owe bench --backend gpu                                        # throughput on the canonical suite
 build/owe backends                                                   # what this build can run on
