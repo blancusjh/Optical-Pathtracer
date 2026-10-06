@@ -601,8 +601,8 @@ TEST(backends_agree_with_reference_on_diffuse_screens) {
     });
 }
 
-// A telescope at the eye (exit-pupil observer), a physical camera (surface sensor with pupil
-// aiming), and an extreme-scale view: Saturn at 1.28e12 m through a 150 mm refractor.
+// A telescope at the eye (exit-pupil observer), and an extreme-scale view: Saturn at 1.28e12 m
+// through a 150 mm refractor.
 TEST(backends_agree_with_reference_through_instruments_and_cameras) {
     forEachCandidate([](const std::string& backend) {
         struct Case {
@@ -612,7 +612,6 @@ TEST(backends_agree_with_reference_through_instruments_and_cameras) {
             double maxRelSe;  // Saturn among stars is a noisy image
         };
         for (Case c : {Case{"scenes/the_telescope.owe", "Eyepiece", 36, 24, 128, 0.02},
-                       Case{"scenes/the_temple.owe", "Cam", 36, 24, 128, 0.02},
                        Case{"scenes/the_observatory.owe", "SaturnEyepiece", 96, 64, 64, 0.03}}) {
             Scene sc = loadScene(c.scene);
             int det = sc.findDetector(c.detector);

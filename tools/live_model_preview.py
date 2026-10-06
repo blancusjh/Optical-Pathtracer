@@ -15,8 +15,7 @@ from mathutils import Vector
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "out" / "model-review"
 WATCH = {}
-VIEWS = {'temple':('Wide','Colonnade','OliveGrove','PrecinctEdge'),
-         'observatory':('Architecture','Room','Desk','Books','Carpet','Mechanism'),
+VIEWS = {'observatory':('Architecture','Room','Desk','Books','Carpet','Mechanism'),
          'telescope':('Landscape','Woodland','Naked','Beside')}
 LABELS = tuple(sys.argv[sys.argv.index('--scenes')+1].split(',')) if '--scenes' in sys.argv else tuple(VIEWS)
 
@@ -110,10 +109,6 @@ def refresh(label):
         cams['Carpet'] = camera(scene, 'Carpet', (2.3,-2.8,base+3.9), (.2,.2,base), math.radians(44))
         cams['Mechanism'] = camera(scene, 'Mechanism', (1.22,.63,base+2.55), (.40,.15,base+2.08), math.radians(46))
         scene.camera = cams['Architecture']
-    elif label == 'temple':
-        cams['OliveGrove'] = camera(scene, 'OliveGrove', (3,-15,base+3.2), (11,-4,base+2.5), math.radians(48))
-        cams['PrecinctEdge'] = camera(scene, 'PrecinctEdge', (-32,-19,base+2), (-19,13,base+2.5), math.radians(57))
-        scene.camera = cams.get('Wide') or next(iter(cams.values()))
     else:
         # Native Naked camera gives the unchanged terrain datum at the instrument.
         base=cams['Naked'].location.z-1.45

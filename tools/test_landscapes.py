@@ -30,9 +30,6 @@ class LandscapeTests(unittest.TestCase):
         t=self.terrain()
         self.assertEqual(t.protected(0,0),0)
         self.assertEqual(t.protected(450,0),0)
-        t.scene='the_temple'
-        for x,y in ((0,20),(-22,0),(22,48),(0,-12)):self.assertEqual(t.protected(x,y),0)
-        self.assertEqual(t.protected(-30,0),1)
         t.scene='the_observatory';self.assertEqual(t.protected(0,-8),0)
 
     def test_graded_grid_has_no_duplicate_edges(self):

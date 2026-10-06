@@ -122,9 +122,8 @@ latitude bands, radial rings). Architecture is built from lathe profiles, tori, 
 columns (entasis, echinus, abacus), boxes and prisms, placed in rows with `repeat`. Imported
 scans (OBJ) are reoriented (`model_up`, including a measured up vector), scaled to a physical
 height and stood on the ground; opaque imported meshes are shells with air on both sides, so
-museum scans with holes and mixed winding cause no region inconsistencies. `the_temple.owe`
-and `the_observatory.owe` are built this way. Detailed scene models — jointed paving, branching
-olives, cypresses and conifers, brick-and-stone architecture, bound books, a woven carpet,
+museum scans with holes and mixed winding cause no region inconsistencies. `the_observatory.owe`
+is built this way. Detailed scene models — branching conifers, brick-and-stone architecture, bound books, a woven carpet,
 engraved instruments, slope-grounded landscapes — are generated deterministically into `models/`
 by `tools/` and loaded as ordinary meshes; where a detailed relief replaces a procedural terrain,
 the terrain stays as a `reference_only` height field for placements, adding no overlapping matter.
@@ -147,15 +146,14 @@ matches the all-polished or all-rough sheet within 1%). A procedural relief (`re
 GPU) tilts the shading normal by the analytic gradient of its height; seen from above under a 30°
 sun, 4 × 4 pixel blocks match (ns·s)/(n·s) predicted from the reference's own noise within 1.2%
 (the relief varies them by 7.3%). Not yet:
-clouds, participating atmosphere over large scenes (`the_temple.owe` fakes distant haze with the
-sky's below-horizon colour).
+clouds, participating atmosphere over large scenes.
 
 **VIII. Instruments inside the world — done.** A camera is lens + housing + mounts + stop +
 sensor (`addPhysicalCamera`); `f_number` rescales the physical stop through the paraxial
 entrance pupil, and the sensor sits at the real best focus for the requested object distance.
 Sensor samples are drawn from a mixture: 85% aimed at the paraxial exit pupil (×1.3 margin),
 15% at the whole rear opening, weighted by the mixture density. Aiming at the pupil alone was
-measured to lose ~1.8% of the light at f/11 in `the_temple.owe` — the ghost and veiling light
+measured to lose ~1.8% of the light at f/11 with the 85 mm portrait lens — the ghost and veiling light
 of the uncoated lens leaves the rear element outside the pupil — so the mixture keeps it. A
 telescope is an assembly built from its prescription; observers are placed with
 `exit_pupil("Name")`; `the_observatory.owe` has three telescopes aimed at the Moon, Jupiter

@@ -2,7 +2,6 @@
 # Renders the canonical gallery into docs/gallery. Every image is accompanied by a JSON
 # record (scene hash, integrator, seed, samples, statistics) that makes it reproducible.
 # Usage: tools/render_gallery.sh [NAME...]   (no names: everything; ~3 h on four cores)
-# The temple's statue is a museum scan fetched by tools/fetch_assets.sh.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 OWE=${OWE:-build/owe}
@@ -29,10 +28,6 @@ r study_eyepiece      scenes/the_study.owe         --detector Eyepiece --spp 512
 r bench_sensor        scenes/optical_bench.owe     --spp 4000
 r bench_overview      scenes/optical_bench.owe     --detector Eye --integrator hybrid --spp 256
 r camera_obscura_wall scenes/camera_obscura.owe    --spp 512
-r temple_wide         scenes/the_temple.owe        --spp 512
-r temple_colonnade    scenes/the_temple.owe        --detector Colonnade --spp 512
-r temple_cam_f2       scenes/the_temple.owe        --detector Cam --spp 1024
-r temple_cam_f11      scenes/the_temple.owe        --detector Cam --spp 1024 --set Cam.f_number=11 --set "Cam.focus=25 m"
 r observatory_room    scenes/the_observatory.owe   --detector Room --spp 512
 r observatory_desk    scenes/the_observatory.owe   --detector Desk --spp 512
 r observatory_slit    scenes/the_observatory.owe   --detector Slit --spp 256

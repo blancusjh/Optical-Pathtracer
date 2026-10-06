@@ -431,7 +431,7 @@ TEST(camera_f_number_and_pupil_aim) {
     // f_number resizes the physical stop: the paraxial f-number of the built camera matches it.
     // Aiming sensor samples at the exit pupil (mixed with the whole rear opening) agrees with the
     // unaimed estimate within its noise. (A pupil-only aim is biased low by the ghost and veiling
-    // light that leaves the rear element outside the pupil: ~1.8% at f/11 in the_temple.owe.)
+    // light that leaves the rear element outside the pupil: ~1.8% at f/11 with the 85 mm portrait lens.)
     const char* scene = R"(
 units = m
 world { sky = uniform(rgb(0.5, 0.5, 0.5)) }

@@ -173,85 +173,6 @@ class Model:
             subprocess.run(['blender','--background','--factory-startup','-noaudio','--threads','4','--python-exit-code','1','--python',str(ROOT/'tools'/'bake_model_details.py'),'--',str(manifest)],check=True)
 
 
-def paving(model, bounds, top=.0, cell=(1.2,.82), name='Limestone', wells=()):
-    from scene_details import relief_slab
-    rng=model.rng
-    stones=model.palette(name,(.57,.52,.43),7,.055)
-    xmin,xmax,ymin,ymax=bounds
-    row=0; y=ymin
-    while y<ymax-.01:
-        h=min(cell[1]*rng.uniform(.87,1.13),ymax-y)
-        x=xmin-cell[0]*(.5 if row%2 else 0)
-        while x<xmax:
-            w=cell[0]*rng.uniform(.78,1.25)
-            left=max(x,xmin);right=min(x+w,xmax)
-            in_well=any(abs((left+right)/2-wx)<radius+(right-left)/2 and abs(y+h/2-wy)<radius+h/2 for wx,wy,radius in wells)
-            if right-left>.05 and not in_well:
-                relief_slab(rng.choice(stones),((left+right)/2,y+h/2,top-.055),(right-left-.014,h-.014,.11),rng,depth=.0015,n=8)
-            x+=w
-        row+=1;y+=h
-
-
-def temple():
-    from scene_details import natural_olive, natural_cypress
-    m=Model('the_temple'); rng=m.rng
-    planting=random.Random(710)
-    trees=[(-15+planting.uniform(-.6,.6),8+k*7.5,planting.uniform(10.4,12.8),110+k) for k in range(4)]
-    trees += [(15.5+planting.uniform(-.4,.4),11+k*9,planting.uniform(10,12),120+k) for k in range(3)]
-    wells=[(x,y,.48) for x,y,_,_ in trees]+[(11+k*5.5,-4-k*6,.80) for k in range(3)]
-    paving(m,(-22,22,-12,48),.012,wells=wells)
-    for x,y,h,seed in trees: natural_cypress(m,(x,y,0),h,seed)
-    for k in range(3): natural_olive(m,(11+k*5.5,-4-k*6,0),4.8-k*.24,140+k)
-    # Doric frieze: raised triglyphs, incised channels, regulae and guttae.
-    stone=m.part('Carved_marble',(.76,.72,.63)); shadow=m.part('Frieze_recess',(.45,.425,.37))
-    for y in (8.77,31.23):
-        for i in range(11):
-            x=-6.5+i*1.3
-            stone.box((x,y,8.68),(.42,.12,.84),.018)
-            for dx in (-.125,0,.125): shadow.box((x+dx,y+(-.067 if y<20 else .067),8.7),(.04,.012,.66),.004)
-            stone.box((x,y,8.18),(.52,.19,.09),.012)
-            for dx in (-.18,-.06,.06,.18): stone.branch([(x+dx,y,8.07),(x+dx,y,8.14)],[.025,.034],8)
-    for x in (-7.33,7.33):
-        for i in range(17):
-            y=9.6+i*1.3
-            stone.box((x,y,8.68),(.12,.42,.84),.016)
-            for dy in (-.125,0,.125): shadow.box((x+(-.067 if x<0 else .067),y+dy,8.7),(.012,.04,.66),.004)
-    # Roof tiles laid on both pitches; ridge caps and antefixes break the silhouette.
-    tiles=m.palette('Roof_terracotta',(.48,.285,.17),5,.065)
-    for side in (-1,1):
-        for j in range(42):
-            y=8.35+j*.558
-            for i in range(15):
-                x=side*(.26+i*.52)
-                z=11.685-abs(x)*.26795
-                # Slope follows the existing 150 degree gable exactly.
-                p1=(x-side*.25,y,z+.067);p2=(x+side*.25,y,z-.067)
-                rng.choice(tiles).polygon([p1,p2,add(p2,(0,.55,0)),add(p1,(0,.55,0))])
-                # Raised barrel seam down each tile strip.
-                seam=(x+side*.25,y,z-.067+.022)
-                tiles[(j+i)%5].branch([seam,add(seam,(0,.535,0))],[.029,.033],7)
-            tiles[j%5].branch([(0,y,11.75),(0,y+.53,11.75)],[.13,.13],10)
-    for side in (-1,1):
-        for j in range(25):
-            x=side*7.78;y=8.6+j*.94
-            stone.branch([(x,y,9.66),(x,y,9.92),(x,y,10.06)],[.095,.12,.01],9)
-    # Small tufts, leaf litter and rubble at the precinct margins.
-    grass=m.palette('Dry_grass',(.32,.32,.15),3,.12)
-    for _ in range(950):
-        x=rng.uniform(-24,24);y=rng.uniform(-14,50)
-        if abs(x)<21.65 and -11.7<y<47.7: continue
-        for _ in range(7): rng.choice(grass).leaf((x+rng.uniform(-.07,.07),y+rng.uniform(-.07,.07),.014),rng.uniform(.12,.32),.008,rng)
-    # Amphora handles, thick lips and foot rings.
-    clay=m.part('Amphora_handles',(.53,.275,.14))
-    for x in (-8.6,8.6):
-        for side in (-1,1):
-            clay.branch([(x+side*.10,7.2,1.05),(x+side*.31,7.2,1.03),(x+side*.37,7.2,.76),(x+side*.25,7.2,.61)],[.03,.04,.042,.04],12)
-        clay.ring((x,7.2,1.142),.113,.022)
-    from scene_details import detail_temple
-    detail_temple(m)
-    m.save()
-
-
 def observatory():
     m=Model('the_observatory');rng=m.rng
     bricks=m.palette('Handmade_brick',(.38,.19,.125),7,.035)
@@ -497,8 +418,7 @@ def other_floors():
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('scene',choices=['all','temple','observatory','floors'],default='all',nargs='?')
+    parser.add_argument('scene',choices=['all','observatory','floors'],default='all',nargs='?')
     args=parser.parse_args()
-    if args.scene in ('all','temple'): temple()
     if args.scene in ('all','observatory'): observatory()
     if args.scene in ('all','floors'): other_floors()

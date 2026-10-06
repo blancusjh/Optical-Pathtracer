@@ -26,10 +26,6 @@ every pixel.
 
 | | |
 |---|---|
-| ![The temple](docs/gallery/temple_wide.png) | ![The west colonnade](docs/gallery/temple_colonnade.png) |
-| **The Temple** — a Doric peristyle temple at golden hour, with a museum scan of Athena on her pedestal. | Fluted columns with entasis along the sunlit west colonnade. |
-| ![85 mm at f/2](docs/gallery/temple_cam_f2.png) | ![85 mm at f/11](docs/gallery/temple_cam_f11.png) |
-| **A physical camera**: 85 mm Petzval-type portrait lens at f/2, focused on Athena (DOF 10.9–13.2 m). | The same camera at f/11 focused at 25 m: the stop is smaller and the depth of field reaches the temple. |
 | ![The observatory](docs/gallery/observatory_room.png) | ![The desk](docs/gallery/observatory_desk.png) |
 | **The Observatory** — a domed observatory at night, lit by candles; two refractors aim through the slit. | The astronomer's desk: books, an armillary, a compass under glass. |
 | ![Saturn](docs/gallery/observatory_saturn.png) | ![Jupiter](docs/gallery/observatory_jupiter.png) |
@@ -117,7 +113,6 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DOWE_GPU=ON -DOWE_VIEWE
 cmake --build build
 build/owe view                         # browse all scenes in scenes/
 build/owe view --tour                  # automatically cycle through every detector
-build/owe view --view the_temple.owe:Cam
 ```
 
 CMake fetches Dear ImGui at a pinned release. `OWE_VIEWER` also works with `OWE_GPU=OFF`;
@@ -257,10 +252,6 @@ build/owe emit   scenes/prism_in_sunlight.owe --from -0.3,0,0.098 --dir 0.9816,0
 build/owe lens   lenses/kepler_16x.lens --afocal --fields 0,0.3,0.6
 build/owe glass  N-SF11
 build/owe info   scenes/the_telescope.owe                           # the world's ontology
-build/owe render scenes/the_temple.owe --detector Cam --set Cam.f_number=5.6 --set "Cam.focus=20 m"
-build/owe studio scenes/the_temple.owe --detector Cam                # interactive: set, render, probe
-build/owe render scenes/the_temple.owe --detector Cam --backend gpu --spp 1024 --out cam   # same render, on the GPU
-build/owe compare scenes/the_temple.owe:Cam --backend gpu            # GPU vs the reference, statistically
 build/owe bench --backend gpu                                        # throughput on the canonical suite
 build/owe backends                                                   # what this build can run on
 ```
@@ -271,19 +262,7 @@ A `camera` is a physical camera: lens bodies from a prescription, a housing, mou
 aperture stop and a sensor surface. `f_number` resizes the physical stop, and `focus` moves
 the sensor to the real plane of best focus for that object distance. Both are ordinary scene
 values, so they can be changed from the command line with `--set` (any `Block.key=value`) or
-live in the studio:
-
-```
-$ build/owe studio scenes/the_temple.owe --detector Cam --resolution 300x200
-camera 'Cam' ...
-EFL 86.3 mm, f/2.00, focus 11.950 m; depth of field 10.945 m to 13.158 m (CoC 29 µm)
-> render 16 4                       # 4 passes of 16 spp; studio.png/.pfm/.json after each
-> set Cam.f_number=11               # the stop closes; the scene is rebuilt and refined afresh
-> set Cam.focus=25 m
-> render 32 4
-> probe 150 100                     # why is this pixel this colour?
-> detector Wide                     # any observer, camera or sensor
-```
+live in the studio.
 
 Commands: `set`, `unset`, `edits`, `detector`, `size WxH`, `backend NAME`, `render [SPP] [PASSES]`,
 `reset`, `exposure EV|auto`, `info`, `probe X Y [N]`, `quit`. `backend gpu` moves the same session
@@ -338,8 +317,8 @@ own hierarchy. Both traversals run the conformance suite and agree with the refe
 detector; `OWE_GPU_RAY_QUERY=0` forces the software traversal.
 
 The canonical suite at 960×540, 32 spp (`owe bench`; i7-12650H, 16 threads; RTX 4060 Laptop).
-The scenes carry the detailed models: 9 M triangles in the temple, 5.5 M in the observatory,
-7.7 M in the mountain landscape.
+The scenes carry the detailed models: 5.5 M triangles in the observatory, 7.7 M in the mountain
+landscape. (Measured when the suite still included a temple scene, since removed.)
 
 | | suite | per scene | vs reference |
 |---|---|---|---|
@@ -431,11 +410,6 @@ Included: `the_lens`, `the_telescope` (alpine landscape with 650 slope-grounded 
 outcrops, a fractal statue, telescope), `optical_bench`, `camera_obscura` (a 6 mm pinhole), and
 scenes built for their own sake:
 
-* `the_temple` — a Doric peristyle temple (6 × 9 fluted columns with entasis, entablature,
-  pedimented roof, triglyphs, roof tiles) on a hillside at golden hour, with branching olives,
-  cypresses, jointed paving, amphorae and a marble Athena. Observers `Wide` and `Colonnade`; the physical camera `Cam` (85 mm portrait lens).
-  The statue is a museum scan (Three D Scans) fetched by `tools/fetch_assets.sh`; without it
-  the pedestal stands empty.
 * `the_observatory` — a brick-and-stone domed observatory at night. Inside: two refractors on
   iron piers aimed through the slit, a small brass telescope on a tripod at the window, walnut
   panelling, a book cabinet, a desk with tooled books and a typeset orbital folio, a woven carpet,
