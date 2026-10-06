@@ -10,10 +10,12 @@ std::vector<TestCase>& testRegistry() {
 int g_checkFailures = 0;
 
 int main(int argc, char** argv) {
-    const char* filter = argc > 1 ? argv[1] : nullptr;
+    // Arguments: substrings; a test runs when its name contains any of them (all tests without).
     int failedTests = 0, ran = 0;
     for (auto& t : testRegistry()) {
-        if (filter && !std::strstr(t.name, filter)) continue;
+        bool selected = argc < 2;
+        for (int i = 1; i < argc && !selected; ++i) selected = std::strstr(t.name, argv[i]) != nullptr;
+        if (!selected) continue;
         int before = g_checkFailures;
         auto t0 = std::chrono::steady_clock::now();
         std::fprintf(stderr, "[ RUN  ] %s\n", t.name);
