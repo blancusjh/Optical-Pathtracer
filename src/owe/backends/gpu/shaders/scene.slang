@@ -119,6 +119,9 @@ struct PixelState {
 };
 
 static const uint kFlagPartition = 1u;  // hybrid: light tracing owns eye → D → S⁺ → light paths
+// VCM/BDPT with scattering media: the path tracer owns the paths with a medium scattering vertex
+// (VCM, which treats media as extinction only, takes all the others).
+static const uint kFlagMediumOnly = 2u;
 
 struct PushConstants {
     uint pass, spp, sampleBase, sampleCount;  // particles: sampleBase is the low word of the first index

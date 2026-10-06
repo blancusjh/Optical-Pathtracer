@@ -355,10 +355,11 @@ void traceLightVcm(inout Wavelengths wl, uint group, inout Rng rng, inout uint4 
         if (found && depth == 0 && em.infinite) refineDistantHit(d, hit);
         stats.y++;
         uint med = mediumOf(region);
-        if (mediumScatters(med)) return;  // not supported (the renderer does not choose vcm then)
-        if (mediumAbsorbs(med)) {
+        // Media are extinction only here: paths that scatter in them are the path tracer's
+        // (kFlagMediumOnly), so these walks carry exp(−σt·t), absorption and out-scattering.
+        if (mediumAbsorbs(med) || mediumScatters(med)) {
             if (!found) return;
-            [ForceUnroll] for (int i = 0; i < NW; ++i) beta[i] *= exp(-spectrumEval(g_media[med].props.x, wl.lambda[i]) * hit.t);
+            beta *= exp(-sigmaT(med, wl) * hit.t);
         }
         if (!found) {
             if (region != ambient) stats.w++;
@@ -553,10 +554,9 @@ float3 traceCameraVcm(float px, float py, Wavelengths wlIn, uint group, inout Rn
         bool found = intersectWorld(o, d, infinity(), hit);
         stats.y++;
         uint med = mediumOf(region);
-        if (mediumScatters(med)) break;
-        if (mediumAbsorbs(med)) {
+        if (mediumAbsorbs(med) || mediumScatters(med)) {  // extinction only (see traceLightVcm)
             if (!found) break;
-            [ForceUnroll] for (int i = 0; i < NW; ++i) beta[i] *= exp(-spectrumEval(g_media[med].props.x, wl.lambda[i]) * hit.t);
+            beta *= exp(-sigmaT(med, wl) * hit.t);
         }
         if (!found) {
             if (region == ambient) {

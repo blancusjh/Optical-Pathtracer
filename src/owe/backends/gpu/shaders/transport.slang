@@ -398,6 +398,7 @@ struct PathState {
     // Hybrid: paths eye → D → S⁺ → light belong to light tracing (the partition is disjoint).
     int scatterEvents, nonDeltaEvents, deltaSinceNonDelta;
     bool firstIsNonDelta;
+    bool mediumScattered;  // a medium scattering vertex so far (kFlagMediumOnly counts only such paths)
 #ifdef OWE_SPPM
     // SPPM camera paths (sppm.slang): the first non-specular surface reached through specular events
     // only is the visible point. The path then takes next-event estimation and one scatter sample
@@ -461,6 +462,7 @@ bool stepPath(inout PathState p, inout Rng rng, inout uint4 stats) {
     const int maxDepth = G.limits.x, rrDepth = G.limits.y;
     const uint ambient = G.counts.z;
     const bool partition = (pc.flags & kFlagPartition) != 0;
+    const bool counts = (pc.flags & kFlagMediumOnly) == 0 || p.mediumScattered;  // this path's light is ours
     const float hero = p.wl.hero();
     const int depth = p.depth++;
 
@@ -484,6 +486,7 @@ bool stepPath(inout PathState p, inout Rng rng, inout uint4 stats) {
                 p.beta[i] *= spectrumEval(g_media[med].props.y, p.wl.lambda[i]) * exp(-sT[i] * t) / pdf0;
             if (depth >= maxDepth) return false;
             float g = g_media[med].g.x;
+            p.mediumScattered = true;
             ShadowRay shadow = prepareDirectMedium(x, p.d, g, p.wl, rng, p.region, p.beta, p.scale);
             float u2 = rng.uniform();  // Draw2 order: last argument first
             float u1 = rng.uniform();
@@ -518,7 +521,7 @@ bool stepPath(inout PathState p, inout Rng rng, inout uint4 stats) {
     const bool ownedByLightTracing =
         partition && p.nonDeltaEvents == 1 && p.firstIsNonDelta && p.deltaSinceNonDelta >= 1;
     if (!found) {
-        if (p.region == ambient && !ownedByLightTracing) {
+        if (p.region == ambient && !ownedByLightTracing && counts) {
             float4 sky, sun;
             [ForceUnroll] for (int i = 0; i < NW; ++i) {
                 sky[i] = envSky(p.d, p.wl.lambda[i]);
@@ -552,7 +555,7 @@ bool stepPath(inout PathState p, inout Rng rng, inout uint4 stats) {
     // Emission.
     if (b.links.w != kGpuNone) {
         GEmission e = g_emissions[b.links.w];
-        if (((fromFront && e.front != 0) || (!fromFront && e.back != 0)) && !ownedByLightTracing) {
+        if (((fromFront && e.front != 0) || (!fromFront && e.back != 0)) && !ownedByLightTracing && counts) {
             float w = 1;
             if (!p.specular) {
                 float pl = lightPdf(p.prevP, hit);
@@ -604,7 +607,7 @@ bool stepPath(inout PathState p, inout Rng rng, inout uint4 stats) {
     }
 #endif
     ShadowRay shadow = (ShadowRay)0;
-    if (!hi.it.optics.isDelta()) shadow = prepareDirect(hit, hi, p.d, p.wl, rng, p.region, p.beta);
+    if (!hi.it.optics.isDelta() && counts) shadow = prepareDirect(hit, hi, p.d, p.wl, rng, p.region, p.beta);
     float u3 = rng.uniform();  // Draw3 order: last argument first
     float u2 = rng.uniform();
     float u1 = rng.uniform();

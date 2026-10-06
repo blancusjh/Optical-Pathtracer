@@ -223,8 +223,11 @@ roll-off; middle grey shows the same in both), `fresnel_floor` (sampling knob, 0
 limit. `vcm` and `bdpt` trace `photons` light subpaths per pixel and iteration, split into
 `vcm_groups` wavelength groups (1; more settle a dispersed colour sooner at more noise elsewhere),
 and `vcm` merges with `photon_radius` and `photon_alpha` too (its radius a few pixel footprints at
-each point's distance from the eye). `bdpt` and `vcm` (GPU) need an observer and a world without
-scattering media; `vcm` is the robust choice for glossy surfaces together with caustics.
+each point's distance from the eye). `bdpt` and `vcm` (GPU) need an observer; `vcm` is the robust
+choice for glossy surfaces together with caustics. With scattering media they split the paths:
+those that scatter in a medium are path traced in a pass of their own (next-event estimation
+reaches the sun through stained glass and haze), and VCM or BDPT takes all the others, through
+media as extinction; the two add up to the whole image.
 
 `indirect_guide = BodyName` optionally names a spherical reflector (for example, the Moon).
 Diffuse surfaces without their own guide sample a 50/50 mixture of its projected disk and
