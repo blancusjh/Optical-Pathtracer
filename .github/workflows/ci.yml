@@ -84,6 +84,10 @@ jobs:
   # Apple silicon: the GPU backend through MoltenVK.
   gpu-macos-moltenvk:
     runs-on: macos-14
+    # The runner's paravirtualized Metal device lacks argument encoders, which MoltenVK uses by
+    # default (it aborts creating the instance); plain argument binding works there.
+    env:
+      MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS: 0
     steps:
       - uses: actions/checkout@v4
       # Scene models are in Git LFS; cache them so pushes do not spend the LFS bandwidth quota.
