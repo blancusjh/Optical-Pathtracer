@@ -465,3 +465,40 @@ TEST(environment_map_lights_the_scene_as_its_radiance_says) {
     fs::remove(white);
     fs::remove(patch);
 }
+
+// Compiled kernels are kept in a pipeline cache on disk, per device and driver: the first renderer
+// writes it, and a later one in a fresh device context compiles nothing new.
+TEST(gpu_pipeline_cache_is_written_and_reused) {
+    const Backend* gpu = findBackend("gpu");
+    if (!gpu || !gpu->available()) return;
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path() / "owe_test_pipeline_cache";
+    fs::remove_all(dir);
+    setenv("OWE_CACHE_DIR", dir.string().c_str(), 1);
+    const Scene sc = loadSceneFromString(R"(
+        units = m
+        world { sky = uniform(rgb(1, 1, 1, luminance = 1)) }
+        body Card { type = sheet  size = (1, 1)  position = (0, 0, 0)  axis = (0, -1, 0)  material = white }
+        observer Eye { position = (0, -3, 0)  look_at = (0, 0, 0)  up = (0, 0, 1)  fov = 30deg  pupil = 1mm  resolution = (8, 8) }
+        render { detector = Eye }
+    )");
+    RenderSettings rs;
+    rs.backend = "gpu";
+    rs.integrator = "path";
+    auto cacheFiles = [&] {
+        std::vector<fs::path> files;
+        if (fs::exists(dir))
+            for (const auto& e : fs::directory_iterator(dir)) files.push_back(e.path());
+        return files;
+    };
+    makeRenderer(sc, 0, rs)->runPass(1);
+    const auto first = cacheFiles();
+    CHECK(first.size() == 1);
+    const auto bytes = first.empty() ? 0 : fs::file_size(first[0]);
+    CHECK(bytes > 32);
+    makeRenderer(sc, 0, rs)->runPass(1);
+    const auto second = cacheFiles();
+    CHECK(second.size() == 1 && fs::file_size(second[0]) == bytes);
+    unsetenv("OWE_CACHE_DIR");
+    fs::remove_all(dir);
+}

@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -51,6 +52,13 @@ public:
     // Hardware ray traversal from compute shaders (VK_KHR_ray_query) is enabled on this device.
     bool rayQuery() const { return rayQuery_; }
     VkDeviceSize scratchAlignment() const { return scratchAlignment_; }
+    // Pipelines compile through a cache kept on disk per device and driver (in the user's cache
+    // directory; OWE_PIPELINE_CACHE=0 disables it), so a kernel compiles once rather than after
+    // every eviction from the driver's own cache. Thread-safe.
+    VkPipelineCache pipelineCache() const { return pipelineCache_; }
+    // Writes the cache to disk if it grew since it was loaded or last saved, merged with what
+    // other processes have written meanwhile.
+    void savePipelineCache();
 
     Buffer createDeviceBuffer(VkDeviceSize size, VkBufferUsageFlags extraUsage = 0);  // storage + transfer, device-local
     VkDeviceAddress address(const Buffer& b) const;     // ray queries only
@@ -89,6 +97,11 @@ private:
     bool statistics_ = false;
     bool rayQuery_ = false;
     VkDeviceSize scratchAlignment_ = 256;
+    VkPipelineCache pipelineCache_ = VK_NULL_HANDLE;
+    std::string cachePath_;
+    size_t cacheSavedBytes_ = 0;
+    std::mutex cacheMutex_;
+    VkPhysicalDeviceProperties props_{};
 };
 
 // A compute pipeline over `bindings` storage buffers (set 0, bindings 0..n-1) with push constants.

@@ -4,7 +4,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <map>
+#include <random>
 #include <mutex>
 #include <stdexcept>
 
@@ -19,6 +23,45 @@ void vkCheck(VkResult r, const char* what) {
 }
 
 namespace {
+
+namespace fs = std::filesystem;
+
+// Where the pipeline cache of this device and driver lives: $OWE_CACHE_DIR, else the platform's
+// user cache directory, under owe/. Empty when caching is disabled or no directory is known.
+std::string pipelineCachePath(const VkPhysicalDeviceProperties& p) {
+    if (const char* e = std::getenv("OWE_PIPELINE_CACHE"); e && std::string(e) == "0") return {};
+    fs::path dir;
+    if (const char* e = std::getenv("OWE_CACHE_DIR"); e && *e) dir = e;
+#ifdef _WIN32
+    else if (const char* e = std::getenv("LOCALAPPDATA"); e && *e) dir = fs::path(e) / "owe";
+#else
+    else if (const char* e = std::getenv("XDG_CACHE_HOME"); e && *e) dir = fs::path(e) / "owe";
+    else if (const char* e = std::getenv("HOME"); e && *e) dir = fs::path(e) / ".cache" / "owe";
+#endif
+    if (dir.empty()) return {};
+    char name[96];
+    std::snprintf(name, sizeof name, "pipelines-%04x-%04x-%08x-", p.vendorID, p.deviceID, p.driverVersion);
+    std::string file = name;
+    for (uint8_t b : p.pipelineCacheUUID) {
+        std::snprintf(name, sizeof name, "%02x", b);
+        file += name;
+    }
+    return (dir / (file + ".bin")).string();
+}
+
+// The file's bytes when its header names this device and driver (a stale or foreign cache is ignored).
+std::vector<char> readPipelineCache(const std::string& path, const VkPhysicalDeviceProperties& p) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) return {};
+    std::vector<char> data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    if (data.size() < 16 + VK_UUID_SIZE) return {};
+    uint32_t h[4];
+    std::memcpy(h, data.data(), sizeof h);
+    if (h[0] < 16 + VK_UUID_SIZE || h[1] != VK_PIPELINE_CACHE_HEADER_VERSION_ONE || h[2] != p.vendorID || h[3] != p.deviceID ||
+        std::memcmp(data.data() + 16, p.pipelineCacheUUID, VK_UUID_SIZE) != 0)
+        return {};
+    return data;
+}
 
 std::once_flag g_volkOnce;
 VkResult g_volkResult = VK_ERROR_INITIALIZATION_FAILED;
@@ -295,11 +338,73 @@ Context::Context(int device) {
     vkCheck(vkAllocateCommandBuffers(device_, &cai, &cmd_), "vkAllocateCommandBuffers");
     VkFenceCreateInfo fci{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
     vkCheck(vkCreateFence(device_, &fci, nullptr, &fence_), "vkCreateFence");
+
+    vkGetPhysicalDeviceProperties(physical_, &props_);
+    cachePath_ = pipelineCachePath(props_);
+    if (!cachePath_.empty()) {
+        const std::vector<char> data = readPipelineCache(cachePath_, props_);
+        VkPipelineCacheCreateInfo cci{VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
+        cci.initialDataSize = data.size();
+        cci.pInitialData = data.empty() ? nullptr : data.data();
+        if (vkCreatePipelineCache(device_, &cci, nullptr, &pipelineCache_) != VK_SUCCESS) {
+            cci.initialDataSize = 0;  // the driver refused the file: start empty
+            cci.pInitialData = nullptr;
+            if (vkCreatePipelineCache(device_, &cci, nullptr, &pipelineCache_) != VK_SUCCESS) pipelineCache_ = VK_NULL_HANDLE;
+        }
+        if (pipelineCache_) vkGetPipelineCacheData(device_, pipelineCache_, &cacheSavedBytes_, nullptr);
+    }
+}
+
+void Context::savePipelineCache() {
+    std::lock_guard<std::mutex> lock(cacheMutex_);
+    if (!pipelineCache_) return;
+    size_t bytes = 0;
+    vkGetPipelineCacheData(device_, pipelineCache_, &bytes, nullptr);
+    if (bytes <= cacheSavedBytes_) return;
+    try {
+        // Keep what other processes added since this one loaded the file.
+        const std::vector<char> disk = readPipelineCache(cachePath_, props_);
+        if (!disk.empty()) {
+            VkPipelineCacheCreateInfo cci{VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
+            cci.initialDataSize = disk.size();
+            cci.pInitialData = disk.data();
+            VkPipelineCache other = VK_NULL_HANDLE;
+            if (vkCreatePipelineCache(device_, &cci, nullptr, &other) == VK_SUCCESS) {
+                vkMergePipelineCaches(device_, pipelineCache_, 1, &other);
+                vkDestroyPipelineCache(device_, other, nullptr);
+            }
+        }
+        vkGetPipelineCacheData(device_, pipelineCache_, &bytes, nullptr);
+        std::vector<char> data(bytes);
+        if (vkGetPipelineCacheData(device_, pipelineCache_, &bytes, data.data()) != VK_SUCCESS) return;
+        data.resize(bytes);
+        const fs::path path(cachePath_);
+        fs::create_directories(path.parent_path());
+        // Written beside the target and renamed over it, so a reader never sees a partial file.
+        const fs::path tmp = path.string() + ".tmp" + std::to_string(std::random_device{}());
+        {
+            std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+            out.write(data.data(), std::streamsize(data.size()));
+            if (!out) {
+                std::error_code ec;
+                fs::remove(tmp, ec);
+                return;
+            }
+        }
+        fs::rename(tmp, path);
+        cacheSavedBytes_ = bytes;
+    } catch (const std::exception&) {
+        // A cache that cannot be written only costs compile time.
+    }
 }
 
 Context::~Context() {
     if (device_) {
         vkDeviceWaitIdle(device_);
+        if (pipelineCache_) {
+            savePipelineCache();
+            vkDestroyPipelineCache(device_, pipelineCache_, nullptr);
+        }
         vkDestroyFence(device_, fence_, nullptr);
         vkDestroyCommandPool(device_, pool_, nullptr);
         vkDestroyDevice(device_, nullptr);
@@ -467,7 +572,7 @@ Kernel::Kernel(Context& ctx, const unsigned char* spirv, size_t bytes, uint32_t 
     cpi.stage.pName = "main";
     cpi.layout = layout_;
     if (ctx_.statistics()) cpi.flags |= VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR;
-    vkCheck(vkCreateComputePipelines(dev, VK_NULL_HANDLE, 1, &cpi, nullptr, &pipeline_), "vkCreateComputePipelines");
+    vkCheck(vkCreateComputePipelines(dev, ctx_.pipelineCache(), 1, &cpi, nullptr, &pipeline_), "vkCreateComputePipelines");
     if (ctx_.statistics()) printStatistics(name);
 
     VkDescriptorPoolSize ps[2] = {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, bindings},
