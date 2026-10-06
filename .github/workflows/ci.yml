@@ -68,14 +68,15 @@ jobs:
         run: cmake --build build
       - name: Devices
         run: build/owe backends || true
-      # A software Vulkan device takes hours over the whole suite (the scene tests): it runs the
-      # GPU's own tests and a white furnace, then the statistical comparison below.
+      # A software Vulkan device takes hours over the whole suite and minutes per kernel: it runs
+      # the tests that compile no kernel, then the statistical comparison below (one kernel).
       - name: Tests (GPU conformance subset on lavapipe)
         timeout-minutes: 45
         run: |
           ctest --test-dir build -R layering --output-on-failure
-          build/owe_tests gpu_ registry_ backends_white_furnace_closed_diffuse_sphere
+          build/owe_tests gpu_scene_layout registry_
       - name: GPU against CPU on a scene
+        timeout-minutes: 40
         run: |
           if build/owe backends gpu; then
             build/owe compare scenes/glass/glass_of_water.owe:Eye --backend gpu --spp 16 --runs 6 --resolution 32x24
@@ -112,4 +113,4 @@ jobs:
         timeout-minutes: 45
         run: |
           ctest --test-dir build -R "layering|viewer" --output-on-failure
-          build/owe_tests gpu_ registry_ backends_white_furnace_closed_diffuse_sphere
+          build/owe_tests gpu_scene_layout registry_
