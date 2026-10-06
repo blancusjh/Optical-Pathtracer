@@ -1,0 +1,336 @@
+THE GREGORIAN: mirror prescriptions — proposed format, not an engine patch
+
+The scene is scenes/the_gregorian.owe. Existing material, mesh, world, assembly,
+observer and placement syntax is unchanged. The six-row file is one Gregorian
+optical prescription; previews/gregorian.py translates it into current bodies.
+The current engine cannot load the requested original scene yet.
+
+ROW GRAMMAR
+label R t medium semi-diameter [k=value] [A4=value ...] [stop]
+      [reflect material=Name substrate=length hole=diameter]
+      [support=spider(count=N,width=length,angle=degrees,outer_radius=length)]
+      [solve] [out_axis=(x,y,z)]
+
+All lengths use the lens-file units. Units/wavelength/object_distance retain
+existing meanings. R=inf is planar. semi-diameter is a radius, ALWAYS; hole is a
+full DIAMETER. medium is the physical medium after the encounter; reflect does
+not change it, and must not manufacture negative-index physical glass.
+
+reflect: optional bare flag. Without it the row retains existing refraction or
+iris behavior. On a reflecting row k and the even asphere coefficients retain
+their existing sag definition. material resolves an opaque Mirror or Conductor
+material in the containing scene (mandatory for reflect; do not silently choose
+aluminium). substrate is the mirror's physical axial backing depth (mandatory,
+positive). The front uses that material; back, edge and hole bore absorb.
+The backing lies on the nonilluminated side of the reflecting face, clears the maximum sag,
+and never fills the central bore. hole defaults to 0, and must be <2*sd.
+stop on the primary marks the entrance aperture, not a second overlapping iris.
+The stop's image is an annulus; a geometrically blocked centre is never an
+emitter and is not replaced with an intensity mask.
+
+support defaults to absent. It makes actual opaque supports behind the mirror's
+back, shadowing the incoming beam; no diffraction or image-space mask. count is
+an integer >=1, width is its tangential width, angle the first support's azimuth
+about local +z from +x; supports are equally spaced. outer_radius is the support
+endpoint in that row's mechanical frame. Its inside attachment meets the back
+of the secondary; finite axial thickness equals substrate. In this scan one
+1.2mm strut reaches the bore radius 54mm; its contact shoe is included in the
+same solid and must meet the measured tube, not penetrate it. With tube=true,
+a mounting shoe reaches the generated tube wall. Omission means no magically
+floating secondary: the containing assembly must supply an existing mount.
+A concave secondary's opaque backing already creates its circular obstruction;
+its diameter is 2*sd. No additional coincident black disc is built.
+
+solve: optional bare row flag marking the ONE air gap t adjusted by afocal=true.
+This is part of folded prescription spacing, not a new scene keyword. It is
+useful because the longest physical segment need not be the afocal adjustment.
+Require exactly one marked nonterminal gap in a mirror prescription with an
+eyepiece; its magnitude must remain positive along the outgoing ray. Solve C=0
+at the design wavelength while retaining mirror separation and all glass
+thicknesses. Never solve by moving the primary-secondary pair or hiding blur.
+The Gregorian secondary-to-field-lens gap is marked; the primary-secondary gap
+is fixed. A signed segment is propagated with its actual sign throughout.
+
+SIGN CONVENTION (coaxial case)
+At the first surface set a fixed mechanical +z parallel to the incoming light.
+R is the signed radius in this fixed chart: z(r)=r^2/(2R)+... . It does NOT flip
+because the light reflected. t is the signed displacement to the NEXT vertex,
+NOT an always-positive unfolded path length. Surface order is encounter order,
+not sorted spatial order. After the primary the ray travels -z and t is negative;
+after the secondary it travels +z and t is positive. Glass thickness still
+follows its actual geometric orientation, grouped only on transmitted rows.
+Mirror substrates, hole walls and traversed bore planes are NOT optical rows.
+
+For ray state (height y, geometric slope u=dy/dz), use
+ P(t)=[[1,t],[0,1]]
+ mirror(R)=[[1,0],[-2/R,-1]]
+ refract(R,n1,n2)=[[1,0],[-(n2-n1)/(n2*R),n1/n2]]
+with physical positive indices. After a reflection the outgoing direction and
+signed segment agree. This convention gives P(-f)*mirror(-2f) a focus for
+parallel rays, and does not mistake a Gregorian for a Cassegrain.
+
+out_axis: optional on reflect only; for a noncoaxial fold, the outgoing chart's
++z is reset to this unit direction in the containing prescription's original
+mechanical frame. The flat mirror normal bisects the incident and outgoing
+physical directions (normalize(d_in-d_out)); a right-handed transverse basis
+is parallel-transported, never reset to an arbitrary camera up. The ensuing
+t is positive along the new chart. Default: keep the chart unchanged, so a
+coaxial reflection reverses travel and changes the sign of t. A flat fold has
+zero power; frame changes transport transverse orientation explicitly. Reject
+out_axis on a powered mirror unless the engine implements its decentered,
+tilted optical mapping; no pretending it is coaxial.
+
+AFocal, PUPIL AND TUBE
+Afocal optics register the actual exit-pupil conjugate after all encounters,
+including the reflecting stop surface. exit_pupil("Gregorian") returns that
+world position using the final outgoing frame. Signed angular magnification
+is positive for the Gregorian, negative for a Newtonian in transported image
+coordinates. Report effective objective focal length, eyepiece EFL, D/|M| and
+pupil conjugates; C approximately zero is the afocal check. Pupil guiding must
+use the annular pupil and support-vane exclusions with correct density; retain
+a full-pupil mixture for ghosts and stray light. It must not divide away the
+~40% speculum loss or the blocked area. Existing observers are unchanged.
+
+tube=true builds a physical black-inside, tube_material-outside shell over the
+SPATIAL envelope of the actual folded ray path, not the algebraic sum of t and
+not a giant unfolded cylinder. Clearances account for signed sag and backing.
+It also builds nonintersecting primary/secondary mounting shoes, opaque bore
+baffles and a narrow rear ocular barrel. Primary and rear mounts retain their
+central holes. After a Newtonian fold it includes the side focuser and a real
+opening at the fold. Never put an end cap across the primary bore or secondary
+path; check all rays over the stated field. A casing never duplicates a scanned
+housing. Here tube=false deliberately uses the existing scanned shell instead.
+For tube_radius, use it as a minimum clear main-bore radius; reject insufficient
+clearance rather than intersecting a mirror rim. The stand is never generated.
+
+EXAMPLE 1 — THE GREGORIAN (millimetres, crown at 587.5618nm)
+See lenses/gregorian_54x.lens for the exact rows. Primary R=-900, k=-1, sd=54,
+hole=26, t=-600. Secondary R=+247.368421053, k=-0.421360418590, sd=21,
+t=+667.255310082 (solve). Both are reflect material=Speculum. The crown field
+lens is R=41.3076651664, plane, t_glass=3, sd=13; the crown eye lens is
+R=13.7692217221, plane, t_glass=2.5, sd=6; front-vertex spacing 53.3333333333.
+
+EXAMPLE 2 — A NEWTONIAN WITH THE SAME HUYGENIAN OCULAR (millimetres)
+name Newtonian 500mm with folded Huygenian
+units mm
+wavelength 587.5618
+object_distance inf
+P  -1000  -400  air   50  k=-1 reflect material=Speculum substrate=5 stop
+D  inf 62.255310082 air 15 reflect material=Speculum substrate=1 out_axis=(1,0,0) support=spider(count=4,width=1,angle=45,outer_radius=51) solve
+F1 41.3076651664 3 crown 13
+F2 inf 50.3333333333 air 13
+E1 13.7692217221 2.5 crown 6
+E2 inf 15 air 6
+
+The primary focus is 500mm back along its reflected leg. A 45-degree plane
+mirror intercepts the bundle 400mm from the primary and redirects it to the
+side; remaining paraxial focus distance is 100mm. The same ocular's front
+principal offset is 37.744689918mm before that focus, hence D.t=62.255310082.
+Flat folding changes no focal power: |M|=500/39.248229973=12.73943. Unlike the
+Gregorian's powered concave secondary, it does not reimage the intermediate
+focus. Newtonian angular image parity remains inverted; do not equate counting
+mirror reflections with counting image inversions. Its exit pupil diameter is
+100/12.73943=7.84965mm. Transverse basis transport accounts for the fold's
+reflection parity, rather than rotating the image by camera-up convention.
+
+GREGORIAN PARAXIAL CHECK
+f1=450, d=600, p=d-f1=150, q=d+b=705, b=105mm.
+1/p+1/q=2/R2; R2=247.368421053mm.
+m2=q/p=4.7; F=f1*m2=2115mm.
+k2=-((q-p)/(q+p))^2=-0.421360418590 (ellipsoid, not hyperboloid).
+Ocular EFL=39.248229973mm including thicknesses and crown/air dispersion.
+M=F/f_eye=+53.8877804545, exit diameter=108/M=2.004164935mm.
+C=0 to floating-point precision after solving secondary-to-ocular separation.
+Exit z=137.828721852mm from primary, 14.740078437mm after last lens.
+Measured real-ray values and rendering/curation record follow below.
+
+DIMENSIONS, MATERIALS AND ART DIRECTION
+Museum record: https://muzea.malopolska.pl/en/objects-list/2778
+Public metadata: https://api.muzea.malopolska.pl/api/object/2778?lang=en
+Maker Jesse Ramsden, London, second half of the eighteenth century. CC0 scan
+by Virtual Museums of Malopolska; the museum description is CC BY 4.0.
+Museum dimensions: objective 113mm, tube 740mm, height 470mm; two plano-convex
+lenses, external secondary-focus screw, brass tripod and horizontal mount.
+
+Measured scan: fit a cylinder to the uninterrupted bore section, axial bins
+8..22 scan units. Radius 4.76565222 units; median radial residual 0.00368 units.
+Axis origin (-0.454757601,0,48.6835608), axis (0.004409794,-0.975360213,
+0.220574272) in original OBJ coordinates. Scale 0.0118556699884m/unit, anchored
+to the 113mm barrel proxy. The entrance tapers; usable aperture is 108mm.
+This is a clearance-restricted reconstruction, not an asserted measurement of
+the historical mirrors' curvatures. Barrel versus catalog objective terminology
+is an absolute-scale uncertainty. At this scale posed height is 712.4mm and
+full scanned axial extent about 782.5mm including ocular fittings. These do not
+all match the catalogue dimensions: do not distort the scan or claim precision
+better than the source conflict permits. Tripod footprint at the lowest foot band:339.6x412.3mm.
+The stand and fittings retain their
+measured scan shape and proportions; telescope pose retained, azimuth changed
+180 degrees in the room. Moon azimuth 359.740956369deg, elevation 12.742764979deg.
+
+The original scan is optically CLOSED: full-bore intersections on the axis
+at s=23.116 and 28.381 scan units, plus rear closures. The reproducible
+derivative removes 21086/220952 triangles (per primitive 11374,9229,483),
+preserving vertex coordinates, UVs and normals, front shell, rear ocular shell,
+stand and exterior fittings. It removes the front disc, scanned secondary,
+rear optical disc and ocular closure. Exact selection is in prepare_scan() of
+previews/gregorian.py; the original files are untouched. The old scan cannot
+contain transmitting/reflected paths unchanged. No alpha, null material, or
+invisible housing is used to fake an opening.
+
+Primary vertex is (0.00656300643,-0.25912405138,1.30832714390)m. Primary body
+radius 54mm leaves about 1.5mm radial clearance at the fitted rear tube.
+Secondary radius 21mm clears the front shell. Field lens radius 13mm clears
+the approximately 15.9mm-radius ocular shell; eye lens radius is 6mm.
+Last lens z=123.089mm is inside the rear opening at roughly z=127mm, and the
+eye pupil z=137.829mm is beyond it. Bodies never replace one another at the
+same surface. The tabletop is 800mm high; all scan vertices stand above it,
+with the lowest foot vertex in contact. Table legs meet floor z=0. The Earth
+surface is below the floor, and wall corners and sill are nonintersecting.
+A reverse emit through the full scan reaches Moon.surface after the two real
+mirrors and four refracting surfaces: through_scan.json/log.
+
+Design table (mm, k dimensionless):
+                 vertex z     R           k          diameter  thickness
+Primary            0         -900        -1           108       4 (hole 26)
+Secondary        -600         247.36842   -0.421360     42       2
+Field front       67.25531      41.307665   0           26       3
+Field back        70.25531     inf         0           26
+Eye front        120.58864      13.769222   0           12       2.5
+Eye back         123.08864     inf         0           12
+Pupil            137.82872                               2.004165
+Body primary faces -z, so current mirror-body R=+900 with axis=(0,0,-1).
+This body conversion must not be copied into the fixed-chart prescription.
+
+Speculum: polished copper-tin empirical mirror spectrum rgb(0.65,0.625,0.60),
+a slightly warm reflectance approximation, no aluminium or invented copper
+optical constants. At 587.5618nm the engine spectral reconstruction gives
+R=0.6357615633: two reflections transmit 0.4041927653; four crown-air
+interfaces leave 0.3403 before geometric obstruction/pupil averaging.
+Brass is metal=gold with the scan's UV photo and roughness 0.30 for wear.
+The empirical conductor tint is texture-dependent; the photograph provides
+its actual spatial variation. Dark woods range 0.039..0.14 linear reflectance.
+
+Moon: NASA CGI Moon Kit LROC map, north up, sphere radius 1737400m, range
+384400000m. Its angular diameter is 0.5179deg. It is a diffuse mesh lit by
+a 5778K Sun at azimuth 245deg/elevation -20deg, with an Earth sphere screening
+the below-horizon source from the room. Albedo is physically normalized in
+LINEAR material space to mean diffuse reflectance 0.18, giving a Lambert-sphere
+geometric-albedo approximation near 0.12; no image-space painted light.
+Sources and material calibration: assets/lunar/SOURCE.txt.
+One candle: 1850K, about one candela under the observatory's 14713lux/unit
+scale. No other lamp, emissive Moon, light linking, or fill source is present.
+
+References: Wright, A Philosopher Lecturing on the Orrery (1766), for a single
+flame revealing an instrument; La Tour, The Magdalen with the Smoking Flame
+(c.1635-37), for flame/black mass restraint; Hammershoi, Interior, Strandgade 30
+(1905), for a quiet bare room and window geometry. The first accent in Beside
+is the worn brass tube, its inclined axis leading toward the small Moon;
+the tripod's silhouette and long shadow articulate the candle's light.
+Foreground: walnut table and candle; middle: Ramsden instrument; background:
+window and lunar disc. Beside is level, fov 55deg, WB 3000K, manual EV 13.5.
+Eyepiece/Naked are 38deg, 3mm pupil, neutral WB, manual EV 4.3; the brighter
+manual lunar exposure accounts for real speculum and pupil averaging losses.
+The narrow Naked diagnostic changes ONLY fov to 0.732169deg for orientation
+checking; it does not change the public scene's true-scale Naked view.
+
+VERIFICATION
+Paraxial vs emit real rays at 587.5618nm:
+  Effective two-mirror focal length: 2115.000 vs 2114.811mm.
+  Magnification: +53.887780 vs +53.941761 (differential ray fan at r=24mm).
+  Exit diameter: 2.004165 vs 2.000392mm (outer marginal-ray envelope).
+  Exit z from primary: 137.828722 vs 137.820052mm.
+  Exit distance after last lens: 14.740078 vs 14.731409mm.
+  Two-mirror back focus: 105.000000 vs 105.000000mm.
+Residual finite-aperture differences reflect aberration and finite-ray height,
+not a hidden eye shift. The scratch eye stays at the computed pupil.
+
+Obstruction: 42/108=0.388888889. emit inner/outer radii 0.389785/1.000196mm
+give 0.389708294. GPU light sensor, 2mm beyond the pupil conjugate: fitted
+inner/outer radii 0.388749/0.999193mm give 0.389063604 (15um radial bins,
+about 0.015 ratio tolerance). Support-vane sector remains visible and is
+excluded from the ideal circular-envelope formula; it reduces intensity
+locally, not the outer pupil diameter.
+An afocal eyepiece has no finite point focus. The requested behind-eyepiece
+annulus is therefore a screen slightly defocused from the PUPIL conjugate.
+The point-source test uses a Sun of angular diameter 0.0001deg (point at
+infinity approximation), solely on an isolated optical bench, traced with
+light. It is not present as a light in the artistic scene.
+
+Erect Moon: same illuminated-left terminator, lunar north and maria arrangement
+in Eyepiece and the fov-matched Naked diagnostic. Central-disk smoothed linear
+correlation 0.95762 erect vs -0.78887 after 180deg rotation. Remove the broad
+phase gradient: lunar-feature correlation 0.84208 erect vs 0.14966 after
+rotation; vertical flip -0.05740, horizontal flip 0.17989. Positive measured
+angular magnification independently confirms erect orientation. These are
+NUMERICAL comparisons of raw images; final PNGs receive no denoising, painted
+optical effects or image manipulation. Statistical limitations remain at 32
+iterations: the eyepiece preview has visible spectral Monte Carlo grain.
+
+Reproduce:
+ python previews/gregorian.py --prepare-only
+ python previews/gregorian.py --views Beside Eyepiece Naked --spp 32
+ python previews/gregorian.py --verify
+All owe commands inside the scripts pass --backend gpu, --device 1 for renders,
+320x200 and 32 or fewer samples/iterations; each child render is killed at 119s.
+The binary is build/owe; never rebuilt. No other scene or engine source edited.
+No commits made. Outputs, PFM, PNG, JSON, logs and timing are under
+out/scenes/gregorian/; no docs/gallery output.
+
+CURRENT ENGINE PROBLEMS (not fixed)
+1. Mirror rows are unavailable, intentionally the new specification:
+ build/owe info scenes/the_gregorian.owe --backend gpu
+ -> unexpected token 'reflect' at lenses/gregorian_54x.lens:11.
+2. OBJ UVs are discarded, so texture=mapping=uv rejects textured OBJ files:
+ build/owe info out/scenes/gregorian/obj_uv_repro.owe --backend gpu
+ Workaround: scientific lunar sphere exported as glTF, UVs retained. No parser fix.
+3. emit accepts --backend gpu but cmdEmit still uses host double Tracer:
+ build/owe emit out/scenes/gregorian/emit.owe --backend gpu --from 0,0.04,-0.7 --dir 0,0,1 --primary --cone 0 --rays 1
+ The requested emit numbers are diagnostic host results, not GPU transport
+results; independent image orientation and annulus measurements ARE GPU.
+4. GPU region inconsistencies/leaks persist around opaque contacts and distant
+Earth in short VCM renders despite disjoint scene bodies:
+ build/owe render out/scenes/gregorian/preview.owe --backend gpu --device 1 --detector Beside --integrator vcm --spp 32 --resolution 320x200 --out out/scenes/gregorian/repro_regions
+ Logs contain exact boundary/ray events; do not claim all are proven engine
+defects rather than mixed-winding scan contact sensitivity. No fixes made.
+5. Direct narrow-field distant Moon is almost black with GPU path while VCM
+resolves it at the same geometry, exposure and sampling:
+ build/owe render out/scenes/gregorian/preview.owe --backend gpu --device 1 --detector Naked --integrator path --spp 32 --resolution 320x200 --set Naked.fov=0.732169deg --out out/scenes/gregorian/naked_detail_path
+ Compare with integrator=vcm: mean Y about 8.77e-8 vs 0.0055722. Mechanism
+unresolved; preserved as a repro, not an asserted diagnosis.
+6. A VCM cold-cache compilation stalled and hit the 119s timeout; the next
+Eyepiece/Naked renders completed in seconds. Concurrent work also compiled
+VCM kernels on this host. Repro with an already cold driver cache:
+ python previews/gregorian.py --views Beside --spp 32
+This is a build/driver/cache observation, not a
+claim that this scene's GPU transport takes 119s.
+
+TIMINGS AND VRAM (RTX 4060 Laptop, 8188MiB)
+All final previews are320x200,32 iterations/spp. Times below are engine GPU
+transport followed by total process wall time including loading/startup.
+VRAM is whole-device nvidia-smi memory.used, polled every0.2s; short renders
+can finish between samples. It is an observed peak, not a guaranteed allocation
+maximum. Other engine work ran on this GPU during the session.
+ beside         GPU 1.572s; wall 3.936s; sampled device peak 254MiB.
+ eyepiece       GPU 1.827s; wall 2.647s; sampled device peak 252MiB.
+ naked          GPU 0.260s; wall 1.106s; sampled device peak 252MiB.
+ naked_detail   GPU 0.499s; wall 1.229s; sampled device peak 306MiB.
+ annulus        GPU 0.032s; wall 0.383s; sampled device peak 28MiB.
+Largest observed SUCCESSFUL-run device peak across all previews was352MiB.
+A stalled cold-cache attempt reached1543MiB device usage and was killed after
+119.244s; concurrent compilation prevents attributing that peak to this scene.
+Cached runs complete in about1-4s overall. No successful render exceeded2min.
+The texture/geometry scene was never rebuilt into the engine.
+
+CURATION RECORD
+The opened-image critique/action triplets are in out/scenes/gregorian/curation.txt.
+Final artistic PNGs: beside.png, eyepiece.png, naked.png. Diagnostics: annulus.png,
+naked_detail.png, naked_detail_path.png, eyepiece_groups4.png. Main scene keeps
+the original future prescription syntax; scratch current-body scene is
+out/scenes/gregorian/preview.owe. Optical bench: emit.owe, mirrors_only.owe,
+annulus.owe. Machine-readable checks: design.json, verification.json,
+gpu_annulus_measurement.json, orientation.json, through_scan.json.
+
+Painting records:
+https://derbymuseums.org/collection/joseph-wright-of-derby/
+https://collections.lacma.org/object/30854
+https://hammershoi.smk.dk/artwork/interior-strandgade-30/

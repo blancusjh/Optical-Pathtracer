@@ -1,0 +1,274 @@
+THE CHAPEL — normative optical specification and scene audit
+
+The authored scene is scenes/the_chapel.owe. It intentionally requires stained_glass
+and volume transport in VCM/SPPM. The existing build is only used on the derived,
+haze-free open-window preview. Nothing in a preview demonstrates coloured
+transmission or visible shafts. No third feature is requested.
+
+1. STAINED GLASS (ROADMAP 2.2)
+
+material Pane {
+    type = stained_glass
+    transmittance = image("photograph.jpeg", mapping = uv)
+    gain = 1.8 density = 0.85 thickness = 3mm index = constant(1.52)
+    haze = 0
+    glass_mask = image("glass-mask.png", mapping = uv)
+    mask_threshold = 0.5 stone_material = Stone
+}
+
+Parameter                 Physical meaning / units / default / permitted values
+-----------------------------------------------------------------------------
+type                      Required stained_glass; a two-sided thin slab, not a
+                          closed refracting solid or an emissive surface.
+transmittance             Normal-incidence internal transmission before the
+                          Fresnel faces; scalar, rgb/tabulated spectrum, or image.
+                          Dimensionless. Default 1. Spectral values in [0,1].
+                          Image uses the existing image(file,mapping=uv) syntax;
+                          filenames are relative to the .owe file. Existing
+                          image scale/mapping defaults are unchanged; specify uv.
+gain                      Exposure calibration of the input, dimensionless;
+                          default 1; finite >0. Applied to linear image RGB before
+                          clamping to [0,1]. Applies to constant spectra too.
+density                   Optical density multiplier, dimensionless; default 1;
+                          finite >0. tau = clamp(gain*C,0,1)^density. A larger
+                          density makes the pane darker and more saturated.
+                          Exact zero stays zero; the two parameters are not
+                          intended to identify an unknown photograph uniquely.
+thickness                 Physical slab thickness in scene length units;
+                          default 3mm; finite >0. The calibrated tau is for this
+                          actual thickness: sigma_a(lambda)=-ln(tau)/thickness.
+                          This parameter does NOT multiply absorption a second
+                          time. It provides material metadata and optical path
+                          length n*t/cos(theta_t); changing t with tau fixed
+                          changes sigma_a, not the normal-incidence transmission.
+index                     Existing medium index expression constant/cauchy/
+                          sellmeier/tabulated, wavelength dependent if supplied.
+                          Default constant(1.52). Real finite n>=1 throughout
+                          the supported wavelength interval. No complex index.
+haze                      Fraction of TOTAL transmitted power redistributed
+                          into the forward lobe, dimensionless; default 0;
+                          [0,1]. This scene deliberately uses 0: no new blur is
+                          assumed without evidence from the glass.
+haze_angle                RMS angular radius of the transmitted forward lobe;
+                          default 0.15deg; finite (0,5deg]. Ignored at haze=0.
+                          Use an axisymmetric Gaussian in tangent angle about
+                          straight transmission, normalized over the opposite
+                          hemisphere with projected-solid-angle measure. This
+                          optional approximation preserves transmitted power
+                          and reciprocity; no arbitrary RGB convolution.
+glass_mask                Optional scalar spectrum or image; default 1.
+                          Dimensionless [0,1]. Image samples RAW normalized data
+                          (no sRGB decoding), independent of transmittance/gain.
+                          In RGB images use red, not brightness of the photo.
+                          White means glass, black means masonry/opaque lead.
+                          Uses existing UV coordinates. Sample nearest texel to
+                          avoid translucent mask borders at a stone junction.
+mask_threshold            Dimensionless; default 0.5; (0,1]. A mask sample >=
+                          threshold chooses glass; below chooses stone_material.
+stone_material            Existing opaque material name; default black. A false
+                          mask sample delegates its entire BSDF and relief to
+                          this material, not just its colour. Must resolve to
+                          diffuse/conductor/mirror/absorber, not another masked
+                          stained_glass/null/dielectric; reject cycles.
+
+Colour decoding: 8-bit photograph RGB is sRGB, decoded by the current image
+loader. Apply gain and density in linear RGB, then use the engine's bounded
+reflectance-spectrum reconstruction as a TRANSMITTANCE spectrum. HDR images
+are linear. This is an exposure-calibrated appearance model, not a measured
+spectral reconstruction; baked photography cannot yield unique absorption.
+Dark texels model the leads through very small tau, without inventing emission.
+The two masks in scenes/chapel_assets are binary UV classification data. The
+rose mask follows blue glass islands with a two-texel morphological closing;
+the Southwark mask is an explicit aperture polygon in its shared atlas. They
+need close inspection at production resolution, especially dark/red rose edges.
+They contain no lighting, gradients or projected floor colours.
+
+Interactions: material=Pane on an existing sheet or open glTF mesh; part= selects
+triangles exactly as today, measured fit_height still uses the entire model.
+No new body syntax. The Pane index is optical material data, not a region;
+transmitting across a Pane MUST leave the ray's containing medium unchanged.
+Both adjacent faces are treated as the same surrounding medium (air/Incense
+here); reject heterogeneous/asymmetric adjacent indices in this first version.
+medium= on the same body and closed=true are incompatible with thin-slab mode.
+reflectance, texture, tint, roughness, back and emission are invalid on Pane;
+use transmittance, haze and stone_material instead. A fake back=black must never
+absorb the inside face. Two-sided file winding does not change the result.
+Use the geometric interface normal for the slab angle; noisy scan shading
+normals must not steer the straight transmitted shadow ray.
+
+Optics (per wavelength; unpolarized, exact Fresnel, incoherent successive hits):
+    cos(theta_t) = sqrt(1 - (n_external/n)^2 * sin(theta_i)^2)
+    a = tau^(1/cos(theta_t))
+    T = (1-R)^2 * a / (1-R^2*a^2)
+    R_slab = R + (1-R)^2 * R * a^2 / (1-R^2*a^2)
+    A = 1-T-R_slab
+R is the unpolarized power Fresnel reflectance at a single face. Average the
+specified scalar unpolarized R at each encounter (no polarization state in
+this first version). Reflection from inside the chapel obeys the same slab
+reflection law as reflection from outside. Include its attenuated second-face
+return, not only the near-interface highlight. Reflection is specular about
+the interface normal; ballistic transmission is exactly the incoming direction,
+with no lateral displacement, refraction of the exterior direction, or region
+transition. Use stable limits at grazing incidence/zero tau; reject invalid n.
+
+Shadow visibility multiplies T at EVERY glass crossing and continues along the
+same sun ray, checking all intervening stone and lead. It must never treat this
+surface as opaque, multiply a Lambertian tint, or use T twice. It belongs to
+DIRECT lighting, not the refractive-caustic category. Sky visibility behaves
+identically. At haze>0, transmission is T*((1-haze)*delta + haze*forward_lobe):
+retain the ballistic NEE term and integrate/sample the finite solar disc for
+forward-scattered NEE, with proper PDFs and MIS. Reflection remains unchanged.
+At haze=0 the finite 0.533deg sun alone blurs edges by approximately 0.00930*L
+at normal projection: ~9.3cm at 10m; oblique floor projections stretch it.
+
+Analytic acceptance references:
+- n_external=1.00028, n=1.52, tau=.5, normal incidence: R=.0425247015,
+  T=.4585867950, R_slab=.0522753347, A=.4891378702.
+- tau=1: T=(1-R)/(1+R), R_slab=2R/(1+R), A=0.
+- n=n_external: R=0, straight T=tau^(1/cos(theta_i)).
+- two independent separated uniform panes: shadow transmission T1*T2.
+- mask=0 with stone_material=diffuse: zero shadow transmission regardless of
+  white stone texels in the photograph. mask=1,tau=0: T=0 and R_slab=R.
+- mirrored front/back illumination must give equal T and R_slab in the same air.
+
+2. PARTICIPATING MEDIA IN VCM AND SPPM (ROADMAP 2.5)
+
+medium Incense { base = air absorption = 0.00015 scattering = 0.004 g = 0.55 }
+world { medium = air ... }
+body IncenseVolume { type = box size = (40,51,49.8)
+                     position = (0,0,24.8) medium = Incense }
+body InteriorStone { ... in = IncenseVolume ... }
+render { integrator = vcm photons = 4 photon_radius = 2
+         photon_alpha = 0.6666667 vcm_groups = 1 ... }
+
+No new syntax or parameter for this feature. Remove VCM's scattering-media
+refusal and implement medium vertices/visibility/MIS; extend SPPM's existing
+surface estimator to volume photon gathering. BDPT support is outside scope.
+
+Existing medium parameters, now honoured on eye AND light subpaths:
+base       Catalog medium, optional (catalog default unchanged); air here.
+index      Existing index model; base air gives n~1.00028 at the d line. No new
+           bending at the equal-index air/Incense boundary.
+absorption Spectral sigma_a, 1/m, default 0; finite >=0 at every wavelength.
+scattering Spectral sigma_s, 1/m, default 0; finite >=0 at every wavelength.
+g          Henyey-Greenstein mean cos(deflection), dimensionless, default 0;
+           finite -1<g<1. Positive is forward along propagation, .55 here.
+body size/position Length in scene units; ordinary existing finite-box geometry.
+in         Existing parent-region body name; necessary for the interior stone.
+
+Existing render controls apply to both surface and medium strategies:
+photons          Light subpaths per pixel/iteration (VCM), launched photon paths
+                 (SPPM); dimensionless, default 1; finite >0, fractional allowed.
+                 4 used here because the true-height bay has a large light disc;
+                 .25 (the study's compact room) leaves indirect stone very noisy.
+photon_radius    Initial merge radius in local pixel footprints; dimensionless,
+                 default 2; finite >0. Use the vertex-to-eye distance to obtain
+                 a metric radius in metres, with the existing pupil/near limits.
+photon_alpha     Progressive retained-count fraction, dimensionless; default
+                 2/3, 0<alpha<=1. Surface radius shrinks with square root, volume
+                 radius with cube root of (N+alpha*M)/(N+M); N += alpha*M.
+vcm_groups       Wavelength groups, default 1; positive integer. Use 1 here.
+max_depth        Existing path-vertex limit, default unchanged; positive integer.
+                 Count volume interactions as vertices; 12 in this scene.
+
+Transport: sigma_t=sigma_a+sigma_s; sample free-flight distance consistently with
+spectral/hero wavelength sampling. Beer extinction along every eye segment,
+connection, pane-to-sun shadow ray and photon segment. HG must use propagation
+directions consistently. Store volume scattering vertices independently of
+surface vertices and merge only within the same containing medium. Use a
+normalized 3-D kernel (a ball kernel is 3/(4*pi*r^3)); retain the existing 2-D
+surface kernel. Account for free-flight/phase densities and the volume merging
+measure in VCM MIS. A stored collision already sampled sigma_s: do not multiply
+it twice. Connections across glass need its straight-through attenuation.
+SPPM eye paths may stop at a medium visible point and gather volume photons;
+keep direct light, indirect light and merging weights consistent. No fabricated
+beam geometry, emission, selective illumination, or screen-space blur.
+
+Expected appearance: faint neutral incense veil, saturated shafts strongest in
+forward viewing against shaded masonry. Optical depth at 10m is .0415, direct
+transmission .9593493353; at 30m transmission .88294 (approx.). The chapel is
+clear enough for distant stone to retain form. No scattering colour added by
+hand: colour comes only from the pane's transmitted sun and sky.
+
+Analytic acceptance references:
+- no surfaces: segment transmittance exp[-(sigma_a+sigma_s)*L]; 10m=.9593493353.
+- free-flight collision probability at L is 1-exp(-sigma_t*L).
+- sigma_s=0 reproduces existing non-scattering VCM/SPPM limits; sigma_a=0
+  conserves energy under angularly uniform illumination; HG integrates to 1.
+- uniform source term J over a segment: integral J exp(-sigma_t*s) ds =
+  J*(1-exp(-sigma_t*L))/sigma_t; use this to verify single scattering.
+- reduce merge radius/increase samples: VCM and SPPM converge toward a GPU path
+  reference in a finite fog box; different photons/group counts alter noise,
+  not expected colour or brightness.
+
+An infinite world scattering medium is NOT used: sunlight from infinity would
+have zero unscattered transmission. This is a scene-design issue, not a third
+feature or a request to clamp physical extinction.
+
+3. ASSETS, ART DIRECTION, AND CURRENT LIMITS
+
+Reference photographs/painting, attribution URLs and all three CC BY author
+credits are in the scene header. Evans supplies layered stone values and
+measured framing; Hammershoi supplies silence, pale mineral colour and light
+as the only event. Amber lancets and a lapis rose are the saturated accents,
+against worn warm grey limestone. White balance 5200K; a 4800K sun 25deg high
+from southwest (azimuth 225deg); no candles or added fill lights.
+
+Bounds after glTF node transforms and y-up to z-up (before grounding):
+Beauvais  x[-5.65319,10.42655] y[-8.25317,4.99013] z[2.40356,20.18592].
+Valencia  x[-24.86637,24.45043] y[-23.39332,-14.41122] z[-16.70793,17.11760].
+Southwark x[-10.52741,10.07230] y[-31.95803,-22.72421] z[-30.00304,22.97150].
+These are scan-space units, NOT metres. Beauvais's measured up-vector restores
+its original survey z; its upright scan height is 17.12026 units. Its entire
+original architectural z interval is 6.43532..48.48244m; fit_height=42.04712m
+and restored floor datum put the crown at 48.48244m. This uses the published
+48.5m TRANSEPT height, not a claim that Beauvais's choir is 48.5m (the cathedral
+records its choir as nearly 47m). Alignment rotation 77.601944deg restores
+survey horizontal axes. The assembled bay is ~35.47 by 46.28m.
+Parts Model_0 and Model_1 each use their own UV photograph as diffuse stone.
+
+Valencia: published 6.5m clear rose diameter; sampled blue-glass aperture width
+21.79543 units; ratio .2982274m/unit; whole scan fit_height=10.0877m. Part
+Material_0 uses RoseGlass and a masked diffuse RoseStone fallback. Surrounding
+scan footprint is 14.7076 by 2.6787 by 10.0877m, not a 6.5m-high scan. The
+circular backing reveal closes holes outside the real aperture.
+
+Southwark: no source establishes the scanned lancet's physical dimension.
+The 1m clear width and derived fit_height=6.99128m are PROVISIONAL and must not
+be reported as verified true scale. This unresolved requirement is explicit in
+the scene header. Glass extent estimated from atlas sampling is 7.57723 by
+37.04754 scan units: provisional clear height ~4.89m. Whole scan is 2.7186 by
+1.2186 by 6.9913m. Main part cathedral-window_Material_u1_v1 has 19380 vertices
+and includes BOTH stone and glass; it uses LancetGlass and LancetStone through
+the aperture mask. Part cathedral-window_Material_u1_v1_NONE has 1024 vertices,
+black baseColorFactor and spans the whole scan; it is exporter backing/closure,
+not a clean glass part. It is deliberately omitted to avoid blocking the pane.
+
+Normals: file normals tried first. Preview helper --smooth tries 65deg on the
+vault; the preview-only OBJ window masonry uses 65deg because those OBJ files
+carry positions/UVs rather than the source glTF normals. The final scene's
+normal choice is recorded in the audit below. Worn floor flags have 0.24mm
+relief at 9mm scale; actual recessed 6mm joints and 90mm slab thickness. Diffuse
+stone albedos .18..54; no emissive glazing, coloured floors or hidden fills.
+
+Observers: Nave at eye height, level; Floor looking down; Rose aimed upwards;
+Shafts across the ray corridor against shaded stone. All pupils 3.5mm; focus
+is the metric subject distance, not a default infinity. Rose necessarily has
+perspective convergence when looking up with an ideal observer (no shift
+feature requested); no roll or tilted world vertical. Production resolution
+960x600; all actual checks 320x200 and 16 or 32 iterations.
+
+Reproduce previews with Python + NumPy + Pillow:
+    python scenes/chapel_preview.py
+    build/owe render out/scenes/chapel/preview.owe --backend gpu --device 1 \
+      --detector Floor --resolution 320x200 --spp 32 --passes 4 \
+      --out out/scenes/chapel/floor
+The helper reads the final scene, strips only future glass/medium/volume,
+retains stone triangles selected by the same masks, leaves the real glass
+apertures open, preserves placement and fixes relative asset paths. It can
+recreate missing masks from the source atlas, but preserves reviewed masks.
+Open-glass previews have brighter windows than the planned stained glass;
+they verify layout and sunlight only. They are not final catalogue images.
+
+Each preview's three critiques, subsequent fixes, measured timings, remaining
+engine issues and final PNG filenames are recorded in out/scenes/chapel/audit.txt.

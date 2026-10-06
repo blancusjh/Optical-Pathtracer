@@ -1,0 +1,93 @@
+# THE GREGORIAN — Ramsden's instrument at an open night window.
+# References: Joseph Wright of Derby, A Philosopher Lecturing on the Orrery (1766);
+# Georges de La Tour, The Magdalen with the Smoking Flame (c.1635-37);
+# Vilhelm Hammershoi, Interior, Strandgade 30 (1905).
+# Intent: a single candle reveals worn brass against a quiet, cool window. The
+# instrument's diagonal leads from its own tripod to the small, real Moon.
+# Eyepiece: the erect lunar image is the sole bright accent; Naked preserves its
+# north/terminator orientation at true angular scale. Neutral lunar white; 3000K room.
+# Scan: Virtual Museums of Malopolska, CC0, 220952 triangles, Ramsden London.
+# Museum: https://muzea.malopolska.pl/en/objects-list/2778
+# Objective 113mm, tube 740mm, quoted height 470mm; Huygenian eyepiece.
+# Uniform scale from the scanned barrel; usable aperture 108mm leaves clearance.
+# Scanned bore closures are removed in a documented derivative, NEVER rendered
+# as a transparent or invisible material.
+# The optics: lenses/gregorian_54x.lens, a prescription with reflecting rows (docs/scenes/gregorian.txt).
+units = m
+world {
+ sky = gradient(zenith = rgb(0.03,0.06,0.16,luminance = 2.5e-7),
+                horizon = rgb(0.10,0.13,0.24,luminance = 8e-7),
+                ground = rgb(0.02,0.02,0.02,luminance = 1e-6))
+ sun { azimuth = 245deg elevation = -20deg temperature = 5778 luminance = 1e5 nee_share = 0.20 }
+}
+material Plaster { type = diffuse texture = noise(a = rgb(0.48,0.46,0.40), b = rgb(0.61,0.59,0.52), scale = 0.04) }
+material Walnut { type = diffuse texture = wood(a = rgb(0.065,0.039,0.020), b = rgb(0.12,0.073,0.037), scale = 4mm, turbulence = 0.3) }
+material Oak { type = diffuse texture = wood(a = rgb(0.08,0.065,0.045), b = rgb(0.14,0.11,0.075), scale = 8mm, turbulence = 0.25) }
+material BrassScan { type = conductor metal = gold roughness = 0.30 tint = rgb(0.78,0.64,0.38)
+ texture = image("../assets/sketchfab/gregorian_telescope/textures/4044_42_V_Teleskop_05_FIN_baseColor.png", mapping = uv) }
+material Brass { type = conductor metal = gold roughness = 0.15 tint = rgb(0.72,0.56,0.29) }
+# Speculum copper-tin, empirical polished spectral reflectance, not aluminium.
+# RGB spectral reconstruction: 65% red, 62.5% green, 60% blue; two bounces ~39% Y.
+material Speculum { type = mirror reflectance = rgb(0.65,0.625,0.60) }
+material Soot { type = absorber }
+material Wax { type = diffuse reflectance = rgb(0.74,0.68,0.51) }
+material EarthDark { type = diffuse reflectance = rgb(0.08,0.075,0.06) }
+# NASA/GSFC CGI Moon Kit, LROC natural colour albedo map (not emission).
+material Regolith { type = diffuse texture = image("../assets/lunar/lroc_albedo_018.png", mapping = uv) }
+body Earth { type = sphere radius = 6371000 position = (0,0,-6371000.2) material = EarthDark }
+body Moon { type = mesh file = "../models/crafted/the_gregorian_moon.gltf" normals = file
+ position = sky(359.740956369deg,12.7427649793deg,3.844e8) material = Regolith }
+
+# A compact room; the north window is genuinely open, with no glazing.
+body Floor { type = box size = (4,4,0.12) position = (0,-1.0,-0.06) material = Oak }
+body NorthLeft { type = box size = (1.0,0.22,2.8) position = (-1.5,0.75,1.4) material = Plaster }
+body NorthRight { type = box size = (1.0,0.22,2.8) position = (1.5,0.75,1.4) material = Plaster }
+body BelowWindow { type = box size = (2,0.22,1.02) position = (0,0.75,0.51) material = Plaster }
+body AboveWindow { type = box size = (2,0.22,0.80) position = (0,0.75,2.40) material = Plaster }
+body WestWall { type = box size = (0.22,3.78,2.8) position = (-2,-1.25,1.4) material = Plaster }
+body EastWall { type = box size = (0.22,3.78,2.8) position = (2,-1.25,1.4) material = Plaster }
+body Ceiling { type = box size = (4,4,0.12) position = (0,-1.14,2.86) material = Plaster }
+body Sill { type = box size = (2.00,0.33,0.045) position = (0,0.71,1.0425) material = Walnut }
+body JambL { type = box size = (0.055,0.06,0.99) position = (-0.98,0.61,1.5475) material = Walnut }
+body JambR { type = box size = (0.055,0.06,0.99) position = (0.98,0.61,1.5475) material = Walnut }
+body Lintel { type = box size = (2.015,0.06,0.055) position = (0,0.61,2.03) material = Walnut }
+
+# The scanned tripod stands directly on a plain walnut table, at true size.
+body Table { type = box size = (1.16,1.05,0.045) position = (0,-0.05,0.7775) material = Walnut }
+body LegFL { type = box size = (0.055,0.055,0.755) position = (-0.50,-0.48,0.3775) material = Walnut }
+body LegFR { type = box size = (0.055,0.055,0.755) position = (0.50,-0.48,0.3775) material = Walnut }
+body LegBL { type = box size = (0.055,0.055,0.755) position = (-0.50,0.38,0.3775) material = Walnut }
+body LegBR { type = box size = (0.055,0.055,0.755) position = (0.50,0.38,0.3775) material = Walnut }
+body RamsdenScan { type = mesh file = "../models/crafted/the_gregorian_open.gltf"
+ scale = 0.0118556699884 rotate = (0,0,180deg) position = (0,0,0.789750901)
+ normals = smooth(crease = 65deg) material = BrassScan }
+
+# BEGIN PRESCRIPTION
+# The position is the PRIMARY vertex, local -z toward the measured tube axis.
+# No generated housing here: the scanned tube is the physical housing.
+# tube=true semantics for a new reflector are specified in docs/scenes/gregorian.txt.
+body Gregorian { type = prescription file = "../lenses/gregorian_54x.lens"
+ afocal = true tube = false rim = black
+ position = (0.0065630064284,-0.259124051379,1.30832714390)
+ point_at = sky(359.740956369deg,12.7427649793deg,3.844e8) }
+# END PRESCRIPTION
+
+# One real candle, same absolute photometric scale as the observatory.
+# Radius 5.5mm emitter: 0.715189 radiance units gives approximately one candela
+# when one scene illuminance unit is interpreted as 14713 lux.
+body CandleFoot { type = lathe segments = 64 material = Brass position = (0.40,-0.12,0.8)
+ profile = [(0.040,0),(0.040,0.005),(0.022,0.012),(0.009,0.025),(0.009,0.068),(0.020,0.073),(0.020,0.078)] }
+body Candle { type = cylinder radius = 10.5mm height = 0.32 position = (0.40,-0.12,0.878) material = Wax }
+body Wick { type = cylinder radius = 0.7mm height = 7mm position = (0.40,-0.12,1.198) material = Soot }
+body Flame { type = sphere radius = 5.5mm position = (0.40,-0.12,1.214) material = black emission = blackbody(1850K,0.715189) }
+
+observer Eyepiece { position = exit_pupil("Gregorian")
+ look_at = sky(359.740956369deg,12.7427649793deg,3.844e8) up = (0,0,1)
+ fov = 38deg pupil = 3mm resolution = (320,200) exposure = 4.3 white_balance = none sun_share = 0.97 }
+# Offset beside the ocular so the naked eye has a genuinely unobstructed view.
+observer Naked { position = (0.0771708026707,-0.393556702822,1.27792567392)
+ look_at = sky(359.740956369deg,12.7427649793deg,3.844e8) up = (0,0,1)
+ fov = 38deg pupil = 3mm resolution = (320,200) exposure = 4.3 white_balance = none sun_share = 0.97 }
+observer Beside { position = (0.70,-2.15,1.10) look_at = (-0.06,0.10,1.10) up = (0,0,1)
+ fov = 55deg pupil = 4mm focus = 2.0 resolution = (320,200) exposure = 13.5 white_balance = 3000 sun_share = 0.15 }
+render { detector = Beside integrator = vcm spp = 16 seed = 7 max_depth = 16 white_balance = none }
