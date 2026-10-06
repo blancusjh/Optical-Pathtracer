@@ -155,7 +155,7 @@ gives every corner the angle-weighted mean normal of the triangles around its ve
 its own at less than the crease angle (30° unless `smooth(crease = …)` says otherwise), so curved
 surfaces shade smoothly while sharper edges stay sharp; vertices at the same position count as
 one, so files split at texture seams still smooth across them. A scan's facets are noisy: give it
-a larger crease (`the_temple.owe`'s Athena uses 70°). `normals = file` takes the file's own `vn`.
+a larger crease (60–70°). `normals = file` takes the file's own `vn`.
 Glass meshes refract about the smooth normal too (a 32 × 16 glass ball's caustic is the analytic
 ball's). Only the GPU backend uses shading normals; the CPU reference shades every mesh flat.
 

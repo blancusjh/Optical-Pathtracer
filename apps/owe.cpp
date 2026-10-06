@@ -534,8 +534,7 @@ int cmdBench(const Args& a) {
     if (cases.empty())
         cases = {{"scenes/the_lens.owe", "Eye"},          {"scenes/prism_in_sunlight.owe", "Eye"},
                  {"scenes/glass/glass_of_water.owe", "Eye"}, {"scenes/the_study.owe", "Magnifier"},
-                 {"scenes/the_telescope.owe", "Eyepiece"}, {"scenes/the_temple.owe", "Wide"},
-                 {"scenes/the_temple.owe", "Cam"},        {"scenes/the_observatory.owe", "SaturnEyepiece"},
+                 {"scenes/the_telescope.owe", "Eyepiece"}, {"scenes/the_observatory.owe", "SaturnEyepiece"},
                  {"scenes/camera_obscura.owe", "Inside"}};
     const int spp = std::stoi(a.get("--spp", "16"));
     const std::string res = a.get("--resolution", "256x192");

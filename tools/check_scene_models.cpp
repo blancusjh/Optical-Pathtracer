@@ -34,9 +34,8 @@ int main() try {
             }
             std::cout<<"Mountain telescope: 32 objective-to-statue rays clear\n";
         }
-        if(entry.path().stem()=="the_telescope" || entry.path().stem()=="the_temple" || entry.path().stem()=="the_observatory") {
-            Vec3 xy=entry.path().stem()=="the_telescope" ? Vec3{0,1,0} :
-                    (entry.path().stem()=="the_temple" ? Vec3{-20,-10,0} : Vec3{8,0,0});
+        if(entry.path().stem()=="the_telescope" || entry.path().stem()=="the_observatory") {
+            Vec3 xy=entry.path().stem()=="the_telescope" ? Vec3{0,1,0} : Vec3{8,0,0};
             // The coordinate terrain is reference-only (no matter); the relief is the ground.
             if(scene.world.findBody("Ground")>=0)
                 throw std::runtime_error("coordinate terrain must be reference_only (no matter)");

@@ -9,8 +9,7 @@ intersection, sampling, optical prescriptions, camera settings or lighting.
 `landscapes/` is generated separately by `tools/build_landscapes.py`. The telescope
 landscape now has 650 clustered, slope-grounded conifers with branching crowns,
 folded serrated sprays, varied heights, fractured granite outcrops, scree and bent
-grass tussocks. The temple has a rocky, planted transition outside its precinct;
-the observatory has hillside outcrops. The simple optical demonstrations are left alone.
+grass tussocks; the observatory has hillside outcrops. The simple optical demonstrations are left alone.
 
 Landscape ground uses a graded mesh and bicubic reconstruction of the original
 height field, with shallow geometric relief. Original protected footprints and the
@@ -21,12 +20,6 @@ the bicubic relief, which the renderer reported as region inconsistencies and wh
 fireflies). Replacement surfaces use the original visible materials. Landscape meshes keep a
 0.5 mm vertical clearance above the reference height field, including protected flat areas.
 Tree roots are sampled from the actual replacement triangles, not just the noise function.
-
-The temple has paired lanceolate olive leaves, attached cypress scale-leaf sprays,
-voxel-unioned, bark-sculpted olive junctions and root flares, chipped and dished stone
-paving, Doric triglyphs and guttae, roof tiles,
-antefixes and amphora handles. Its Athena scan remains the separately downloaded asset
-from the existing `tools/fetch_assets.sh` workflow.
 
 The observatory takes its brick-and-stone palette and entrance pavilion from the supplied
 Greenwich reference. The supplied astronomer paintings inform its walnut panelling,
@@ -51,9 +44,9 @@ optical bench supports. New geometry is grouped by finish to keep boundary count
 
 ```sh
 python3 tools/build_scene_models.py              # all models and marked scene sections
-python3 tools/build_scene_models.py observatory  # or temple / floors
+python3 tools/build_scene_models.py observatory  # or floors
 python3 tools/build_landscapes.py                # outdoor ground, planting and rocks
-python3 tools/build_landscapes.py telescope      # or temple / observatory
+python3 tools/build_landscapes.py telescope      # or observatory
 bash tools/review_models.sh                     # open the interactive Blender review
 bash tools/review_models.sh --export            # refresh that running window
 bash tools/review_models.sh --render            # PNG views and a models.blend file
@@ -67,29 +60,26 @@ The lettering uses installed GNU FreeSerif, falling back to an installed Serif f
 Blender's built-in font. Generated meshes have no runtime font or Blender dependency.
 The carpet alone contains over two million triangles; allow several GB of free memory.
 
-In Blender, use the scene selector for **OWE • Temple**, **OWE • Observatory** or
-**OWE • Telescope**. For a lighter landscape-only window:
+In Blender, use the scene selector for **OWE • Observatory** or **OWE • Telescope**. For a lighter landscape-only window:
 
 ```sh
 blender -noaudio --python tools/live_model_preview.py -- --scenes telescope
 ```
 
-The mountain cameras include **Landscape**, **Woodland**, **Naked** and **Beside**;
-the temple also has **PrecinctEdge**.
+The mountain cameras include **Landscape**, **Woodland**, **Naked** and **Beside**.
 The viewport's **Models** sidebar provides one-click views, including **Books**,
 **Carpet** and **Mechanism**. Press N if the sidebar is hidden. The cameras also include
-Wide, Colonnade, OliveGrove, Architecture, Room and Desk. Select a
+Architecture, Room and Desk. Select a
 camera in the Outliner and use Ctrl–Numpad 0 to make it active, then Numpad 0 to view it.
 Middle-drag orbits the scene. Geometry reloads after each completed export; the chosen
-camera is retained. The watcher owns only its selected review scenes. All three scenes
+camera is retained. The watcher owns only its selected review scenes. Both scenes
 together are substantial; use `--scenes telescope` on machines with limited memory.
 
 Review images and the `.blend` live under `out/model-review/` (ignored by Git).
 These use Blender Workbench studio shading, approximate spectral material colours, and
 tessellated analytic surfaces. They show geometry, not optical or lighting correctness.
 The original OWE renderer continues to use the exact analytic shapes and original lights.
-No model geometry is decimated for the preview. The downloaded Athena scan has about
-2.6 million triangles, so the initial temple import can take a few seconds.
+No model geometry is decimated for the preview.
 
 The generated source is reproducible; edit the recipes rather than the marked scene
 sections. Coordinates are metres, Z up; the millimetre bench scene explicitly compensates

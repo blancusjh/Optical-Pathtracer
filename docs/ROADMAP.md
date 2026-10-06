@@ -12,7 +12,7 @@ Measured on an RTX 4060 laptop GPU:
 | run | time |
 |---|---|
 | `the_study` (vcm), driver cache warm | 0.4 s (`owe render`), 3.5 s for four views (`owe view`) |
-| `the_temple`, `the_telescope`, warm | ~4 s each (20 s of CPU on host threads: generated meshes, BVHs) |
+| `the_telescope`, warm | ~4 s each (20 s of CPU on host threads: generated meshes, BVHs) |
 | `the_study` right after a kernel change | 70 s |
 | a two-triangle quad (path) right after a kernel change | 34 s |
 
@@ -31,7 +31,7 @@ pipeline cache (`vkCreateComputePipelines(dev, VK_NULL_HANDLE, …)` in `vulkan_
    `[noinline]` functions, specialization constants and optimization levels, measuring the
    compile time per kernel.
 4. **Then scene-side caching:** write the generated meshes and the mesh groups' BVHs to disk as
-   binary files keyed by content hash, and memory-map them. The temple and the telescope would
+   binary files keyed by content hash, and memory-map them. The telescope would
    then load in well under a second.
 
 ## 2. Engine: what remains

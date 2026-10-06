@@ -5,7 +5,6 @@ cd "$(dirname "$0")/.."
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j 4
 cmake --build build --target export_model_preview
-build/export_model_preview scenes/the_temple.owe out/model-review/temple
 build/export_model_preview scenes/the_observatory.owe out/model-review/observatory
 build/export_model_preview scenes/the_telescope.owe out/model-review/telescope
 case "${1:-}" in

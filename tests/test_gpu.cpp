@@ -52,25 +52,3 @@ TEST(gpu_scene_layout_is_flat_and_aligned) {
     for (const auto& b : g.boundaries) CHECK(b.boxLo[0] <= b.boxHi[0] && b.boxLo[1] <= b.boxHi[1] && b.boxLo[2] <= b.boxHi[2]);
 }
 
-// Moving the eye re-expresses the world relative to it (camera-relative float precision) without
-// re-uploading meshes: the rebased records equal a fresh export, and triangles stay untouched.
-TEST(gpu_camera_rebase_matches_fresh_export_including_meshes) {
-    Scene sc = loadScene("scenes/the_temple.owe");
-    int d = sc.findDetector("Wide");
-    auto& eye = dynamic_cast<IdealObserver&>(*sc.detectors[size_t(d)]);
-    auto g = gpu::flattenScene(sc, d, sc.render);
-    auto triangles = g.triangles;
-    NavigationCamera c = NavigationCamera::from(eye);
-    for (int i = 0; i < 3; ++i) {
-        c.pan(0.123, -0.09);
-        c.turn(0.05, 0.02, false);
-        c.apply(eye, sc.world);
-        gpu::updateObserver(g, sc.world, eye);
-        auto fresh = gpu::flattenScene(sc, d, sc.render);
-        CHECK(std::memcmp(&g.globals, &fresh.globals, sizeof(g.globals)) == 0);
-        CHECK(g.nodes.size() == fresh.nodes.size());
-        CHECK(std::memcmp(g.nodes.data(), fresh.nodes.data(), g.nodes.size() * sizeof(gpu::GNode)) == 0);
-        CHECK(std::memcmp(g.boundaries.data(), fresh.boundaries.data(), g.boundaries.size() * sizeof(gpu::GBoundary)) == 0);
-        CHECK(std::memcmp(g.triangles.data(), triangles.data(), triangles.size() * sizeof(gpu::GTriangle)) == 0);
-    }
-}
