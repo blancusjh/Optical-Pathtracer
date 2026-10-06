@@ -1211,8 +1211,23 @@ double parseNumber(const char*& p, const char* end) {
     const char* q = skipBlanks(p, end);
     if (q < end && *q == '+') ++q;
     double v = 0;
+#if defined(__cpp_lib_to_chars) && __cpp_lib_to_chars >= 201611L
     auto r = std::from_chars(q, end, v);
     if (r.ec == std::errc() || r.ec == std::errc::result_out_of_range) p = r.ptr;
+#else
+    // Without floating-point from_chars (Apple's libc++): strtod on a terminated copy of the token.
+    char buf[64];
+    size_t n = 0;
+    while (q + n < end && n < sizeof buf - 1 && q[n] != ' ' && q[n] != '\t' && q[n] != '\n' && q[n] != '\r') {
+        buf[n] = q[n];
+        ++n;
+    }
+    buf[n] = 0;
+    char* e = buf;
+    v = std::strtod(buf, &e);
+    if (e != buf) p = q + (e - buf);
+    else v = 0;
+#endif
     return v;
 }
 
