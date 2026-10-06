@@ -1,0 +1,83 @@
+{
+  "panel_width_m": 0.30000001192092896,
+  "panel_height_m": 0.874218784738332,
+  "minimum_thickness_m": 0.012,
+  "maximum_thickness_m": 0.025616480203373634,
+  "relief_m": 0.013616480203373634,
+  "throw_m": 1.2,
+  "screen_local_z_m": 1.2256164802033735,
+  "throw_definition": "from highest shaped-face vertex to screen",
+  "material": "PMMA",
+  "design_wavelength_nm": 546.074,
+  "design_index_absolute": 1.4928185228742346,
+  "engine_model": "PMMA: Sellmeier B1=1.1819 C1=0.011313 (micrometres squared)",
+  "incidence": "collimated, normal to flat back, propagation local +z",
+  "resolution_vertices": [
+    512,
+    1492
+  ],
+  "resolution_cells": [
+    511,
+    1491
+  ],
+  "solver_time_seconds": 871.4327989609956,
+  "solver_command": [
+    "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/assets/tools/poisson_caustic_design/build/CausticEngineering",
+    "--input_png=/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/assets/caustic_panel/sacred_heart/512/target_linear.png",
+    "--output=/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/assets/caustic_panel/sacred_heart/512/",
+    "--res_w=512",
+    "--mesh_width=0.3",
+    "--focal_l=1.2",
+    "--thickness=0.012",
+    "--index=1.492818522874",
+    "--conv_tres=0.00001",
+    "--threads=8"
+  ],
+  "tool": "Dylan Missuwe poisson_caustic_design; Yue et al., TOG 2014; MIT",
+  "tool_version": "21b495026da77936bbbb27edc8ebe638261a1679",
+  "local_build_patch": "assets/caustic_panel/prepare_solver.py",
+  "patches": [
+    "RGB linear-luminance input; preserve intensity floor",
+    "physical focal length and grid spacing in Snell height integration",
+    "configurable design index",
+    "exact Neumann DCT Poisson solve (FFTW)",
+    "17-digit export; canonical x only unreflection; retain -h",
+    "rebuild manifold caps and perimeter with file normals"
+  ],
+  "prediction_correlation": 0.9332274071148634,
+  "prediction_escaped_flux_fraction": 2.9962062000181124e-05,
+  "prediction": "independent Snell forward tracing at design wavelength; point source; smooth normals",
+  "outside_arch": "rectangular panel clears dark outside arch by transporting flux into lancet; 0.015 linear regularisation floor",
+  "target": {
+    "path": "assets/caustic_panel/sacred_heart/512/target_linear.png",
+    "source": "local user-supplied cristo-vidriera.jpg",
+    "crop_pixels": [
+      284,
+      30,
+      891,
+      1799
+    ],
+    "licence": "unknown",
+    "church": "unidentified",
+    "window": "Sacred Heart; banderole Ecce Cor quod tantopere amavit homines",
+    "source_sha256": "83ea5158b8319d4a70c3e62c10ffbbe8c4dd63e34c1d0512e7d3c8e3cae4a6e4",
+    "transfer": "sRGB to linear RGB then Rec.709 luminance; area resampling",
+    "note": "Actual cropped aspect about 1:2.91; photograph truncates window bottom; no invented continuation"
+  },
+  "mesh_validation": {
+    "closed": true,
+    "vertices": 767909,
+    "triangles": 1535814,
+    "volume_m3": 0.005376272089561676
+  },
+  "frozen": true,
+  "mesh_orientation": "Flat back z=0, beam +z, image up +y; image right -x when viewed from illuminated screen side. Candidate height field reflected in x at export.",
+  "mesh_sha256": "1e16e59cc374d8323c649dbf9aae175990c2f0e912bb90e1358fa6673a2a4f32",
+  "acceptance": "Visually inspected prediction against linear luminance target; Sacred Heart figure, halo, hands and banderole identifiable.",
+  "selected_candidate": "assets/caustic_panel/sacred_heart/512",
+  "solver_executable_sha256": "42332f83c1bb404ba99bef7cb428ac78bc1b1b54b578ceaabe45b1368c2e683e",
+  "local_build_patch_sha256": "f215d4948d95f1d3f77fa6fbce0a2e87b91f645eae056cc19cacf363031b66e5",
+  "driver_sha256": "5bd811fb8eada1c174b9cdfcd4464dcd22203806ddfa1a2162be08106d84d4ad",
+  "solar_diameter_deg": 0.53,
+  "solar_geometric_blur_diameter_m": 0.011099999999999999
+}
