@@ -52,8 +52,8 @@ Lamp evidence and choices
   Area is 4*pi^2*.003*.00008 = 9.47482e-6 m2 (analytic torus; the polygon mesh
   approximates this area, giving a small discretisation error in luminous flux).
 
-Stained-glass syntax: common contract with the chapel
-  Inspected scenes/the_chapel.owe. Its actual syntax is:
+Stained-glass syntax: thin-slab material contract
+  The material syntax is:
     type = stained_glass
     transmittance = image("...", mapping = uv)
     gain = ... density = ... thickness = 3mm index = constant(1.52) haze = 0
@@ -64,8 +64,8 @@ Stained-glass syntax: common contract with the chapel
   haze=.90 specifies the opalescent limit. Masks/stone delegation are unnecessary
   because Shade is already a separate part, with lead encoded as dark texels.
   Earlier draft called these transmission_scale and diffuse_transmission. Final
-  scene adopts gain and haze to avoid a competing syntax. Chapel defaults remain
-  haze=0, no diffuse reflection, roughness=0; its straight transmission is preserved.
+  scene adopts gain and haze to avoid a competing syntax. Clear-glass defaults are
+  haze=0, no diffuse reflection, roughness=0; straight transmission is preserved.
 
   Normative lamp proposal (wavelength by wavelength; reciprocal, two-sided slab):
   * transmittance supplies normal INTERNAL tau, sRGB decoded to linear reflectance
@@ -90,14 +90,14 @@ Stained-glass syntax: common contract with the chapel
     spectrum. Rdiff=(1-Rs-Ts)*clamp(rho,0,1); remaining budget is absorbed. This
     allocation guarantees Rs+Ts+Rdiff<=1 at every wavelength/angle. Both faces
     use the same rho unless a future back_reflectance override is explicitly given.
-    With rho=0 there is only Fresnel reflection, preserving the chapel model.
+    With rho=0 there is only Fresnel reflection, preserving the clear-glass model.
   * roughness broadens the specular reflection lobe using a reciprocal normalized
     GGX closure; it must not silently convert the straight branch to a refracted
-    thick-solid ray. roughness=0 is the chapel limit. Neither haze nor roughness
+    thick-solid ray. roughness=0 is the specular limit. Neither haze nor roughness
     changes total branch power. All branches participate in MIS and photon transport.
   * Black lead texels give tau~0 and rho~0, absorbing rather than emitting. This
     scan's lead is photographic, so residual highlights are a known approximation.
-  * Mask semantics, where needed by the chapel, delegate masked-out stone to its
+  * Mask semantics, where needed by a window mesh, delegate masked-out stone to its
     opaque material; do not interpret stone as low-transmission glass.
 
 Lit versus unlit appearance / texture audit
