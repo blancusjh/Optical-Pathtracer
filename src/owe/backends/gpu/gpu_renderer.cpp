@@ -8,7 +8,10 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
+#include <future>
 #include <string>
+#include <vector>
 #include <stdexcept>
 
 #include "owe/backends/gpu/gpu_accel.hpp"
@@ -151,51 +154,67 @@ public:
         ctx_ = acquireContext(settings_.device);
         rayQuery_ = ctx_->rayQuery() && hardwareTraversalWanted();
         const uint32_t accel = rayQuery_ ? kSceneBinding : kNoBinding;
-        pathKernel_ = rayQuery_ ? std::make_unique<Kernel>(*ctx_, owe_kernel_path_rq, owe_kernel_path_rq_size, kAllBindings,
-                                                           uint32_t(sizeof(PushConstants)), "path (ray queries)", accel)
-                                : std::make_unique<Kernel>(*ctx_, owe_kernel_path, owe_kernel_path_size, kAllBindings,
-                                                           uint32_t(sizeof(PushConstants)), "path");
+        // Only this integrator's kernels, compiled in parallel: each one is a separate driver
+        // compilation of up to a minute when neither cache holds it.
+        struct KernelJob {
+            std::unique_ptr<Kernel>* slot;
+            const unsigned char* spirv;
+            size_t bytes;
+            const char* name;
+            bool traces;
+        };
+        std::vector<KernelJob> jobs;
+        auto tracing = [&](std::unique_ptr<Kernel>& slot, const unsigned char* rq, size_t rqBytes, const char* rqName,
+                           const unsigned char* sw, size_t swBytes, const char* swName) {
+            jobs.push_back(rayQuery_ ? KernelJob{&slot, rq, rqBytes, rqName, true} : KernelJob{&slot, sw, swBytes, swName, false});
+        };
+        auto plain = [&](std::unique_ptr<Kernel>& slot, const unsigned char* code, size_t bytes, const char* name) {
+            jobs.push_back(KernelJob{&slot, code, bytes, name, false});
+        };
+        if (camera_)
+            tracing(pathKernel_, owe_kernel_path_rq, owe_kernel_path_rq_size, "path (ray queries)", owe_kernel_path,
+                    owe_kernel_path_size, "path");
         if (particles_)
-            particleKernel_ =
-                rayQuery_ ? std::make_unique<Kernel>(*ctx_, owe_kernel_particle_rq, owe_kernel_particle_rq_size, kAllBindings,
-                                                     uint32_t(sizeof(PushConstants)), "particle (ray queries)", accel)
-                          : std::make_unique<Kernel>(*ctx_, owe_kernel_particle, owe_kernel_particle_size, kAllBindings,
-                                                     uint32_t(sizeof(PushConstants)), "particle");
+            tracing(particleKernel_, owe_kernel_particle_rq, owe_kernel_particle_rq_size, "particle (ray queries)",
+                    owe_kernel_particle, owe_kernel_particle_size, "particle");
         if (sppm_) {
-            const uint32_t pb = uint32_t(sizeof(PushConstants));
-            sppmCamera_ = rayQuery_ ? std::make_unique<Kernel>(*ctx_, owe_kernel_sppm_camera_rq, owe_kernel_sppm_camera_rq_size,
-                                                               kAllBindings, pb, "sppm camera (ray queries)", accel)
-                                    : std::make_unique<Kernel>(*ctx_, owe_kernel_sppm_camera, owe_kernel_sppm_camera_size,
-                                                               kAllBindings, pb, "sppm camera");
-            sppmPhoton_ = rayQuery_ ? std::make_unique<Kernel>(*ctx_, owe_kernel_sppm_photon_rq, owe_kernel_sppm_photon_rq_size,
-                                                               kAllBindings, pb, "sppm photon (ray queries)", accel)
-                                    : std::make_unique<Kernel>(*ctx_, owe_kernel_sppm_photon, owe_kernel_sppm_photon_size,
-                                                               kAllBindings, pb, "sppm photon");
-            sppmGrid_ = std::make_unique<Kernel>(*ctx_, owe_kernel_sppm_grid, owe_kernel_sppm_grid_size, kAllBindings, pb, "sppm grid");
-            sppmUpdate_ =
-                std::make_unique<Kernel>(*ctx_, owe_kernel_sppm_update, owe_kernel_sppm_update_size, kAllBindings, pb, "sppm update");
+            tracing(sppmCamera_, owe_kernel_sppm_camera_rq, owe_kernel_sppm_camera_rq_size, "sppm camera (ray queries)",
+                    owe_kernel_sppm_camera, owe_kernel_sppm_camera_size, "sppm camera");
+            tracing(sppmPhoton_, owe_kernel_sppm_photon_rq, owe_kernel_sppm_photon_rq_size, "sppm photon (ray queries)",
+                    owe_kernel_sppm_photon, owe_kernel_sppm_photon_size, "sppm photon");
+            plain(sppmGrid_, owe_kernel_sppm_grid, owe_kernel_sppm_grid_size, "sppm grid");
+            plain(sppmUpdate_, owe_kernel_sppm_update, owe_kernel_sppm_update_size, "sppm update");
             buffers_[kLevels] = ctx_->createDeviceBuffer(8 * sizeof(int32_t));
-            buffers_[kGuide] = ctx_->createDeviceBuffer((2 * kGuideCells + 1) * sizeof(uint32_t));
-            sppmGuide_ = std::make_unique<Kernel>(*ctx_, owe_kernel_sppm_guide, owe_kernel_sppm_guide_size, kAllBindings, pb,
-                                                  "sppm guide");
         }
         if (vcm_) {
-            const uint32_t pb = uint32_t(sizeof(PushConstants));
-            vcmLight_ = rayQuery_ ? std::make_unique<Kernel>(*ctx_, owe_kernel_vcm_light_rq, owe_kernel_vcm_light_rq_size, kAllBindings,
-                                                             pb, "vcm light (ray queries)", accel)
-                                  : std::make_unique<Kernel>(*ctx_, owe_kernel_vcm_light, owe_kernel_vcm_light_size, kAllBindings, pb,
-                                                             "vcm light");
-            vcmCamera_ = rayQuery_ ? std::make_unique<Kernel>(*ctx_, owe_kernel_vcm_camera_rq, owe_kernel_vcm_camera_rq_size,
-                                                              kAllBindings, pb, "vcm camera (ray queries)", accel)
-                                   : std::make_unique<Kernel>(*ctx_, owe_kernel_vcm_camera, owe_kernel_vcm_camera_size, kAllBindings,
-                                                              pb, "vcm camera");
-            vcmGrid_ = std::make_unique<Kernel>(*ctx_, owe_kernel_vcm_grid, owe_kernel_vcm_grid_size, kAllBindings, pb, "vcm grid");
-            // Sun light paths are guided as SPPM's photons: the same map and its CDF kernel.
-            buffers_[kGuide] = ctx_->createDeviceBuffer((2 * kGuideCells + 1) * sizeof(uint32_t));
-            sppmGuide_ = std::make_unique<Kernel>(*ctx_, owe_kernel_sppm_guide, owe_kernel_sppm_guide_size, kAllBindings, pb,
-                                                  "sppm guide");
+            tracing(vcmLight_, owe_kernel_vcm_light_rq, owe_kernel_vcm_light_rq_size, "vcm light (ray queries)",
+                    owe_kernel_vcm_light, owe_kernel_vcm_light_size, "vcm light");
+            tracing(vcmCamera_, owe_kernel_vcm_camera_rq, owe_kernel_vcm_camera_rq_size, "vcm camera (ray queries)",
+                    owe_kernel_vcm_camera, owe_kernel_vcm_camera_size, "vcm camera");
+            plain(vcmGrid_, owe_kernel_vcm_grid, owe_kernel_vcm_grid_size, "vcm grid");
             buffers_[kVcmCounters] = ctx_->createDeviceBuffer(16 * sizeof(uint32_t));
             vcmCounterReadback_ = ctx_->createHostBuffer(16 * sizeof(uint32_t), true);
+        }
+        if (sppm_ || vcm_) {
+            // SPPM's photons and VCM's sun light paths are guided by the same map and its CDF kernel.
+            plain(sppmGuide_, owe_kernel_sppm_guide, owe_kernel_sppm_guide_size, "sppm guide");
+            buffers_[kGuide] = ctx_->createDeviceBuffer((2 * kGuideCells + 1) * sizeof(uint32_t));
+        }
+        {
+            std::vector<std::future<void>> compiling;
+            for (const KernelJob& j : jobs)
+                compiling.push_back(std::async(std::launch::async, [this, j, accel] {
+                    *j.slot = std::make_unique<Kernel>(*ctx_, j.spirv, j.bytes, kAllBindings, uint32_t(sizeof(PushConstants)),
+                                                       j.name, j.traces ? accel : kNoBinding);
+                }));
+            std::exception_ptr failed;
+            for (auto& c : compiling) try {
+                    c.get();
+                } catch (...) {
+                    if (!failed) failed = std::current_exception();
+                }
+            if (failed) std::rethrow_exception(failed);
+            ctx_->savePipelineCache();
         }
         auto make = [&](Binding b, const void* data, size_t bytes) {
             buffers_[b] = ctx_->createDeviceBuffer(bytes);
