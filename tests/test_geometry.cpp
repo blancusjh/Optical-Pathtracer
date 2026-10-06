@@ -1,5 +1,7 @@
 // Geometry kernel: exact surfaces, conic foci, acceleration structures.
 #include "check.hpp"
+#include "owe/loader/scene_loader.hpp"
+#include "owe/backends/registry.hpp"
 #include "owe/scene/builders.hpp"
 #include "owe/scene/geometry.hpp"
 #include "owe/core/sampling.hpp"
@@ -236,4 +238,91 @@ TEST(dome_and_round_wall_are_exact_and_open_where_cut) {
     Vec3 win{std::sin(radians(250)), std::cos(radians(250)), 0};
     CHECK(!wall.intersect({{0, 0, 1.9}, win}, 0, Inf, h));
     CHECK(wall.intersect({{0, 0, 0.5}, win}, 0, Inf, h));
+}
+
+TEST(wave_surface_spline_follows_the_wave_sum_and_rays_find_it) {
+    // A 48-wave ripple field: its bicubic spline must match the analytic sum in height and slope,
+    // the slope bound must hold, and a ray must meet the surface where the sum says it is.
+    auto waves = rippleField(48, 11, 0.015, 0.14, 0.22, radians(30), radians(110));
+    WaveSurface exact(waves, 0.5, 0.5, 0.1, 0), spline(waves, 0.5, 0.5, 0.1);
+    CHECK(!exact.sampled() && spline.sampled());
+    Rng rng(5, 1);
+    double worstH = 0, worstSlope = 0, maxSlope = 0;
+    for (int i = 0; i < 20000; ++i) {
+        double x = (2 * rng.uniform() - 1) * 0.5, y = (2 * rng.uniform() - 1) * 0.5;
+        double h0, gx0, gy0, h1, gx1, gy1;
+        exact.height(x, y, h0, gx0, gy0);
+        spline.height(x, y, h1, gx1, gy1);
+        worstH = std::max(worstH, std::abs(h1 - h0));
+        worstSlope = std::max(worstSlope, std::hypot(gx1 - gx0, gy1 - gy0));
+        maxSlope = std::max(maxSlope, std::hypot(gx1, gy1));
+    }
+    CHECK(worstH < 2e-3 * exact.amplitudeBound());
+    CHECK(worstSlope < 0.01);
+    CHECK(maxSlope <= spline.slopeBound());
+    CHECK(spline.slopeBound() < exact.slopeBound());
+    for (int i = 0; i < 2000; ++i) {
+        Vec3 o{(2 * rng.uniform() - 1) * 0.3, (2 * rng.uniform() - 1) * 0.3, 0.5};
+        Vec3 d = normalize(Vec3{(rng.uniform() - 0.5) * 0.8, (rng.uniform() - 0.5) * 0.8, -1});
+        LocalHit h;
+        CHECK(spline.intersect(Ray{o, d}, 0, 10, h));
+        CHECK_NEAR(h.p.z, spline.height(h.p.x, h.p.y), 1e-9);
+        CHECK_NEAR(h.p.z, exact.height(h.p.x, h.p.y), 2e-3 * exact.amplitudeBound());
+        LocalHit up;  // and from just below it, back up along the same line
+        CHECK(spline.intersect(Ray{h.p + d * 0.002, -d}, 0, 10, up));
+        CHECK_NEAR(length(up.p - h.p), 0, 1e-7);
+    }
+}
+
+TEST(lathe_cone_and_torus_patches_are_hit_exactly) {
+    ConeShape cone(0.03, 0.01, 0.038, 0.095);
+    TorusPatchShape torus(0.022, 0.009, 0.009, -Pi / 2, -0.08);
+    Rng rng(9, 2);
+    int coneHits = 0, torusHits = 0;
+    for (int i = 0; i < 20000; ++i) {
+        Vec3 o{(rng.uniform() - 0.5) * 0.3, -0.2, 0.05 + (rng.uniform() - 0.5) * 0.1};
+        Vec3 target{(rng.uniform() - 0.5) * 0.08, (rng.uniform() - 0.5) * 0.08, rng.uniform() * 0.1};
+        Ray r{o, normalize(target - o)};
+        LocalHit h;
+        if (cone.intersect(r, 0, 10, h)) {
+            ++coneHits;
+            double rho = 0.03 + (0.038 - 0.03) / (0.095 - 0.01) * (h.p.z - 0.01);
+            CHECK_NEAR(std::hypot(h.p.x, h.p.y), rho, 1e-12);
+            CHECK(h.p.z >= 0.01 && h.p.z <= 0.095);
+            CHECK(dot(h.n, Vec3(h.p.x, h.p.y, 0)) > 0);  // away from the axis
+        }
+        Vec3 o2{(rng.uniform() - 0.5) * 0.2, (rng.uniform() - 0.5) * 0.2, -0.1};
+        Vec3 t2{(rng.uniform() - 0.5) * 0.06, (rng.uniform() - 0.5) * 0.06, rng.uniform() * 0.02};
+        Ray r2{o2, normalize(t2 - o2)};
+        if (torus.intersect(r2, 0, 10, h)) {
+            ++torusHits;
+            CHECK_NEAR(sqr(std::hypot(h.p.x, h.p.y) - 0.022) + sqr(h.p.z - 0.009), 0.009 * 0.009, 1e-12);
+            CHECK(h.p.z <= 0.009 + 1e-9);  // the lower quarter of the tube only
+            // The first hit along the ray: nothing of the patch before it.
+            LocalHit h2;
+            CHECK(!torus.intersect(r2, 0, h.t * (1 - 1e-9), h2));
+        }
+    }
+    CHECK(coneHits > 1000 && torusHits > 1000);
+}
+
+TEST(vessel_regions_are_consistent_through_glass_and_liquid) {
+    // A tumbler with filleted corners and a round rim, holding water: every ray that crosses it meets
+    // each boundary from the region it is in (no leaks, no inconsistencies), from every direction.
+    Scene sc = loadSceneFromString(R"(
+        units = m
+        world { sky = uniform(1) }
+        body Glass { type = vessel  outer = [(0, 0), (30mm, 0, 9mm), (38mm, 95mm)]
+                     inner = [(0, 13mm), (27mm, 13mm, 7mm), (35mm, 95mm)]  rim = round  glass = N-BK7
+                     liquid = water  level = 60mm }
+        observer Eye { position = (0.04, -0.25, 0.12)  look_at = (0, 0, 0.05)  fov = 30deg  pupil = 0  resolution = (48, 48) }
+    )");
+    CHECK(sc.world.bodies().size() == 1);
+    RenderSettings rs;
+    rs.backend = "cpu";
+    auto R = makeRenderer(sc, 0, rs);
+    R->runPass(64);
+    CHECK(R->stats().leaks == 0);
+    CHECK(R->stats().inconsistencies <= R->stats().segments / 1000000);
+    CHECK(sc.world.locate({0, 0, 0.03}) != sc.world.locate({0, 0, 0.08}));  // water below, air above the level
 }

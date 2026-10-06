@@ -1,0 +1,164 @@
+# THE PEACOCK LAMP — a study, c. 1905. Light is the subject, furniture its quiet frame.
+# References: Joseph Wright of Derby, A Philosopher Lecturing on the Orrery (1766);
+# Georges de La Tour, Magdalene with the Smoking Flame (c. 1642–44);
+# Vilhelm Hammershoi, Interior with Young Woman Seen from the Back (1903–04).
+# Intent: amber feather-eyes and blue-green glass first, then the fall of coloured light
+# across warm grey plaster, then the desk edge disappearing into walnut-black shadow.
+# Room: foreground folio and desk edge; middle-ground lamp at the right third;
+# background panel rhythm and an almost black window. No moon, fill lights or painted glow.
+# Credits: Cleveland Museum of Art, 2018.281 (CC0), scan by Dale Utt;
+# Poly Haven, Qwantani Night Pure Sky (CC0). Museum record:
+# https://www.clevelandart.org/art/2018.281 — c. 1902; Clara Wolcott Driscoll,
+# Tiffany Studios; diameter 48cm, overall 65cm; original kerosene apparatus AND
+# electric attachment survive. This view chooses electricity, one socket switched on.
+# 2100K: NBS Museum, https://nvlpubs.nist.gov/nistpubs/Legacy/IR/nbsir76-1125.pdf
+# 4 horizontal cp: 1908 Bureau of Standards carbon-lamp specification, Table 3.
+# https://www.govinfo.gov/content/pkg/GOVPUB-C13-4ed3e0af3f8fbdbed1c8f03c529b9581/pdf/GOVPUB-C13-4ed3e0af3f8fbdbed1c8f03c529b9581.pdf
+# Spherical factor .825 -> 41.469 lm. A 16cp bulb is ~166lm, ~50 W, NOT 50lm.
+# The object's historic bulb rating is unknown: 4cp is a scene choice, not an attribution.
+# Photometry follows the Observatory convention: one scene Y = 14713 cd/m2.
+# The HDR upper-hemisphere weighted RGB Y is .89012138; scale below targets
+# 1e-4 cd/m2 moonless sky (RGB approximation, not a calibrated HDR capture).
+# Exposures are engine log2 display gains, NOT photographic EV100.
+# The shade is a stained_glass slab with .90 diffuse (opalescent) transmission and one colour atlas
+# for both appearances; semantics and limitations: docs/scenes/peacock_lamp.txt.
+units = m
+world { up = (0, 0, 1)
+    sky = map("../assets/hdri/qwantani_night_puresky_4k.hdr", rotation = 112deg, scale = 7.635711866e-9)
+}
+
+material PeacockGlass {
+    type = stained_glass
+    index = constant(1.52)
+    thickness = 3mm
+    transmittance = image("../assets/sketchfab/peacock_table_lamp/textures/Shade_baseColor.png", mapping = uv)
+    gain = 0.55  density = 1.0
+    haze = 0.90
+    reflectance = image("../assets/sketchfab/peacock_table_lamp/textures/Shade_baseColor.png", mapping = uv)
+    reflection_scale = 0.18
+    roughness = 0.035
+}
+# Thin clear glass (a bulb's envelope, a window pane): a stained-glass slab of clear glass, so
+# direct light crosses it as it does the real thin glass.
+material ClearGlass { type = stained_glass  transmittance = 0.98  index = constant(1.5) }
+material Bronze {
+    type = conductor  metal = copper  roughness = 0.38
+    texture = image("../assets/sketchfab/peacock_table_lamp/textures/Lamp_Material_baseColor.jpeg", mapping = uv)
+    relief = noise(scale = 3mm, depth = 0.045mm)
+}
+material Ferrule { type = conductor  metal = copper  roughness = 0.25
+    texture = image("../assets/sketchfab/peacock_table_lamp/textures/Filament_Material_baseColor.png", mapping = uv) }
+material Carbon { type = absorber }
+material Walnut { type = diffuse
+    texture = wood(a = rgb(0.115, 0.071, 0.040), b = rgb(0.059, 0.034, 0.021), scale = 7mm, turbulence = 0.35)
+    relief = noise(scale = 6mm, depth = 0.035mm) }
+material FloorOak { type = diffuse
+    texture = wood(a = rgb(0.13, 0.085, 0.046), b = rgb(0.071, 0.043, 0.027), scale = 11mm, turbulence = 0.25) }
+material Plaster { type = diffuse
+    texture = noise(a = rgb(0.49, 0.46, 0.39), b = rgb(0.55, 0.52, 0.45), scale = 0.09)
+    relief = noise(scale = 2mm, depth = 0.08mm) }
+material CeilingPaint { type = diffuse  reflectance = rgb(0.63, 0.60, 0.53) }
+material Oxblood { type = diffuse  reflectance = rgb(0.095, 0.025, 0.023)
+    relief = noise(scale = 0.8mm, depth = 0.025mm) }
+material OliveLeather { type = diffuse  reflectance = rgb(0.052, 0.067, 0.035)
+    relief = noise(scale = 0.8mm, depth = 0.025mm) }
+material Paper { type = diffuse  reflectance = rgb(0.77, 0.73, 0.62)
+    relief = noise(scale = 0.5mm, depth = 0.015mm) }
+material AgedBrass { type = conductor  metal = gold  tint = rgb(0.55, 0.40, 0.23)  roughness = 0.28 }
+
+# Small room: 3.4 x 3.0 x 2.65m. The window is on the left wall, away from the
+# luminous shade silhouette. Upper wall and ceiling receive the soft coloured accent.
+body Floor { type = sheet  size = (3.4, 3.0)  material = FloorOak }
+body Ceiling { type = sheet  size = (3.4, 3.0)  position = (0, 0, 2.65)  material = CeilingPaint }
+body NorthWall { type = sheet  size = (3.4, 2.65)  position = (0, 1.50, 1.325)
+    axis = (0, -1, 0)  up = (0, 0, 1)  material = Plaster }
+body SouthWall { type = sheet  size = (3.4, 2.65)  position = (0, -1.50, 1.325)
+    axis = (0, 1, 0)  up = (0, 0, 1)  material = Plaster }
+body EastWall { type = sheet  size = (3.0, 2.65)  position = (1.70, 0, 1.325)
+    axis = (-1, 0, 0)  up = (0, 0, 1)  material = Plaster }
+# Left-wall window: y .25–1.05, z 1.05–2.15 (80 x 110cm).
+body WestFront { type = sheet  size = (1.75, 2.65)  position = (-1.70, -0.625, 1.325)
+    axis = (1, 0, 0)  up = (0, 0, 1)  material = Plaster }
+body WestRear { type = sheet  size = (0.45, 2.65)  position = (-1.70, 1.275, 1.325)
+    axis = (1, 0, 0)  up = (0, 0, 1)  material = Plaster }
+body WestSillWall { type = sheet  size = (0.8, 1.05)  position = (-1.70, 0.65, 0.525)
+    axis = (1, 0, 0)  up = (0, 0, 1)  material = Plaster }
+body WestHeadWall { type = sheet  size = (0.8, 0.50)  position = (-1.70, 0.65, 2.40)
+    axis = (1, 0, 0)  up = (0, 0, 1)  material = Plaster }
+body WindowPane { type = sheet  size = (0.8, 1.10)  position = (-1.704, 0.65, 1.60)  axis = (1, 0, 0)  up = (0, 0, 1)  material = ClearGlass }
+body WindowSill { type = box  size = (0.16, 0.94, 0.045)  position = (-1.64, 0.65, 1.0275)  material = Walnut }
+body WindowJambA { type = box  size = (0.065, 0.065, 1.23)  position = (-1.665, 0.2175, 1.60)  material = Walnut }
+body WindowJambB { type = box  size = (0.065, 0.065, 1.23)  position = (-1.665, 1.0825, 1.60)  material = Walnut }
+body WindowHead { type = box  size = (0.065, 0.93, 0.065)  position = (-1.665, 0.65, 2.1825)  material = Walnut }
+body WindowMullion { type = box  size = (0.04, 0.027, 1.10)  position = (-1.674, 0.65, 1.60)  material = Walnut }
+
+# Panelling comes forward of plaster. Each framed panel is a recessed plain board,
+# not a procedural imitation of carved antique furniture.
+body NorthWainscot { type = box  size = (3.4, 0.026, 0.92)  position = (0, 1.476, 0.46)  material = Walnut }
+body NorthRail { type = box  size = (3.4, 0.047, 0.055)  position = (0, 1.4595, 0.9475)  material = Walnut }
+body NorthBase { type = box  size = (3.4, 0.043, 0.11)  position = (0, 1.4615, 0.055)  material = Walnut }
+body NorthStiles { type = box  size = (0.04, 0.018, 0.81)  position = (-1.62, 1.452, 0.515)
+    repeat = (7, (0.54, 0, 0))  material = Walnut }
+body EastWainscot { type = box  size = (0.026, 3.0, 0.92)  position = (1.676, 0, 0.46)  material = Walnut }
+body EastRail { type = box  size = (0.047, 3.0, 0.055)  position = (1.6595, 0, 0.9475)  material = Walnut }
+body EastBase { type = box  size = (0.043, 3.0, 0.11)  position = (1.6615, 0, 0.055)  material = Walnut }
+
+# Writing table 145 x 68cm, top at 76cm; lamp foot rests directly on it.
+assembly Desk { position = (0.28, 0.94, 0)  rotate = (0, 0, -3deg)
+    body Top { type = box  size = (1.45, 0.68, 0.045)  position = (0, 0, 0.7375)  material = Walnut }
+    body FrontApron { type = box  size = (1.30, 0.035, 0.12)  position = (0, -0.2725, 0.655)  material = Walnut }
+    body RearApron { type = box  size = (1.30, 0.035, 0.12)  position = (0, 0.2725, 0.655)  material = Walnut }
+    body EndApronA { type = box  size = (0.035, 0.51, 0.12)  position = (-0.6325, 0, 0.655)  material = Walnut }
+    body EndApronB { type = box  size = (0.035, 0.51, 0.12)  position = (0.6325, 0, 0.655)  material = Walnut }
+    body LegA { type = box  size = (0.047, 0.047, 0.715)  position = (-0.64, -0.275, 0.3575)  material = Walnut }
+    body LegB { type = box  size = (0.047, 0.047, 0.715)  position = (0.64, -0.275, 0.3575)  material = Walnut }
+    body LegC { type = box  size = (0.047, 0.047, 0.715)  position = (-0.64, 0.275, 0.3575)  material = Walnut }
+    body LegD { type = box  size = (0.047, 0.047, 0.715)  position = (0.64, 0.275, 0.3575)  material = Walnut }
+    # A folio and two cloth/leather bindings, resting flat and slightly turned.
+    assembly Folio { position = (-0.37, -0.11, 0.760)  rotate = (0, 0, 9deg)
+        body LowerCover { type = box  size = (0.24, 0.32, 0.003)  position = (0, 0, 0.0015)  material = Oxblood }
+        body Leaves { type = box  size = (0.229, 0.31, 0.025)  position = (0.002, 0, 0.0155)  material = Paper }
+        body UpperCover { type = box  size = (0.24, 0.32, 0.003)  position = (0, 0, 0.0295)  material = Oxblood }
+        body Spine { type = box  size = (0.006, 0.32, 0.025)  position = (-0.117, 0, 0.0155)  material = Oxblood }
+    }
+    assembly Books { position = (-0.48, 0.195, 0.760)  rotate = (0, 0, -7deg)
+        body BindingA { type = box  size = (0.20, 0.115, 0.035)  position = (0, 0, 0.0175)  material = OliveLeather }
+        body PagesA { type = box  size = (0.184, 0.003, 0.025)  position = (0.003, -0.059, 0.0175)  material = Paper }
+        body BindingB { type = box  size = (0.17, 0.105, 0.024)  position = (-0.011, 0.003, 0.047)  rotate = (0, 0, 6deg)  material = Oxblood }
+    }
+    assembly Lamp { position = (0.32, 0.035, 0.760)  rotate = (0, 0, 13deg)
+        body BronzeBase { type = mesh  file = "../models/crafted/the_peacock_lamp.gltf"
+            part = "Lamp_Material"  fit_height = 65cm  normals = file  material = Bronze }
+        body ShadeGlass { type = mesh  file = "../models/crafted/the_peacock_lamp.gltf"
+            part = "Shade"  fit_height = 65cm  normals = file  material = PeacockGlass }
+        body Bulbs { type = mesh  file = "../models/crafted/the_peacock_lamp.gltf"
+            part = "Bulb_Glass"  fit_height = 65cm  normals = file  material = ClearGlass }
+        body Ferrules { type = mesh  file = "../models/crafted/the_peacock_lamp.gltf"
+            part = "Filament_Material"  fit_height = 65cm  normals = file  material = Ferrule }
+        # Hot carbon loop inside first bulb; ferrule mesh is not the emitting filament.
+        # Imported bounds: z -0.936..88.424. Scale .007274; loop centre in first bulb.
+        # Torus area 4*pi^2*R*r = 9.47482e-6 m2; flux = pi*A*Y*14713 = 41.469lm.
+        # Second and third sockets remain unlit. This is the ONLY local light source.
+        body CarbonLoop { type = torus  radius = 3mm  tube_radius = 0.08mm
+            segments = 48  tube_segments = 12  position = (0.0094, 0.101, 0.508)
+            material = Carbon  emission = blackbody(2100K, 94.689477) }
+    }
+}
+
+# Level camera axes keep verticals plumb. The shade is wholly within the close frame.
+observer Room { position = (-0.75, -1.18, 1.17)  look_at = (0.22, 0.94, 1.17)
+    up = (0, 0, 1)  fov = 56deg  pupil = 3mm  focus = 2.45  resolution = (960, 600)
+    white_balance = 3000K  tone = agx }
+observer Shade { position = (0.59, -0.45, 1.285)  look_at = (0.59, 0.96, 1.285)
+    up = (0, 0, 1)  fov = 30deg  pupil = 2mm  focus = 1.40  resolution = (960, 600)
+    white_balance = 3000K  tone = agx }
+observer Wall { position = (-0.34, -0.36, 1.69)  look_at = (0.72, 1.49, 1.69)
+    up = (0, 0, 1)  fov = 54deg  pupil = 3mm  focus = 2.15  resolution = (960, 600)
+    white_balance = 3000K  tone = agx }
+# Optional sky observer: adapted to the sky. At gain 25, 1e-4cd/m2 -> ~.228 scene
+# display Y; the lamp would saturate. No separate lighting/exposure compositing.
+observer Window { position = (-1.30, 0.65, 1.65)  look_at = (-2.0, 0.65, 1.65)
+    up = (0, 0, 1)  fov = 60deg  pupil = 3mm  focus = 100  resolution = (960, 600)
+    exposure = 25.0  white_balance = none  tone = agx }
+render { detector = Room  integrator = vcm  spp = 256  photons = 0.25  max_depth = 16
+    seed = 17 }

@@ -14,6 +14,7 @@
 
 #include "owe/scene/bvh.hpp"
 #include "owe/scene/geometry.hpp"
+#include "owe/scene/image.hpp"
 #include "owe/core/medium.hpp"
 #include "owe/core/spectrum.hpp"
 
@@ -22,12 +23,19 @@ namespace owe {
 constexpr uint32_t kOutside = 0xFFFFFFFFu;  // placeholder: "the region surrounding this body"
 constexpr uint32_t kNone = 0xFFFFFFFEu;
 
-// Spatially varying reflectance (solid textures in boundary-local coordinates).
+// Spatially varying reflectance (solid textures in boundary-local coordinates, or an image).
 struct Texture {
-    enum class Kind { None, Checker, Noise, Rings, Terrain, Bands, Radial, Marble } kind = Kind::None;
+    enum class Kind { None, Checker, Noise, Rings, Terrain, Bands, Radial, Marble, Image } kind = Kind::None;
     Spectrum a = Spectrum::constant(0.8), b = Spectrum::constant(0.2), c = Spectrum::constant(0.9);
-    double scale = 1.0;       // cell size / feature size in metres
+    double scale = 1.0;       // cell size / feature size in metres (image: the size one image covers)
     double param = 0.0;       // terrain: snow line height; rings/bands/marble: turbulence
+    // Image: its linear RGB are the weights of a, b, c, which are the RGB reflectance basis spectra;
+    // projected in boundary-local coordinates along z (planar: x across, y up) or along whichever
+    // axis the normal favours, blended (triplanar: no seams on boxes or meshes without UVs), or
+    // by a model's texture coordinates (uv: GPU; the CPU reference and bodies without texture
+    // coordinates project it planar).
+    std::shared_ptr<const ImageRGB> image;
+    enum class Mapping { Planar, Triplanar, UV } mapping = Mapping::Planar;
     double eval(const Vec3& localP, const Vec3& localN, double lambdaNm) const;
     void weights(const Vec3& localP, const Vec3& localN, double w[3]) const;
     double mix(const double w[3], double lambdaNm) const {
@@ -48,17 +56,41 @@ enum class SurfaceType {
     Conductor,   // opaque metal: complex-index Fresnel, smooth or GGX-rough
     Mirror,      // opaque specular reflector with prescribed spectral reflectance
     Absorber,    // perfectly black matter
-    Detector     // sensitive surface of a detector; absorbs what it records
+    Detector,    // sensitive surface of a detector; absorbs what it records
+    StainedGlass // thin coloured-glass slab (GPU): Fresnel at both faces, straight and diffuse transmission
 };
 const char* surfaceTypeName(SurfaceType t);
+
+// A thin slab of coloured glass (stained glass, opalescent shades). Its normal-incidence internal
+// transmittance τ₀ = clamp(gain · colour, 0, 1)^density comes from `transmittance` (the material's
+// texture or reflectance spectrum); at angle θₜ inside it is τ₀^(1/cos θₜ). Fresnel acts at both faces
+// with incoherent inter-reflections; a fraction `haze` of the transmitted power leaves diffusely
+// (opalescent glass), the rest straight through, without refraction or a change of region.
+// `reflectionScale` · colour of the remaining absorbed budget is reflected diffusely. A mask image
+// (raw red channel, nearest texel) below `maskThreshold` hands the point to the opaque `stone`.
+struct StainedGlass {
+    double gain = 1, density = 1, haze = 0, reflectionScale = 0, thickness = 0.003;
+    Spectrum index = Spectrum::constant(1.52);
+    std::shared_ptr<const ImageRGB> mask;
+    double maskThreshold = 0.5;
+    int stone = -1;  // optics index of the opaque material where the mask says stone
+};
 
 struct SurfaceOptics {
     std::string name;
     SurfaceType type = SurfaceType::Dielectric;
     double roughness = 0;                                 // GGX α; 0 = specular
+    // A material map (GPU): with a texture, the roughness of each of its components (a, b, c),
+    // mixed by the texture's weights as the reflectance is; empty: `roughness` everywhere.
+    std::vector<double> roughnessMap;
+    // Surface relief (GPU): a height depth·fbm(p / scale) over the surface, in the body's frame,
+    // whose slopes tilt the shading normal (paper grain, a concrete's pores, hammered metal).
+    double reliefScale = 0, reliefDepth = 0;
+    int reliefOctaves = 3;
     Spectrum reflectance = Spectrum::constant(1.0);       // diffuse albedo / mirror reflectance
-    Texture texture;                                      // overrides reflectance when set (diffuse)
+    Texture texture;                                      // overrides reflectance (diffuse) or tint (conductor)
     ConductorSpectrum conductor;                          // Conductor only
+    StainedGlass glass;                                   // StainedGlass only (reflectance/texture: its colour)
     bool backAbsorbs = false;                             // thin opaque sheet with a black back
     int detector = -1;                                    // absorbing detector or diffuse measurement screen
     // Optional diffuse-screen sampling guide, in world coordinates. Mixed with cosine sampling
@@ -70,6 +102,7 @@ struct SurfaceOptics {
         return texture.kind == Texture::Kind::None ? reflectance.eval(lambdaNm) : texture.eval(localP, localN, lambdaNm);
     }
     bool isDelta() const {
+        if (type == SurfaceType::StainedGlass) return glass.haze <= 0 && glass.reflectionScale <= 0;
         return (type == SurfaceType::Dielectric || type == SurfaceType::Conductor) ? roughness < 1e-3
                                                                                    : type == SurfaceType::Mirror;
     }
@@ -121,7 +154,26 @@ struct Assembly {
 };
 
 struct Environment {
-    enum class Sky { None, Uniform, Gradient } skyModel = Sky::None;
+    enum class Sky { None, Uniform, Gradient, Map } skyModel = Sky::None;
+    // Map: an equirectangular HDR image of the sky about `up` (u: azimuth from mapFrame's first axis
+    // toward its second, turned by mapRotation; v: angle from the zenith), in linear RGB; a texel's
+    // radiance is its colour through the RGB illuminant basis, times mapScale. It is a light for
+    // next-event estimation, sampled in proportion to luminance × sin θ.
+    std::shared_ptr<const ImageRGB> map;
+    double mapRotation = 0, mapScale = 1;
+    struct MapDistribution {
+        int W = 0, H = 0;
+        std::vector<double> marginal;     // H + 1 row CDF
+        std::vector<double> conditional;  // H × (W + 1) column CDFs
+        std::vector<double> rowWeight;    // H: each row's total weight
+        double total = 0;
+    } mapDist;
+    void prepareMap();  // builds mapDist
+    void mapFrame(Vec3& e1, Vec3& e2) const;
+    Vec3 mapRGB(const Vec3& dir) const;
+    // A direction toward the sky drawn from mapDist, and its solid-angle pdf.
+    bool sampleMap(double u1, double u2, Vec3& dir, double& pdf) const;
+    double mapPdf(const Vec3& dir) const;
     Spectrum zenith = Spectrum::constant(0), horizon = Spectrum::constant(0), ground = Spectrum::constant(0);
     Vec3 up{0, 0, 1};
     bool hasSun = false;
@@ -153,7 +205,7 @@ struct SurfaceHit {
 
 // A light that next-event estimation can sample.
 struct LightEntry {
-    enum class Kind { Boundary, Sun } kind = Kind::Boundary;
+    enum class Kind { Boundary, Sun, Environment } kind = Kind::Boundary;
     uint32_t boundary = kNone;
     double power = 0;
 };
@@ -177,6 +229,20 @@ public:
     uint32_t addBoundary(int body, const std::string& name, std::shared_ptr<const Shape> shape, const Transform& local,
                          uint32_t front, uint32_t back, uint32_t optics, int emission = -1);
     void setAmbientMedium(uint32_t medium) { regions_[0].medium = medium; }
+    // Bodies added while set are immersed in `region` (their outside is that region, e.g. stones on a
+    // seabed are surrounded by water); kOutside restores the ambient region.
+    void setImmersion(uint32_t region) { immersion_ = region; }
+    uint32_t immersion() const { return immersion_; }
+    // Exit pupils of afocal instruments (telescopes): where an eye receives their light, on the
+    // axis of the instrument's assembly (light leaves along +z). A sampling hint for observers
+    // (IdealObserver::prepare); transport never reads it.
+    struct ExitPupil {
+        std::string instrument;
+        int assembly = -1;
+        double z = 0, radius = 0;
+    };
+    void addExitPupil(const ExitPupil& e) { exitPupils_.push_back(e); }
+    const std::vector<ExitPupil>& exitPupils() const { return exitPupils_; }
 
     // Compiles transforms, resolves placeholders and builds acceleration structures.
     // Must be called after any structural or placement change.
@@ -224,6 +290,8 @@ public:
     double totalLightPower() const { return totalLightPower_; }
     // Emitted power estimate of the sky dome (used by light tracing to share particles with lights).
     double environmentPower() const { return envPower_; }
+    // The environment map's light (next-event estimation), or -1.
+    int environmentLight() const { return environmentLight_; }
     int lightOfBoundary(uint32_t b) const { return b < lightOfBoundary_.size() ? lightOfBoundary_[b] : -1; }
     std::string boundaryLabel(uint32_t b) const;
     std::string regionLabel(uint32_t r) const;
@@ -242,8 +310,11 @@ private:
     std::vector<double> lightCdf_, lightPdf_;
     double totalLightPower_ = 0;
     double envPower_ = 0;
+    int environmentLight_ = -1;
     double computeEnvironmentPower() const;
     std::vector<int> lightOfBoundary_;
+    std::vector<ExitPupil> exitPupils_;
+    uint32_t immersion_ = kOutside;
     bool built_ = false;
 };
 

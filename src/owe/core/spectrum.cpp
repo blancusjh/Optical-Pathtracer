@@ -140,6 +140,14 @@ const RgbCalibration& rgbCalibration() {
 }
 }  // namespace
 
+void rgbToBasisWeights(double r, double g, double b, double w[3]) { rgbCalibration().weights(r, g, b, w); }
+void rgbBasisMatrix(double A[3][3]) {
+    const auto& c = rgbCalibration();
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j) A[i][j] = c.inv[i][j] * c.white[j];
+}
+double rgbIlluminantNorm() { return Spectrum::rgbIlluminant(1, 1, 1).paramScale(); }
+
 Spectrum Spectrum::rgbReflectance(double r, double g, double b) {
     Spectrum s;
     s.kind_ = Kind::RgbReflectance;

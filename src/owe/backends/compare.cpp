@@ -63,9 +63,17 @@ void meanSe(const std::vector<double>& xs, double& m, double& se) {
 
 ComparisonReport compareRenderers(const Scene& scene, int det, const RenderSettings& a, const RenderSettings& b,
                                   int spp, int runs, int B) {
+    return compareMeasurements(scene, det, a, det, b, spp, runs, B);
+}
+
+ComparisonReport compareMeasurements(const Scene& scene, int det, const RenderSettings& a, int detB,
+                                     const RenderSettings& b, int spp, int runs, int B) {
     if (runs < 3) throw std::runtime_error("compare: need at least 3 runs per renderer");
+    const Detector &da = *scene.detectors.at(size_t(det)), &db = *scene.detectors.at(size_t(detB));
+    if (da.width != db.width || da.height != db.height)
+        throw std::runtime_error("compare: the two detectors must have the same resolution");
     Runs ra = collect(scene, det, a, 1000, spp, runs, B);
-    Runs rb = collect(scene, det, b, 2000, spp, runs, B);
+    Runs rb = collect(scene, detB, b, 2000, spp, runs, B);
     ComparisonReport rep;
     rep.runs = runs;
     rep.backendA = ra.backend;

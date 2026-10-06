@@ -29,8 +29,14 @@ enum ShapeKind : uint32_t {
     kShapeRoundWall = 5,
     kShapeDome = 6,
     kShapeMesh = 7,
+    kShapeWaves = 8,     // liquid surface: a tapered sum of plane waves (height field)
+    kShapeCone = 9,      // cone frustum (lathe profiles)
+    kShapeTorus = 10,    // torus patch (lathe profile fillets)
 };
 constexpr uint32_t kGpuNone = 0xFFFFFFFFu;
+// Boundaries a shadow ray crosses rather than stops at (it then walks the segment in order): null
+// boundaries and stained glass, whose straight transmission attenuates it.
+inline bool passable(SurfaceType t) { return t == SurfaceType::Null || t == SurfaceType::StainedGlass; }
 constexpr uint32_t kNodeInner = 0x80000000u;
 
 struct alignas(16) GNode {  // BVH node; inner: a = right child (left is next), b = kNodeInner | axis
@@ -57,7 +63,10 @@ struct alignas(16) GBoundary {
 };
 
 // Leaf order. Vertices (not edges) are rounded, so triangles sharing a vertex share its float
-// value exactly. w of v0 carries the original triangle index (as bits).
+// value exactly. w of v0 carries the original triangle index (as bits); w of v2, a smooth or
+// textured triangle's first word in GpuScene::normals with flags for what is there (kGpuNone:
+// flat, untextured).
+constexpr uint32_t kCornerNormals = 0x80000000u, kCornerUvs = 0x40000000u, kCornerIndex = 0x3FFFFFFFu;
 struct alignas(16) GTriangle {
     float v0[4], v1[4], v2[4];
 };
@@ -84,6 +93,8 @@ struct alignas(16) GOptics {
     float roughness, texScale, texParam;
     float sampleAimCenter[4]; // camera-relative centre, radius
     float sampleAimNormal[4]; // normal, mixture share
+    float roughMap[4];        // material map: roughness of texture components a, b, c; w: 1 if mapped
+    float relief[4];          // relief: scale, depth, octaves; w: unused (depth 0: none)
 };
 
 struct alignas(16) GEmission {
@@ -118,7 +129,18 @@ struct alignas(16) GGlobals {
     float emit[4];         // particles: x: the sky's share of emitted power; yzw: scene centre (camera-relative)
     uint32_t targetBoundary;  // the sensor's own boundary (particles deposit on it), or kGpuNone
     uint32_t hasNull;         // the scene has null boundaries (shadow rays check for them)
-    uint32_t pad4[2];
+    float pixelSigma;         // the pixel response's Gaussian (pixels; 0: the pixel's square alone)
+    float guideShare;         // observer: share of pupil samples drawn from the guide disk
+    float guide[4];           // observer: pupil guide centre (camera-relative), radius (0: none)
+    // Environment map (sky model 3): image record, the sampling distribution's marginal and
+    // conditional CDFs and row weights in `scalars`, its light's index (kGpuNone: none); rotation,
+    // scale, distribution total, RGB illuminant norm; the map's frame (e1 | W, e2 | H); the RGB basis
+    // matrix rows.
+    uint32_t envRecord, envMarginal, envConditional, envLight;
+    float envRotation, envScale, envTotal, envNorm;
+    float envE1[4], envE2[4];
+    uint32_t envRowWeight, envPad0, envPad1, envPad2;
+    float rgbA[3][4];
 };
 
 // All meshes sharing a frame, under one hierarchy (built once per scene; see gpu_scene.cpp).
@@ -134,6 +156,7 @@ struct MeshGroups {
     std::vector<MeshGroup> groups;
     std::vector<GNode> nodes;          // each group's BLAS (inner children relative to nodes[0])
     std::vector<GTriangle> triangles;  // in leaf order; v1.w names the owning boundary
+    std::vector<uint32_t> normals;     // corner words: smooth triangles' normals, textured triangles' uvs
 };
 
 // A flattened scene plus the facts the host needs to interpret the kernel's output.
@@ -150,6 +173,14 @@ struct GpuScene {
     std::vector<GMedium> media;
     std::vector<GSpectrum> spectra;
     std::vector<float> scalars;        // spectrum tables, index coefficients, mesh CDFs
+    // Images (textures, environment maps): a header of (offset, width, height, flags) per image,
+    // then the texels: 8-bit sRGB images one word each (R | G<<8 | B<<16, decoded in the kernel),
+    // HDR images three float words (flags bit 0).
+    std::vector<uint32_t> texels;
+    // Corner words of smooth and textured meshes: per triangle, three shading normals in the mesh's
+    // frame, each a unit vector in octahedral coordinates (2 × 16-bit snorm, x low), then three
+    // texture coordinates (u, v as float bits), as GTriangle's flags say.
+    std::vector<uint32_t> normals;
     std::vector<GOptics> optics;
     std::vector<GEmission> emissions;
     std::vector<GLight> lights;

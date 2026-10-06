@@ -1,0 +1,15 @@
+# BENCHMARK caustic_water_surface — sunlight through water rippled by one plane wave
+# h = a sin(kx) (a = 0.5 mm, λ = 2 cm: crests of 2 cm radius focusing ~8 cm deep) onto the white
+# floor of an 8 cm layer. Fold caustics at the Jacobian's zeros of the surface-to-floor ray map.
+# Physical parameters: sun overhead, 1.2e5, 0.533°; water (Daimon–Masumura index, Pope–Fry
+# absorption); floor ρ = 0.8. Measurement: Eye (radiance, 480×320, fixed exposure −9 EV).
+# The irradiance profile is verified against the analytic ray map in
+# tests/test_references.cpp (reference_ripple_caustics_follow_the_ray_map_jacobian).
+units = m
+world { sun { elevation = 90deg  azimuth = 0deg  luminance = 1.2e5 } }
+material floor { type = diffuse  reflectance = 0.8 }
+body Pool { type = waves  size = (0.3, 0.3)  depth = 0.08  margin = 0.05  medium = water  bottom = floor  walls = floor
+            waves = [wave(amplitude = 0.5mm, wavelength = 2cm, direction = 0deg, phase = 0deg)] }
+observer Eye { position = (0.0, -0.10, 0.22)  look_at = (0, 0.0, -0.08)  up = (0, 1, 0)  fov = 30deg  pupil = 3mm
+               focus = 0.32  resolution = (480, 320)  exposure = -9 }
+render { detector = Eye  spp = 1024  integrator = sppm }

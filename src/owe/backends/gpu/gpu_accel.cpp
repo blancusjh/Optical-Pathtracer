@@ -103,7 +103,7 @@ HardwareScene::HardwareScene(Context& ctx, const World& world, const GpuScene& s
             instanceBlas_[j] = groupBlas[k];
         } else {  // an analytic boundary: one box in its own frame
             const Boundary& b = world.boundaries()[r];
-            instanceMask_[j] = world.optics()[b.optics].type == SurfaceType::Null ? kMaskNull : kMaskMatter;
+            instanceMask_[j] = passable(world.optics()[b.optics].type) ? kMaskNull : kMaskMatter;
             VkAabbPositionsKHR box = localBox(*b.shape);
             std::vector<float> key = {box.minX, box.minY, box.minZ, box.maxX, box.maxY, box.maxZ};
             auto it = boxIndex.find(key);

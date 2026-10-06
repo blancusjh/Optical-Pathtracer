@@ -11,6 +11,7 @@ struct LocalHit {
     float3 n;
     uint prim;
     uint owner;  // mesh groups: the boundary the hit triangle belongs to (else kGpuNone)
+    uint slot;   // meshes: the hit triangle's record in g_triangles (set by mesh intersection only)
 };
 
 int solveQuadratic(float a, float b, float c, out float t0, out float t1) {
@@ -213,6 +214,249 @@ bool intersectSagNumeric(Sag s, float3 o, float3 d, float tmin, float tmax, inou
                 h.t = t;
                 h.p = p;
                 h.n = s.normalAt(p);
+                h.prim = 0;
+                return true;
+            }
+        }
+        tPrev = tCur;
+        fPrev = fCur;
+    }
+    return false;
+}
+
+// ---------------------------------------------------------------- liquid surfaces
+
+// WaveSurface (geometry.cpp): z = w(x) w(y) Σ aᵢ sin(kᵢ·(x, y) + φᵢ) over |x| ≤ hx, |y| ≤ hy, either
+// summed here or (many waves) as its bicubic Hermite spline. Data: (hx, hy, margin, waves),
+// (amplitude bound, slope bound, dx, dy), (nx, ny, sampled, -), then the waves (a, kx, ky, φ) or the
+// nodes (h, ∂h/∂x·dx, ∂h/∂y·dy, ∂²h/∂x∂y·dx·dy).
+void waveTaper(float u, float half, float margin, out float w, out float dw) {
+    w = 1;
+    dw = 0;
+    if (!(margin > 0)) return;
+    float e = half - abs(u);
+    if (e >= margin) return;
+    if (e <= 0) {
+        w = 0;
+        return;
+    }
+    float t = e / margin;
+    w = t * t * (3 - 2 * t);
+    dw = -(u < 0 ? -1.0 : 1.0) * 6 * t * (1 - t) / margin;
+}
+
+// Height and gradient (dh/dx, dh/dy) of the surface at (x, y).
+float3 waveHeight(uint data, float x, float y) {
+    float4 hdr = g_shapeData[data];
+    if (abs(x) > hdr.x || abs(y) > hdr.y) return 0;
+    float4 grid = g_shapeData[data + 2];
+    if (grid.z != 0) {
+        float4 sp = g_shapeData[data + 1];
+        uint nx = uint(grid.x), ny = uint(grid.y);
+        float fx = (x + hdr.x) / sp.z, fy = (y + hdr.y) / sp.w;
+        uint i = min(uint(max(fx, 0.0)), nx - 2), j = min(uint(max(fy, 0.0)), ny - 2);
+        float u = fx - float(i), v = fy - float(j);
+        float2 P = float2(2 * u * u * u - 3 * u * u + 1, -2 * u * u * u + 3 * u * u);
+        float2 Q = float2(u * u * u - 2 * u * u + u, u * u * u - u * u);
+        float2 dP = float2(6 * u * u - 6 * u, -6 * u * u + 6 * u);
+        float2 dQ = float2(3 * u * u - 4 * u + 1, 3 * u * u - 2 * u);
+        float2 Pv = float2(2 * v * v * v - 3 * v * v + 1, -2 * v * v * v + 3 * v * v);
+        float2 Qv = float2(v * v * v - 2 * v * v + v, v * v * v - v * v);
+        float2 dPv = float2(6 * v * v - 6 * v, -6 * v * v + 6 * v);
+        float2 dQv = float2(3 * v * v - 4 * v + 1, 3 * v * v - 2 * v);
+        float f = 0, fu = 0, fv = 0;
+        [ForceUnroll] for (int b = 0; b < 2; ++b)
+            [ForceUnroll] for (int a = 0; a < 2; ++a) {
+                float4 n = g_shapeData[data + 3 + (j + uint(b)) * nx + i + uint(a)];
+                f += n.x * P[a] * Pv[b] + n.y * Q[a] * Pv[b] + n.z * P[a] * Qv[b] + n.w * Q[a] * Qv[b];
+                fu += n.x * dP[a] * Pv[b] + n.y * dQ[a] * Pv[b] + n.z * dP[a] * Qv[b] + n.w * dQ[a] * Qv[b];
+                fv += n.x * P[a] * dPv[b] + n.y * Q[a] * dPv[b] + n.z * P[a] * dQv[b] + n.w * Q[a] * dQv[b];
+            }
+        return float3(f, fu / sp.z, fv / sp.w);
+    }
+    float g = 0, gx = 0, gy = 0;
+    uint n = uint(hdr.w);
+    for (uint k = 0; k < n; ++k) {
+        float4 w = g_shapeData[data + 3 + k];
+        float arg = w.y * x + w.z * y + w.w;
+        float s = sin(arg), c = cos(arg);
+        g += w.x * s;
+        gx += w.x * c * w.y;
+        gy += w.x * c * w.z;
+    }
+    float wx, dwx, wy, dwy;
+    waveTaper(x, hdr.x, hdr.z, wx, dwx);
+    waveTaper(y, hdr.y, hdr.z, wy, dwy);
+    return float3(wx * wy * g, dwx * wy * g + wx * wy * gx, wx * dwy * g + wx * wy * gy);
+}
+
+// The same Lipschitz-safe march and Newton refinement as the reference, in float.
+bool intersectWaves(uint data, float3 o, float3 d, float tmin, float tmax, inout LocalHit h) {
+    float4 hdr = g_shapeData[data];
+    float amp = g_shapeData[data + 1].x, slope = g_shapeData[data + 1].y;
+    float ta = tmin, tb = tmax;
+    float3 lo = float3(-hdr.x, -hdr.y, -amp), hi = float3(hdr.x, hdr.y, amp);
+    [ForceUnroll] for (int k = 0; k < 3; ++k) {
+        if (abs(d[k]) < 1e-35) {
+            if (o[k] < lo[k] || o[k] > hi[k]) return false;
+            continue;
+        }
+        float s0 = (lo[k] - o[k]) / d[k], s1 = (hi[k] - o[k]) / d[k];
+        ta = max(ta, min(s0, s1));
+        tb = min(tb, max(s0, s1));
+    }
+    if (!(ta < tb)) return false;
+    const float L = abs(d.z) + slope * length(d.xy);
+    const float scale = 1 + max(max(hdr.x, hdr.y), amp);
+    const float tol = 2e-7 * scale, nearSurface = 1e-4 * (amp + tol), minStep = 1e-5 * (tb - ta);
+    float t = ta;
+    float3 hv = waveHeight(data, o.x + d.x * t, o.y + d.y * t);
+    float ft = o.z + d.z * t - hv.x;
+    for (int i = 0; i < 1024 && t < tb; ++i) {
+        float step = max(abs(ft) / L, minStep);
+        if (abs(ft) < nearSurface) {
+            float tn = t;
+            for (int k = 0; k < 6; ++k) {
+                float3 hn = waveHeight(data, o.x + d.x * tn, o.y + d.y * tn);
+                float fn = o.z + d.z * tn - hn.x;
+                float dfdt = d.z - hn.y * d.x - hn.z * d.y;
+                if (abs(fn) < tol || abs(dfdt) < 1e-9) break;
+                tn -= fn / dfdt;
+            }
+            float3 hn = waveHeight(data, o.x + d.x * tn, o.y + d.y * tn);
+            if (tn >= t - 10 * tol && abs(o.z + d.z * tn - hn.x) < 20 * tol) {
+                float3 p = o + d * tn;
+                if (!(tn > tmin && tn < tmax) || abs(p.x) > hdr.x || abs(p.y) > hdr.y) return false;
+                h.t = tn;
+                h.p = p;
+                h.n = normalize(float3(-hn.y, -hn.z, 1));
+                h.prim = 0;
+                return true;
+            }
+            step = max(minStep, 2 * abs(ft) / L);
+        }
+        float tn = min(t + step, tb);
+        float3 hn = waveHeight(data, o.x + d.x * tn, o.y + d.y * tn);
+        float fn = o.z + d.z * tn - hn.x;
+        if ((fn < 0) != (ft < 0)) {
+            float a = t, b = tn, fa = ft;
+            for (int k = 0; k < 40 && b - a > tol; ++k) {
+                float m = 0.5 * (a + b);
+                float3 hm = waveHeight(data, o.x + d.x * m, o.y + d.y * m);
+                float fm = o.z + d.z * m - hm.x;
+                if ((fm < 0) == (fa < 0)) { a = m; fa = fm; } else { b = m; }
+            }
+            float tr = 0.5 * (a + b);
+            float3 p = o + d * tr;
+            if (!(tr > tmin && tr < tmax) || abs(p.x) > hdr.x || abs(p.y) > hdr.y) return false;
+            float3 hr = waveHeight(data, p.x, p.y);
+            h.t = tr;
+            h.p = p;
+            h.n = normalize(float3(-hr.y, -hr.z, 1));
+            h.prim = 0;
+            return true;
+        }
+        t = tn;
+        ft = fn;
+    }
+    return false;
+}
+
+// ---------------------------------------------------------------- lathe surfaces
+
+// ConeShape (geometry.cpp): x² + y² = (r0 + k (z − z0))², z0 ≤ z ≤ z1. Data: (r0, z0, r1, z1).
+bool intersectCone(uint data, float3 o, float3 d, float tmin, float tmax, inout LocalHit h) {
+    float4 c = g_shapeData[data];
+    const float k = (c.z - c.x) / (c.w - c.y);
+    float t0, t1;
+    float rho0 = c.x + k * (o.z - c.y);
+    float A = d.x * d.x + d.y * d.y - k * k * d.z * d.z;
+    float B = 2 * (o.x * d.x + o.y * d.y - k * rho0 * d.z);
+    float C = o.x * o.x + o.y * o.y - rho0 * rho0;
+    int n = solveQuadratic(A, B, C, t0, t1);
+    for (int i = 0; i < n; ++i) {
+        float t = i == 0 ? t0 : t1;
+        if (!mayLieIn(t, tmin, tmax)) continue;
+        // Re-solve from the approximate hit, as the reference does (float precision far away).
+        float3 p1 = o + d * t;
+        float rho1 = c.x + k * (p1.z - c.y);
+        float B1 = 2 * (p1.x * d.x + p1.y * d.y - k * rho1 * d.z);
+        float C1 = p1.x * p1.x + p1.y * p1.y - rho1 * rho1;
+        float u0, u1;
+        if (solveQuadratic(A, B1, C1, u0, u1) > 0) {
+            float du = abs(u0) < abs(u1) ? u0 : u1;
+            if (abs(du) < 1e-3 * (1 + abs(t))) t += du;
+        }
+        if (t <= tmin || t >= tmax) continue;
+        float3 p = o + d * t;
+        if (p.z < c.y || p.z > c.w) continue;
+        float rho = c.x + k * (p.z - c.y);
+        if (rho < 0) continue;
+        h.t = t;
+        h.p = p;
+        h.n = normalize(float3(p.x, p.y, -rho * k));
+        h.prim = 0;
+        return true;
+    }
+    return false;
+}
+
+// TorusPatchShape: (√(x²+y²) − R)² + (z − zc)² = rho² for arc angles a0 ≤ a ≤ a1.
+// Data: (R, zc, rho, -), (a0, a1, rMax, -), (zMin, zMax, -, -).
+bool torusOnArc(float a, float a0, float a1) {
+    const float eps = 1e-5;
+    return (a >= a0 - eps && a <= a1 + eps) || (a + 2 * kPi >= a0 - eps && a + 2 * kPi <= a1 + eps) ||
+           (a - 2 * kPi >= a0 - eps && a - 2 * kPi <= a1 + eps);
+}
+float torusF(float4 c, float3 p) { return sqr(length(p.xy) - c.x) + sqr(p.z - c.y) - c.z * c.z; }
+
+bool intersectTorus(uint data, float3 o, float3 d, float tmin, float tmax, inout LocalHit h) {
+    float4 c = g_shapeData[data], a = g_shapeData[data + 1], zr = g_shapeData[data + 2];
+    float ta = tmin, tb = tmax;
+    const float pad = 1e-6 * (1 + a.z + abs(zr.y));
+    if (abs(d.z) < 1e-35) {
+        if (o.z < zr.x - pad || o.z > zr.y + pad) return false;
+    } else {
+        float s0 = (zr.x - pad - o.z) / d.z, s1 = (zr.y + pad - o.z) / d.z;
+        ta = max(ta, min(s0, s1));
+        tb = min(tb, max(s0, s1));
+    }
+    if (!(ta < tb)) return false;
+    // Continue from the slab's entry: a ray from far away (a sun photon starts metres off) keeps
+    // its precision there, where the cylinder test would otherwise lose it to cancellation.
+    const float t0 = ta;
+    const float3 o2 = o + d * t0;
+    float A = d.x * d.x + d.y * d.y;
+    if (A > 1e-30) {
+        float q0, q1;
+        if (solveQuadratic(A, 2 * (o2.x * d.x + o2.y * d.y), o2.x * o2.x + o2.y * o2.y - sqr(a.z + pad), q0, q1) < 2)
+            return false;
+        ta = max(ta, t0 + q0);
+        tb = min(tb, t0 + q1);
+    } else if (o2.x * o2.x + o2.y * o2.y > sqr(a.z + pad)) {
+        return false;
+    }
+    if (!(ta < tb)) return false;
+    const int N = 64;
+    float tPrev = ta, fPrev = torusF(c, o2 + d * (ta - t0));
+    for (int i = 1; i <= N; ++i) {
+        float tCur = ta + (tb - ta) * float(i) / N;
+        float fCur = torusF(c, o2 + d * (tCur - t0));
+        if ((fPrev <= 0) != (fCur <= 0) || fCur == 0) {
+            float lo = tPrev - t0, hi = tCur - t0, flo = fPrev;
+            for (int it = 0; it < 40 && hi - lo > 2e-7 * (1 + abs(hi)); ++it) {
+                float mid = 0.5 * (lo + hi);
+                float fm = torusF(c, o2 + d * mid);
+                if ((fm <= 0) == (flo <= 0)) { lo = mid; flo = fm; } else { hi = mid; }
+            }
+            float3 p = o2 + d * (0.5 * (lo + hi));
+            float t = t0 + 0.5 * (lo + hi);
+            float rho = length(p.xy);
+            if (t > tmin && t < tmax && torusOnArc(atan2(p.z - c.y, rho - c.x), a.x, a.y)) {
+                float3 ctr = rho > 0 ? float3(p.xy * (c.x / rho), c.y) : float3(0, 0, c.y);
+                h.t = t;
+                h.p = p;
+                h.n = normalize(p - ctr);
                 h.prim = 0;
                 return true;
             }
@@ -487,10 +731,72 @@ bool intersectMesh(GBoundary b, float3 o, float3 d, float tmin, float tmax, inou
     h.n = normalize(triangleNormal(tri.v0.xyz, tri.v1.xyz, tri.v2.xyz));
     h.prim = asuint(tri.v0.w);
     h.owner = asuint(tri.v1.w);
+    h.slot = bestSlot;
     return true;
 }
 
-bool isNullBoundary(uint boundary) { return g_optics[g_boundaries[boundary].links.z].a.x == kSurfNull; }
+// Unit vectors in octahedral coordinates, 2 × 16-bit snorm (x low); as gpu_scene.cpp's octEncode.
+uint octEncode(float3 n) {
+    n /= abs(n.x) + abs(n.y) + abs(n.z);
+    float2 e = n.xy;
+    if (n.z < 0) e = (1 - abs(n.yx)) * float2(n.x >= 0 ? 1.0 : -1.0, n.y >= 0 ? 1.0 : -1.0);
+    int2 q = int2(round(clamp(e, -1.0, 1.0) * 32767.0));
+    return (uint(q.x) & 0xFFFFu) | (uint(q.y) << 16);
+}
+float3 octDecode(uint w) {
+    float2 e = float2(float(int(w << 16) >> 16), float(int(w) >> 16)) / 32767.0;
+    float3 n = float3(e.x, e.y, 1 - abs(e.x) - abs(e.y));
+    float t = max(-n.z, 0.0);
+    n.x += n.x >= 0 ? -t : t;
+    n.y += n.y >= 0 ? -t : t;
+    return normalize(n);
+}
+
+// Local point p's barycentric coordinates in a triangle (false for a degenerate one).
+bool triangleBarycentrics(GTriangle tri, float3 p, out float3 b) {
+    b = float3(1, 0, 0);
+    float3 e1 = tri.v1.xyz - tri.v0.xyz, e2 = tri.v2.xyz - tri.v0.xyz, q = p - tri.v0.xyz;
+    float d00 = dot(e1, e1), d01 = dot(e1, e2), d11 = dot(e2, e2), d20 = dot(q, e1), d21 = dot(q, e2);
+    float den = d00 * d11 - d01 * d01;
+    if (!(den > 0)) return false;
+    float b1 = saturate((d11 * d20 - d01 * d21) / den), b2 = saturate((d00 * d21 - d01 * d20) / den);
+    b = float3(max(0.0, 1 - b1 - b2), b1, b2);
+    return true;
+}
+
+// The shading normal of a smooth triangle at local point p (its corner normals interpolated with
+// p's barycentric coordinates), on the side of the geometric normal n; n itself for a flat one.
+float3 meshShadingNormal(uint slot, float3 p, float3 n) {
+    GTriangle tri = g_triangles[slot];
+    uint cw = asuint(tri.v2.w);
+    if (cw == kGpuNone || (cw & kCornerNormals) == 0) return n;
+    float3 b;
+    if (!triangleBarycentrics(tri, p, b)) return n;
+    uint w = cw & kCornerIndex;
+    float3 ns = octDecode(g_normals[w]) * b.x + octDecode(g_normals[w + 1]) * b.y + octDecode(g_normals[w + 2]) * b.z;
+    float l = length(ns);
+    ns = l > 0 ? ns / l : n;
+    return dot(ns, n) > 1e-4 ? ns : n;
+}
+
+// The texture coordinates of a textured triangle at local point p (false: it has none).
+bool meshUv(uint slot, float3 p, out float2 uv) {
+    uv = 0;
+    GTriangle tri = g_triangles[slot];
+    uint cw = asuint(tri.v2.w);
+    if (cw == kGpuNone || (cw & kCornerUvs) == 0) return false;
+    float3 b;
+    triangleBarycentrics(tri, p, b);
+    uint w = (cw & kCornerIndex) + ((cw & kCornerNormals) != 0 ? 3 : 0);
+    uv = float2(asfloat(g_normals[w]), asfloat(g_normals[w + 1])) * b.x +
+         float2(asfloat(g_normals[w + 2]), asfloat(g_normals[w + 3])) * b.y +
+         float2(asfloat(g_normals[w + 4]), asfloat(g_normals[w + 5])) * b.z;
+    return true;
+}
+
+// Boundaries a shadow ray crosses (null) or is attenuated by (stained glass) rather than stopped.
+bool isPassableType(uint type) { return type == kSurfNull || type == kSurfStainedGlass; }
+bool isNullBoundary(uint boundary) { return isPassableType(g_optics[g_boundaries[boundary].links.z].a.x); }
 
 // Any hit on matter (a triangle whose boundary is not null) in (tmin, tmax); no ordering, first
 // found wins. sawNull reports crossing a null boundary's triangle.
@@ -544,7 +850,15 @@ bool intersectShape(GBoundary b, float3 o, float3 d, float tmin, float tmax, ino
         case kShapeCylinder:
         case kShapeRoundWall:
         case kShapeDome: return intersectCylinderLike(kind, data, o, d, tmin, tmax, h);
+        case kShapeWaves: return intersectWaves(data, o, d, tmin, tmax, h);
+        case kShapeCone: return intersectCone(data, o, d, tmin, tmax, h);
+        case kShapeTorus: return intersectTorus(data, o, d, tmin, tmax, h);
+#ifndef OWE_RAY_QUERY
+        // With hardware traversal a mesh is triangle geometry of the acceleration structure and
+        // never reaches here; its software traversal inlined at every call site would only spill
+        // (~4 KB of local memory per thread).
         case kShapeMesh: return intersectMesh(b, o, d, tmin, tmax, h);
+#endif
         default: return false;
     }
 }

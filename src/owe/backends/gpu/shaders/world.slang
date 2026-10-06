@@ -7,8 +7,11 @@ struct SurfaceHit {
     float t;
     float3 p;       // camera-relative world position
     float3 n;       // world geometric normal, toward the front region
+    float3 ns;      // world shading normal (smooth meshes; else n), on n's side
     float3 pLocal;  // shape-local position and normal (textures, emitter pdfs)
     float3 nLocal;
+    float2 uv;      // texture coordinates (textured meshes, where hasUv)
+    bool hasUv;
     uint boundary;
     float scale;    // float error scale of the boundary's local frame (ray offsets)
 };
@@ -63,6 +66,7 @@ bool intersectWorld(float3 o, float3 d, float tmax, out SurfaceHit hit) {
         bestLocal.p = lo + ld * bestLocal.t;
         bestLocal.n = normalize(np);
         bestLocal.prim = asuint(tri.v0.w);
+        bestLocal.slot = g.mesh.z + q.CommittedPrimitiveIndex();
         bestB = asuint(tri.v1.w);
     }
     GBoundary b = g_boundaries[bestB];
@@ -71,6 +75,12 @@ bool intersectWorld(float3 o, float3 d, float tmax, out SurfaceHit hit) {
     hit.nLocal = bestLocal.n;
     hit.p = xfPoint(b.toWorld, bestLocal.p);
     hit.n = normalize(xfVector(b.toWorld, bestLocal.n));
+    hit.ns = hit.n;
+    if (asuint(b.boxLo.w) == kShapeMesh) {
+        float3 ns = meshShadingNormal(bestLocal.slot, bestLocal.p, bestLocal.n);
+        if (any(ns != bestLocal.n)) hit.ns = normalize(xfVector(b.toWorld, ns));
+        hit.hasUv = meshUv(bestLocal.slot, bestLocal.p, hit.uv);
+    }
     hit.boundary = bestB;
     hit.scale = b.misc.x;
     return true;
@@ -171,6 +181,12 @@ bool intersectWorld(float3 o, float3 d, float tmax, out SurfaceHit hit) {
     hit.nLocal = bestLocal.n;
     hit.p = xfPoint(b.toWorld, bestLocal.p);
     hit.n = normalize(xfVector(b.toWorld, bestLocal.n));
+    hit.ns = hit.n;
+    if (asuint(b.boxLo.w) == kShapeMesh) {
+        float3 ns = meshShadingNormal(bestLocal.slot, bestLocal.p, bestLocal.n);
+        if (any(ns != bestLocal.n)) hit.ns = normalize(xfVector(b.toWorld, ns));
+        hit.hasUv = meshUv(bestLocal.slot, bestLocal.p, hit.uv);
+    }
     hit.boundary = bestB;
     hit.scale = b.misc.x;
     return true;
@@ -207,7 +223,7 @@ bool occluded(float3 o, float3 d, float tmax, out bool sawNull) {
                 LocalHit lh;
                 lh.owner = kGpuNone;
                 if (!intersectShape(b, lo, ld, 0, tmax, lh)) continue;
-                if (g_optics[b.links.z].a.x != kSurfNull) return true;
+                if (!isPassableType(g_optics[b.links.z].a.x)) return true;
                 sawNull = true;
             }
         } else {

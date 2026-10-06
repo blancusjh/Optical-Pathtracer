@@ -19,15 +19,13 @@ every pixel.
 |---|---|
 | ![The Lens](docs/gallery/the_lens.png) | ![Through the telescope](docs/gallery/telescope_eyepiece.png) |
 | **The Lens** — a loose magnifier over a page: magnified view, dispersion-tinted caustic in its shadow. | **The Telescope** — the eye's pupil placed at the telescope's computed exit pupil: the statue on the ridge, magnified 16× and inverted. |
-| ![The Prism](docs/gallery/the_prism.png) | ![Glass of water](docs/gallery/glass_of_water.png) |
-| **The Prism** — lamp → slit → collimator → N-SF11 prism → screen, plus a secondary spectrum from an internal reflection. | **The Glass of Water** — a rod broken at the water line; the card behind compressed by the water cylinder. |
+| ![Prism in sunlight](docs/gallery/prism_in_sunlight.png) | ![Glass of water](docs/gallery/glass_of_water.png) |
+| **Prism in Sunlight** — low sun through a slit onto an N-SF11 prism: the white beam, the spectrum and the beams its faces reflect, seen where they graze the floor (VCM). | **The Glass of Water** — a rod broken at the water line; the card behind compressed by the water cylinder. |
+| ![The study](docs/gallery/study_room.png) | |
+| **The Study** — one sunlit room to walk through: a glass of water and a prism in the sun, a magnifier, a mirror, a lamp, and a telescope aimed out of the window (VCM). | |
 
 | | |
 |---|---|
-| ![The temple](docs/gallery/temple_wide.png) | ![The west colonnade](docs/gallery/temple_colonnade.png) |
-| **The Temple** — a Doric peristyle temple at golden hour, with a museum scan of Athena on her pedestal. | Fluted columns with entasis along the sunlit west colonnade. |
-| ![85 mm at f/2](docs/gallery/temple_cam_f2.png) | ![85 mm at f/11](docs/gallery/temple_cam_f11.png) |
-| **A physical camera**: 85 mm Petzval-type portrait lens at f/2, focused on Athena (DOF 10.9–13.2 m). | The same camera at f/11 focused at 25 m: the stop is smaller and the depth of field reaches the temple. |
 | ![The observatory](docs/gallery/observatory_room.png) | ![The desk](docs/gallery/observatory_desk.png) |
 | **The Observatory** — a domed observatory at night, lit by candles; two refractors aim through the slit. | The astronomer's desk: books, an armillary, a compass under glass. |
 | ![Saturn](docs/gallery/observatory_saturn.png) | ![Jupiter](docs/gallery/observatory_jupiter.png) |
@@ -115,11 +113,12 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DOWE_GPU=ON -DOWE_VIEWE
 cmake --build build
 build/owe view                         # browse all scenes in scenes/
 build/owe view --tour                  # automatically cycle through every detector
-build/owe view --view the_temple.owe:Cam
 ```
 
 CMake fetches Dear ImGui at a pinned release. `OWE_VIEWER` also works with `OWE_GPU=OFF`;
-the viewer uses the GPU when available and otherwise uses the CPU. Run from the repository
+the viewer starts on the GPU when there is a discrete one (or Apple silicon) and otherwise on the
+CPU, which outruns a laptop's integrated GPU; **G** switches. The first use of a GPU after a driver
+update compiles the kernels (the status line says so; minutes on an integrated GPU, then cached). Run from the repository
 root, or pass scene files/directories explicitly. For a lighter preview use `--scale 0.5`.
 
 Select a detector in the scene browser, or use **Left/Right** to change scenes and **Up/Down**
@@ -127,6 +126,12 @@ to change views. The image refines progressively. **Space** pauses, **R** restar
 to the next backend (the Render panel has a button per backend), **T** toggles the tour, **F**
 toggles fullscreen, **H** hides the panel, and **Q** quits.
 The panel controls exposure, white balance, resolution, camera aperture/focus and scene edits.
+Exposure has three modes (**A** cycles them): *manual*, a fixed exposure; *locked* (the default),
+which meters each new view once and then keeps that exposure while you navigate; and *adaptive*,
+which follows the meter gradually in real time (at most 1.5 EV/s brighter and 2.5 EV/s darker,
+with a 0.35 EV dead band). **L** meters again, **+**/**-** change the exposure (the compensation in
+the automatic modes). A lamp or the sun entering the view saturates; the room around it does not
+darken. Saved images use exactly the exposure the window shows.
 Click a pixel to inspect its light paths. **S** saves PNG, raw PFM and a JSON render record under
 `out/view_<scene>_<detector>`. On a backend without the scene's light or hybrid integrator the
 view uses path tracing (same expected image); on the reference it can use either. Scene changes
@@ -141,7 +146,8 @@ Navigate over the image with these controls:
 | Middle-mouse drag | Orbit around the point in front of the eye |
 | Shift + middle-mouse drag | Pan sideways/up and down |
 | Wheel, or Ctrl + middle-mouse drag | Move toward/away from the orbit point |
-| Shift + click a surface | Set the orbit center and eye focus to that surface |
+| Shift + click a surface | Set the orbit center there and focus the eye on what it shows (through optics, their image) |
+| [ / ], or Alt + wheel | Zoom: narrow or widen the field of view (the eye does not move) |
 | Hold right mouse | Look around; WASD moves forward/back/sideways, Q/E moves down/up |
 | Shift + F | Toggle fly mode without holding a mouse button; Escape releases the cursor |
 | Shift / Ctrl while moving | Faster / precision movement |
@@ -151,7 +157,11 @@ Navigate over the image with these controls:
 | Home | Return to the selected scene's saved view |
 
 The **Explore** panel provides movement speed (metres/second), eye pupil diameter, focus,
-field of view and exact position. **Walk at constant height** makes WASD horizontal; Q/E still
+field of view and exact position. The eye **accommodates** by default, like a real one: it
+focuses on whatever is at the centre of the view, and when that is seen through lenses or in a
+mirror it focuses on their image, not on the glass (through the Saturn refractor, at infinity;
+through the 16× telescope, on the statue's image about 2 m away). Turn it off to set the focus
+by hand. **Walk at constant height** makes WASD horizontal; Q/E still
 changes height. Navigation has no gravity or collision constraint, so it can pass through matter.
 Hold **Ctrl** for precise alignment: translation, mouse look, roll, pan and dolly use the
 adjustable **Ctrl speed / look** factor (20% by default). **Slow near surfaces** reduces
@@ -174,13 +184,18 @@ traced through the instrument, not pre-rendered images.
 Movement uses a temporary virtual eye; physical cameras, sensors, lenses and saved observer
 positions stay in place. Moving renders a preview up to 320 pixels wide; after a short pause,
 the selected resolution returns and the image refines. GPU camera changes retain mesh buffers
-and the compute pipeline. Exploration uses path tracing on every backend. Saved exploration
-images have an `_explore` suffix, and their JSON records include the eye's exact pose and optics.
+and the compute pipeline. Exploration keeps the scene's integrator (so caustics stay formed by
+light tracing; **path integrator only** switches it off). Saved exploration images have an
+`_explore` suffix, and their JSON records include the eye's exact pose and optics.
 
 Images form through light transport at arbitrary eye positions; selecting a saved view does
 not activate an optical instrument. An eye that intercepts the telescope's emerging light
 bundle sees its image, with pupil clipping, defocus and vignetting determined by the geometry.
-A large field of view also makes the planetary disc occupy fewer pixels.
+A planet through an eyepiece spans a degree or two: in an 80° field that is a dozen pixels, so
+zoom (**]**) to a few degrees to see its bands and rings — a real eye resolves an arcminute, a
+pixel at 80° spans six. An eye pupil wider than the telescope's exit pupil (5 mm against the
+refractor's 1.07 mm) receives the image through part of its pupil only; its samples are drawn
+mostly there, so the image converges as quickly as through a matched pupil.
 The telescope scenes include physical black eyecups to reduce room light reflecting off the
 glass. The lenses remain uncoated and the observer remains a virtual pupil without a head;
 Fresnel reflections of the surroundings are still possible. These are separate paths from
@@ -191,8 +206,6 @@ lens focal plane, but a finite opening still blurs the image. For an object dist
 screen distance `L` and hole diameter `d`, the geometric blur diameter is `d * (1 + L/s)`.
 Larger holes admit more light and produce more blur. Diffraction is not simulated; this
 geometrical model cannot predict the optimum pinhole diameter or wave-limited resolution.
-`camera_obscura_lens.owe` preserves the original 300 mm diameter, 3 m focal-length lens
-camera, whose image does depend on lens focus.
 
 The camera obscura and optical bench use diffuse measurement screens. Incident light
 is reflected throughout the illuminated front hemisphere, so the projection remains
@@ -201,13 +214,18 @@ does not appear through its back. `camera_obscura.owe:Inside` and
 `optical_bench.owe:ScreenView` are convenient starting positions for exploring this.
 The `BackWall` and `Sensor` entries instead show an irradiance readout of the screen itself;
 they are not observer viewpoints. Move around on the illuminated side to inspect the image.
-The obscura starts with automatic exposure, which re-meters the current image as you walk
-outside. Auto exposure protects the 99th luminance percentile and compact central highlights
-supported by neighbouring pixels. A centred planet occupying less than 1% of a wide view therefore
-still limits the gain, instead of a weak surrounding glass reflection being raised to grey.
-The panel reports the automatic gain in EV; turning
-auto exposure off locks the current brightness for comparisons between views. Turning it
-on restores automatic metering with zero exposure compensation. Display processing does
+The meter (`owe/render/exposure.hpp`) averages block means, not pixels, in log luminance over a
+band of percentiles with a smooth centre weighting: fireflies and the empty pixels of a
+one-sample preview do not move it, and nothing steps as a bright object crosses the view. Lit
+surfaces beyond white (a candle-lit wall, a projected image) pull the exposure down in proportion
+to the area they cover, by at most 4 EV; emitters seen directly, ten or more stops above the key,
+do not, so a small bright planet or a lamp saturates rather than setting the exposure. Views whose
+subject is a small bright object (the eyepieces, the bench's projected F) carry a fixed exposure.
+`owe pan` measures the display's time course: it turns the free eye through a sweep and prints each
+frame's meter reading and the exposure each mode resolves. The old meter protected compact
+highlights in a central window and re-metered every frame, so a candle crossing the centre of the
+observatory room changed the exposure by up to 4.9 EV from one frame to the next; now the locked
+exposure is constant and the adaptive one moves at most 1.5 EV/s. Display processing does
 not change the raw radiance. In particular, automatic metering can make a weak glass
 reflection look bright when it occupies most of the view. The glass model is uncoated;
 it does not model the anti-reflection coatings found on many real telescope lenses.
@@ -230,14 +248,12 @@ runs a two-scene tour using SDL's software renderer without requiring a desktop.
 build/owe render scenes/the_lens.owe --spp 128 --out lens          # lens.png, lens.pfm, lens.json
 build/owe render scenes/the_telescope.owe --detector Eyepiece --spp 256 --passes 8 --out scope
 build/owe probe  scenes/the_lens.owe --pixel 320 110 --svg why.svg  # why is this pixel this colour?
-build/owe emit   scenes/the_prism.owe --from -0.3195,0,0.1 --dir 1,0,0 --cone 0.25 --svg beam.svg
+build/owe emit   scenes/prism_in_sunlight.owe --from -0.3,0,0.098 --dir 0.9816,0,-0.1908 --cone 0.25 --svg beam.svg
 build/owe lens   lenses/kepler_16x.lens --afocal --fields 0,0.3,0.6
 build/owe glass  N-SF11
+build/owe model  assets/sketchfab/<slug>/scene.gltf                 # a model's parts, sizes and textures
+build/owe render scenes/the_study.owe --detector Cam --integrator path --set Cam.f_number=8   # the 85 mm camera
 build/owe info   scenes/the_telescope.owe                           # the world's ontology
-build/owe render scenes/the_temple.owe --detector Cam --set Cam.f_number=5.6 --set "Cam.focus=20 m"
-build/owe studio scenes/the_temple.owe --detector Cam                # interactive: set, render, probe
-build/owe render scenes/the_temple.owe --detector Cam --backend gpu --spp 1024 --out cam   # same render, on the GPU
-build/owe compare scenes/the_temple.owe:Cam --backend gpu            # GPU vs the reference, statistically
 build/owe bench --backend gpu                                        # throughput on the canonical suite
 build/owe backends                                                   # what this build can run on
 ```
@@ -251,15 +267,15 @@ values, so they can be changed from the command line with `--set` (any `Block.ke
 live in the studio:
 
 ```
-$ build/owe studio scenes/the_temple.owe --detector Cam --resolution 300x200
+$ build/owe studio scenes/the_study.owe --detector Cam --integrator path --resolution 300x200
 camera 'Cam' ...
-EFL 86.3 mm, f/2.00, focus 11.950 m; depth of field 10.945 m to 13.158 m (CoC 29 µm)
+EFL 86.3 mm, f/2.80, focus 1.340 m; depth of field 1.322 m to 1.358 m (CoC 29 µm)
 > render 16 4                       # 4 passes of 16 spp; studio.png/.pfm/.json after each
 > set Cam.f_number=11               # the stop closes; the scene is rebuilt and refined afresh
-> set Cam.focus=25 m
+> set Cam.focus=1.8 m
 > render 32 4
 > probe 150 100                     # why is this pixel this colour?
-> detector Wide                     # any observer, camera or sensor
+> detector Room                     # any observer, camera or sensor
 ```
 
 Commands: `set`, `unset`, `edits`, `detector`, `size WxH`, `backend NAME`, `render [SPP] [PASSES]`,
@@ -315,18 +331,20 @@ own hierarchy. Both traversals run the conformance suite and agree with the refe
 detector; `OWE_GPU_RAY_QUERY=0` forces the software traversal.
 
 The canonical suite at 960×540, 32 spp (`owe bench`; i7-12650H, 16 threads; RTX 4060 Laptop).
-The scenes carry the detailed models: 9 M triangles in the temple, 5.5 M in the observatory,
-7.7 M in the mountain landscape.
+The scenes carry the detailed models: 5.5 M triangles in the observatory, 7.7 M in the mountain
+landscape. (Measured when the suite still included a temple scene, since removed.)
 
 | | suite | per scene | vs reference |
 |---|---|---|---|
 | `cpu` (reference) | 134.8 s | 3.1–61.8 s | 1× |
-| `gpu`, software traversal | 10.1 s | 0.12–3.1 s | 13× (7–26× per scene) |
-| `gpu`, hardware traversal | 4.2 s | 0.12–0.86 s | 32× (10–72× per scene) |
+| `gpu`, software traversal | 9.6 s | 0.11–3.0 s | 14× |
+| `gpu`, hardware traversal | 3.8 s | 0.11–0.79 s | 35× |
 
-The first run of a new build compiles the kernels in the driver (~10 s; cached afterwards), and
-the first renderer of a scene builds its merged mesh hierarchies (a few seconds for millions of
-triangles; later renderers of the same scene reuse them).
+The laptop's CPU timings vary by ±15% between sessions (power and thermal state); the reference
+row is the best measured. The first run of a new build compiles the kernels in the driver (~10 s;
+cached afterwards). Loading is parallel: the mountain landscape (7.7 M triangles) loads in 1.2 s,
+and the GPU's first renderer of a scene builds its merged mesh hierarchies in about a second
+(later renderers of the same scene reuse them).
 
 `owe compare scene.owe:DETECTOR --backend gpu` is the validation: K independent renders per
 backend, block means of X, Y and Z, and z-scores of their differences against the combined
@@ -403,16 +421,9 @@ observer Eye { position = exit_pupil("Scope")  look_at = (0, 20000, 3000)  pupil
 ```
 
 Included: `the_lens`, `the_telescope` (alpine landscape with 650 slope-grounded conifers, rock
-outcrops, statue, telescope), `the_statue` (fractal statue: direct, close, hand lens, telescope),
-`the_prism`, `glass_of_water`, `optical_bench`, `camera_obscura` (a 6 mm pinhole) and
-`camera_obscura_lens` (the same room with a 300 mm, f = 3 m lens), `the_ghost`, and two scenes
-built for their own sake:
+outcrops, a fractal statue, telescope), `optical_bench`, `camera_obscura` (a 6 mm pinhole), and
+scenes built for their own sake:
 
-* `the_temple` — a Doric peristyle temple (6 × 9 fluted columns with entasis, entablature,
-  pedimented roof, triglyphs, roof tiles) on a hillside at golden hour, with branching olives,
-  cypresses, jointed paving, amphorae and a marble Athena. Observers `Wide` and `Colonnade`; the physical camera `Cam` (85 mm portrait lens).
-  The statue is a museum scan (Three D Scans) fetched by `tools/fetch_assets.sh`; without it
-  the pedestal stands empty.
 * `the_observatory` — a brick-and-stone domed observatory at night. Inside: two refractors on
   iron piers aimed through the slit, a small brass telescope on a tripod at the window, walnut
   panelling, a book cabinet, a desk with tooled books and a typeset orbital folio, a woven carpet,
@@ -421,6 +432,16 @@ built for their own sake:
   lit by the sun below the horizon, and 3500 stars. Observers `Room`, `Desk`, `Slit`, and the
   eyepieces `SaturnEyepiece`, `JupiterEyepiece`, `MoonEyepiece`, placed at each telescope's
   computed exit pupil.
+* `the_study` — every phenomenon in one sunlit room to walk through: a tumbler of water and a
+  flint prism in the sun on a desk under the window, a loose magnifier over a printed page, a
+  wall mirror, a desk lamp, and a 16× telescope on a pier aimed out of the window at a brick
+  tower. Observers `Room`, `Desk`, `Magnifier` and `Eyepiece` (at the telescope's exit pupil);
+  rendered with VCM.
+
+Glasses, grouped in `scenes/glass/`: `glass_of_water` (refraction: a rod broken at the water
+line, a card compressed by the water cylinder), and two caustic studies after reference
+photographs, `glass_in_sunlight` and `tea_glass`. More caustic studies: `prism_in_sunlight` and
+`the_shallows` (sunlight through rippled sea water). `owe view scenes` finds scenes in groups too.
 
 Lens files in `lenses/` use a literature-style table (label, R, t, medium, semi-diameter,
 `k=`, `A4=`, `stop`); they include an 85 mm f/1.9 Petzval-type portrait lens and a 150 mm f/15
@@ -469,5 +490,7 @@ What exists, what is partial and what is ahead is mapped section by section to t
 in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). In short: the reference engine, geometrical
 optics with spectral transport, the ontology, instruments inside the world, inspection and lens
 diagnostics are implemented, on two backends (CPU reference, portable GPU), with a command-line
-studio and an interactive window; the GPU's light and hybrid integrators, bidirectional
-estimators (BDPT/VCM), GRIN media, thin-film coatings, polarisation and optimisation are not yet.
+studio and an interactive window. On the GPU: photon mapping (SPPM) and bidirectional estimators
+(BDPT, VCM) for caustics, and glTF models with texture coordinates. GRIN media, thin-film
+coatings, polarisation and optimisation are not yet. The priorities ahead, starting with faster
+loading, are in [`docs/ROADMAP.md`](docs/ROADMAP.md).

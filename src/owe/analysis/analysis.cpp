@@ -1,5 +1,6 @@
 #include "owe/analysis/analysis.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <sstream>
 
@@ -10,16 +11,18 @@ namespace {
 struct LensWorld {
     Scene scene;
     BuiltInstrument bi;
-    size_t surfaces = 0;
+    size_t surfaces = 0, mirrors = 0;
 };
 
 void makeLensWorld(const Prescription& p, LensWorld& lw) {
     lw.bi = buildPrescription(lw.scene.world, p, "lens", -1, Transform{}, 0.0, catalogIndex(), LensSpec::Rim::Black);
     lw.scene.world.build();
     lw.surfaces = 0;
+    lw.mirrors = 0;
     for (size_t i = 0; i < p.surfaces.size(); ++i) {
         std::string before = i == 0 ? p.ambient : p.surfaces[i - 1].medium;
-        if (!(before == p.ambient && p.surfaces[i].medium == p.ambient)) lw.surfaces++;
+        if (p.surfaces[i].reflect) lw.mirrors++;
+        else if (!(before == p.ambient && p.surfaces[i].medium == p.ambient)) lw.surfaces++;
     }
 }
 
@@ -34,12 +37,13 @@ TracedRay traceThrough(const LensWorld& lw, const Vec3& origin, const Vec3& dir,
     PathRecord rec = tr.walk(Ray{origin, dir}, lw.scene.world.ambientRegion(), lambda, WalkMode::PrimaryTransmission, rng, 64);
     TracedRay r;
     if (rec.v.size() < 2 || rec.v.back().event != EventKind::Escape) return r;
-    size_t refr = 0;
+    size_t refr = 0, refl = 0;
     for (auto& v : rec.v) {
         if (v.event == EventKind::Refract) refr++;
+        else if (v.event == EventKind::Reflect && lw.mirrors > 0) refl++;
         else if (v.event != EventKind::Emit && v.event != EventKind::Escape) return r;
     }
-    if (refr != lw.surfaces) return r;
+    if (refr != lw.surfaces || refl != lw.mirrors) return r;
     const PathVertex& last = rec.v[rec.v.size() - 2];
     r.p = last.p;
     r.d = last.dOut;
@@ -256,6 +260,221 @@ std::vector<PathRecord> lensFan(const Prescription& p, double fieldDeg, double l
         out.push_back(rec);
     }
     return out;
+}
+
+namespace {
+
+bool specularEvent(EventKind k) {
+    return k == EventKind::Refract || k == EventKind::Reflect || k == EventKind::TIR || k == EventKind::Pass;
+}
+
+// A line of sight up to the object: the events (boundary, kind) crossed, and either the object
+// point or, for light from beyond the world, the final direction.
+struct Sight {
+    std::vector<std::pair<uint32_t, EventKind>> events;
+    Vec3 lastPoint, lastDir;  // after the final specular event (the eye if there is none)
+    Vec3 object;              // the object point (when !atInfinity)
+    bool atInfinity = false, ok = false;
+    bool dark = false;        // ends on matter that neither scatters nor emits (black paint)
+    double length = 0;
+    int specular = 0;
+};
+
+Sight followSight(const Scene& scene, const Tracer& tr, const Vec3& eye, const Vec3& dir, uint32_t region, double lambda) {
+    Rng rng(1, 1);  // PrimaryTransmission walks are deterministic through smooth surfaces
+    PathRecord rec = tr.walk(Ray{eye, dir}, region, lambda, WalkMode::PrimaryTransmission, rng, 64);
+    Sight s;
+    s.lastPoint = eye;
+    s.lastDir = dir;
+    for (size_t i = 1; i < rec.v.size(); ++i) {
+        const PathVertex& v = rec.v[i];
+        if (v.event == EventKind::Escape) {
+            s.atInfinity = s.ok = true;
+            return s;
+        }
+        s.length += length(v.p - rec.v[i - 1].p);
+        if (specularEvent(v.event)) {
+            s.events.push_back({v.boundary, v.event});
+            if (v.event != EventKind::Pass) s.specular++;
+            s.lastPoint = v.p;
+            s.lastDir = v.dOut;
+            continue;
+        }
+        // The first surface that scatters, emits or measures: the object.
+        s.events.push_back({v.boundary, v.event});
+        s.object = v.p;
+        s.ok = v.event != EventKind::Terminate && v.event != EventKind::None;
+        s.dark = v.event == EventKind::Absorb && v.boundary != kNone &&
+                 scene.world.boundaries()[v.boundary].emission < 0;
+        return s;
+    }
+    return s;
+}
+
+// The focus for the line of sight from `eye` along `dir` (see accommodation()).
+Accommodation focusAlong(const Scene& scene, const Tracer& tr, const Sight& chief, const Vec3& eye, const Vec3& dir,
+                         uint32_t region, double lambda) {
+    Accommodation a;
+    a.found = true;
+    a.pupilPoint = eye;
+    a.specular = chief.specular;
+    a.objectPath = chief.atInfinity ? Inf : chief.length;
+    if (chief.specular == 0) {
+        a.distance = chief.atInfinity ? Inf : chief.length;
+        return a;
+    }
+    // Paraxial rays from the eye at height h along a, aimed to cross the line of sight at distance
+    // 1/v (vergence v; 0: parallel). Their miss at the object (a transverse distance, or for an
+    // object at infinity an angle) is affine in v: solve it for zero along two directions and
+    // take the mean vergence, the circle of least confusion of an astigmatic image.
+    Vec3 a1, a2;
+    orthonormalBasis(dir, a1, a2);
+    auto miss = [&](const Vec3& axis, double h, double v, Vec3& out) {
+        Sight m = followSight(scene, tr, eye + axis * h, normalize(dir - axis * (v * h)), region, lambda);
+        if (!m.ok || m.atInfinity != chief.atInfinity || m.events.size() != chief.events.size()) return false;
+        for (size_t k = 0; k < m.events.size(); ++k)
+            if (m.events[k] != chief.events[k]) return false;
+        Vec3 e;
+        if (chief.atInfinity) {
+            e = m.lastDir - chief.lastDir;
+        } else {
+            // Where the ray crosses the plane through the object normal to the line of sight.
+            double c = dot(m.lastDir, chief.lastDir);
+            if (!(c > 0)) return false;
+            e = m.lastPoint + m.lastDir * (dot(chief.object - m.lastPoint, chief.lastDir) / c) - chief.object;
+        }
+        out = e - chief.lastDir * dot(e, chief.lastDir);
+        return true;
+    };
+    double sum = 0;
+    int solved = 0;
+    for (const Vec3& axis : {a1, a2}) {
+        for (double h : {1e-4, 1e-5, 1e-6}) {
+            // Two vergences bracket the answer's scale: 0 and that of the nearest optics.
+            double v0 = 0, v1 = 1 / std::max(1e-3, length(chief.lastPoint - eye));
+            Vec3 e0, e1;
+            if (!miss(axis, h, v0, e0) || !miss(axis, h, v1, e1)) continue;
+            bool ok = true;
+            for (int it = 0; it < 3 && ok; ++it) {
+                Vec3 de = e1 - e0;
+                double dd = dot(de, de);
+                if (!(dd > 0)) { ok = false; break; }
+                double v = v1 - dot(e1, de) / dd * (v1 - v0);  // least-squares secant step
+                Vec3 e;
+                if (!miss(axis, h, v, e)) { ok = false; break; }
+                v0 = v1; e0 = e1;
+                v1 = v; e1 = e;
+            }
+            if (!ok || !std::isfinite(v1)) continue;
+            sum += v1;
+            solved++;
+            break;
+        }
+    }
+    if (solved == 0) {
+        a.found = false;
+        return a;
+    }
+    double v = sum / solved;
+    // Collimated light (v = 0) or converging light (v < 0): the relaxed eye, focused at infinity.
+    a.distance = v > 1e-9 ? 1 / v : Inf;
+    return a;
+}
+
+}  // namespace
+
+Accommodation accommodation(const Scene& scene, const Vec3& eye, const Vec3& direction, uint32_t region,
+                            double pupilRadius, double lambda) {
+    const Tracer tr(scene);
+    const Vec3 dir = normalize(direction);
+    // Pupil points: the centre, then rings an eighth of the radius apart (fine enough to find a
+    // 1 mm exit pupil in a 10 mm eye pupil).
+    std::vector<Vec3> points{eye};
+    if (pupilRadius > 0) {
+        Vec3 b1, b2;
+        orthonormalBasis(dir, b1, b2);
+        constexpr int kRings = 8;
+        for (int ring = 1; ring <= kRings; ++ring) {
+            int n = 6 * ring;
+            double r = pupilRadius * ring / kRings;
+            for (int k = 0; k < n; ++k) {
+                double phi = 2 * Pi * (k + 0.5 * (ring % 2)) / n;
+                points.push_back(eye + (b1 * std::cos(phi) + b2 * std::sin(phi)) * r);
+            }
+        }
+    }
+    // Lines of sight grouped by what they end on. A group's representative is its line through the
+    // middle of the bundle it forms on the pupil (the member nearest the members' centroid): at a
+    // telescope, the centre of the exit pupil's footprint, not its aberrated rim.
+    struct Group {
+        uint32_t boundary;
+        bool atInfinity;
+        int specular;
+        std::vector<size_t> members;
+        std::vector<Sight> sights;
+        std::vector<uint32_t> starts;
+        size_t point = 0;  // representative: index into members
+        int count() const { return int(members.size()); }
+    };
+    std::vector<Group> groups;
+    for (size_t i = 0; i < points.size(); ++i) {
+        const uint32_t start = i == 0 ? region : scene.world.locate(points[i]);
+        Sight s = followSight(scene, tr, points[i], dir, start, lambda);
+        if (!s.ok) continue;
+        uint32_t boundary = s.atInfinity || s.events.empty() ? kNone : s.events.back().first;
+        auto g = std::find_if(groups.begin(), groups.end(), [&](const Group& x) {
+            return x.boundary == boundary && x.atInfinity == s.atInfinity && x.specular == s.specular;
+        });
+        if (g == groups.end()) {
+            groups.push_back({boundary, s.atInfinity, s.specular, {}, {}, {}});
+            g = groups.end() - 1;
+        }
+        g->members.push_back(i);
+        g->sights.push_back(s);
+        g->starts.push_back(start);
+    }
+    for (Group& g : groups) {
+        Vec3 centroid;
+        for (size_t m : g.members) centroid += points[m] / double(g.members.size());
+        double nearest = Inf;
+        for (size_t k = 0; k < g.members.size(); ++k) {
+            double d = lengthSq(points[g.members[k]] - centroid);
+            if (d < nearest) { nearest = d; g.point = k; }
+        }
+    }
+    // The eye focuses on what sends it light: the object seen through the largest share of the
+    // pupil, weighted by its luminance (a few deterministic radiance samples; black matter and
+    // unlit surfaces bring none). Without light anywhere, the centre's line of sight.
+    const Group* best = nullptr;
+    double bestScore = 0;
+    for (const Group& g : groups) {
+        if (g.sights[g.point].dark) continue;
+        const size_t q = g.members[g.point];
+        Rng rng(0x5eed1e55ULL, q);
+        TransportStats st;
+        double y = 0;
+        constexpr int kSamples = 24;
+        for (int k = 0; k < kSamples; ++k) {
+            Wavelengths wl = Wavelengths::sample((k + 0.5) / kSamples);
+            Spec4 L = tr.radiance(Ray{points[q], dir}, g.starts[g.point], wl, rng, st);
+            double v = wl.toXYZ(L).y;
+            if (std::isfinite(v)) y += v / kSamples;
+        }
+        double score = y * g.count();
+        if (score > bestScore) {
+            bestScore = score;
+            best = &g;
+        }
+    }
+    if (!best) {  // nothing sends light: the line of sight nearest the centre
+        for (const Group& g : groups)
+            if (!best || g.members.front() < best->members.front()) best = &g;
+        if (!best) return Accommodation{};
+        const size_t q = best->members.front();
+        return focusAlong(scene, tr, best->sights.front(), points[q], dir, best->starts.front(), lambda);
+    }
+    const size_t q = best->members[best->point];
+    return focusAlong(scene, tr, best->sights[best->point], points[q], dir, best->starts[best->point], lambda);
 }
 
 }  // namespace owe

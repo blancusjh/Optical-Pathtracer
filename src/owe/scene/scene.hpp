@@ -14,16 +14,32 @@ namespace owe {
 
 struct RenderSettings {
     std::string detector;           // empty = first detector
-    std::string integrator = "path";  // "path" (camera paths) or "light" (particle tracing)
+    std::string integrator = "path";  // "path", "light" (particle tracing), "hybrid", "sppm", "bdpt", "vcm"
     int spp = 16;                   // samples per pixel (path) or particles per pixel (light)
     uint64_t seed = 1;
     int maxDepth = 64;
     int rrDepth = 6;
     int threads = 0;                // cpu backend threads; 0 = hardware concurrency
     double fresnelFloor = 0;        // sampling knob: min branch probability at smooth dielectrics
+    // Stochastic progressive photon mapping (integrator "sppm"): the initial gather radius in pixel
+    // footprints at each pixel's first visible point, the radius reduction α (Hachisuka & Jensen:
+    // r'² = r²·(N + αM)/(N + M)), and photons per pixel and iteration. Estimator choices, not physics:
+    // the estimate converges to the same image for any of them.
+    double photonRadius = 2.0;
+    double photonAlpha = 2.0 / 3.0;
+    double photonsPerPixel = 1.0;
+    // Wavelength groups per iteration: points the eye sees directly take every group's photons (more
+    // spectral samples, less colour noise); points seen through glass only their own group's.
+    int photonWavelengthGroups = 4;
+    // VCM's wavelength groups: 1 by default (each group sees 1/G of the light paths, which costs VCM
+    // more than the spectral variety gains; more groups settle a dispersed colour sooner).
+    int vcmWavelengthGroups = 1;
     double exposure = 0;            // EV applied to the display image only
     double whiteBalance = 0;        // display white point (Kelvin, Planckian); 0 = none
     bool autoExposure = true;
+    // Display view transform (owe/render/output.hpp): "agx" (a filmic curve over 16.5 stops whose
+    // brightest colours go gradually to white) or "standard" (linear up to white, a short roll-off).
+    std::string tone = "agx";
     // Where the transport runs: a name in the backend registry (owe/backends/registry.hpp), "cpu"
     // (the IEEE-754 double reference) or "gpu" (portable Vulkan). Nothing else changes with it.
     std::string backend = "cpu";
@@ -35,8 +51,9 @@ struct RenderSettings {
 // white point and its samples on the candles. Display settings never touch the raw image; the
 // sun share is a sampling choice (it changes noise, not the expected value).
 struct DetectorSettings {
-    bool hasExposure = false, hasWhiteBalance = false, hasSunShare = false;
+    bool hasExposure = false, hasWhiteBalance = false, hasSunShare = false, hasTone = false;
     double exposure = 0, whiteBalance = 0, sunShare = 0;
+    std::string tone;
 };
 
 struct Scene {
@@ -60,6 +77,7 @@ struct Scene {
         if (it != display.end()) {
             if (it->second.hasExposure) { rs.exposure = it->second.exposure; rs.autoExposure = false; }
             if (it->second.hasWhiteBalance) rs.whiteBalance = it->second.whiteBalance;
+            if (it->second.hasTone) rs.tone = it->second.tone;
         }
         return rs;
     }

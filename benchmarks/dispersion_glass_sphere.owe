@@ -1,0 +1,12 @@
+# BENCHMARK dispersion_glass_sphere — the same ball in N-SF11 (n_d 1.785, Abbe 25.7) under a sun at
+# 55°: its caustic on the floor is fringed by dispersion (blue focuses nearer the ball than red).
+# Physical parameters: sun 55°, 1.2e5, 0.533°; N-SF11; floor ρ = 0.8.
+# Measurement: Eye (radiance, 480×360, fixed exposure −9 EV). Reference: sppm 16384 iterations.
+units = m
+world { sun { elevation = 55deg  azimuth = 0deg  luminance = 1.2e5 } }
+material floor { type = diffuse  reflectance = 0.8 }
+body Floor { type = sheet  size = (0.6, 0.6)  position = (0, 0, 0)  material = floor }
+body Ball  { type = sphere  radius = 25mm  position = (0, 0, 0.06)  medium = N-SF11 }
+observer Eye { position = (0.0, -0.26, 0.18)  look_at = (0, -0.03, 0.01)  fov = 34deg  pupil = 3mm  focus = 0.31
+               resolution = (480, 360)  exposure = -9 }
+render { detector = Eye  spp = 1024  integrator = sppm }

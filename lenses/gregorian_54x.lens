@@ -1,0 +1,15 @@
+# R and t are signed in a fixed mechanical +z chart, NOT an unfolded distance.
+# Start with light travelling +z. Reflection reverses axial travel; medium stays air.
+# Scene materials are resolved by material=. Hole is a DIAMETER, sd a RADIUS.
+# afocal adjusts ONLY the marked solve gap; never the primary-secondary separation.
+name The Gregorian — Ramsden-scale speculum mirrors and Huygenian ocular
+units mm
+wavelength 587.5618
+object_distance inf
+# label R              t              medium sd   options
+P     -900            -600            air    54   k=-1 reflect material=Speculum substrate=4 hole=26 stop
+S      247.368421053    667.255310082   air    21   k=-0.42136041859 reflect material=Speculum substrate=2 support=spider(count=1,width=1.2,angle=0,outer_radius=54) solve
+F1      41.3076651664     3            crown  13
+F2      inf             50.3333333333   air    13
+E1      13.7692217221     2.5          crown   6
+E2      inf             14.7400784369  air     6

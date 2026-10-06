@@ -1,0 +1,13 @@
+# BENCHMARK telescope_exit_pupil_walk — the 150 mm refractor (lenses/refractor_150mm.lens, afocal)
+# aimed at a distant bright disc, and eyes of 1.2 mm pupil at the exit pupil and 0.3, 0.6, 0.9 mm
+# beside it: the image dims as the overlap of the eye pupil with the emerging beam
+# (tests/test_navigation.cpp: walking_across_a_telescope_exit_pupil_vignettes_as_the_pupils_overlap
+# measures 0.693, 0.386, 0.139, 0 against the disc overlap 0.692, 0.395, 0.146, 0).
+# Measurement: each Eye (radiance, 64×64, fixed exposure 0 EV); image means.
+units = m
+body Scope { type = prescription  file = "../lenses/refractor_150mm.lens"  afocal = true  tube = true
+             position = (0, 0, 0)  axis = (0, 0, -1) }
+body Target { type = disk  radius = 45.5  position = (0, 0, -1e6)  axis = (0, 0, 1)  material = black  emission = 1 }
+observer Centred { position = exit_pupil("Scope")  look_at = (0, 0, -1)  up = (0, 1, 0)  fov = 1.5deg  pupil = 1.2mm
+                   resolution = (64, 64)  exposure = 0 }
+render { detector = Centred  spp = 256  integrator = path }

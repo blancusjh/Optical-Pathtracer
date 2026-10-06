@@ -22,6 +22,15 @@ struct PrescriptionSurface {
     double k = 0;
     std::vector<double> A;     // A4, A6, ... (SI units: m^-3, m^-5, ...)
     bool stop = false;
+    // A reflecting row (mirrors): R and t are signed in a fixed chart whose +z is the incoming light's
+    // direction; reflection reverses the travel, so t is negative on a leg travelling −z.
+    bool reflect = false;
+    std::string material;      // the scene material of the reflecting face (Mirror or Conductor)
+    double substrate = 0;      // axial depth of the mirror's backing
+    double hole = 0;           // central bore diameter
+    bool solve = false;        // the gap `afocal` adjusts (mirror systems)
+    int spiderCount = 0;       // support = spider(count, width, angle, outer_radius): opaque struts
+    double spiderWidth = 0, spiderAngle = 0, spiderOuter = 0;
 };
 
 struct Prescription {
@@ -68,8 +77,13 @@ struct BuiltInstrument {
 };
 // Builds lens groups (cemented where media are adjacent), stops and optional
 // mounts (annular baffles out to tubeRadius) into a new assembly.
+// Reflecting rows become mirrors with the scene material `materialOf(name)` (an ideal mirror when
+// none is given).
+using MaterialFn = std::function<uint32_t(const std::string& name)>;
 BuiltInstrument buildPrescription(World& w, const Prescription& p, const std::string& name, int parentAssembly,
                                   const Transform& xf, double tubeRadius, const IndexFn& index,
-                                  LensSpec::Rim rim = LensSpec::Rim::Black);
+                                  LensSpec::Rim rim = LensSpec::Rim::Black, const MaterialFn& materialOf = {});
+// Whether any row reflects.
+bool hasMirrors(const Prescription& p);
 
 }  // namespace owe

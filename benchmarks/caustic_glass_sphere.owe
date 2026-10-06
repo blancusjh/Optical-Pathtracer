@@ -1,0 +1,16 @@
+# BENCHMARK caustic_glass_sphere — an N-BK7 ball (25 mm radius, centre 60 mm up) under an overhead sun
+# over a white floor. Paraxial focus nR/(2(n−1)) = 36.7 mm from the centre: the caustic forms 23 mm
+# above the floor, so the floor holds a bright ringed spot in the ball's shadow.
+# Physical parameters: sun overhead, 1.2e5 luminance, 0.533°; N-BK7 (Schott Sellmeier, rel. air);
+# floor ρ = 0.8 Lambertian.
+# Measurement: Eye (radiance, 480×360, fixed exposure −9 EV); Spot (irradiance under the ball,
+# 40×40 over 60 mm, particles). Reference estimator: light (Spot), sppm 16384 iterations (Eye).
+units = m
+world { sun { elevation = 90deg  azimuth = 0deg  luminance = 1.2e5 } }
+material floor { type = diffuse  reflectance = 0.8 }
+body Floor { type = sheet  size = (0.6, 0.6)  position = (0, 0, 0)  material = floor }
+body Ball  { type = sphere  radius = 25mm  position = (0, 0, 0.06)  medium = N-BK7 }
+sensor Spot { size = (0.06, 0.06)  resolution = (40, 40)  position = (0, 0, 0.0005)  axis = (0, 0, 1)  up = (0, 1, 0) }
+observer Eye { position = (0.0, -0.22, 0.20)  look_at = (0, 0, 0.02)  fov = 36deg  pupil = 3mm  focus = 0.29
+               resolution = (480, 360)  exposure = -9 }
+render { detector = Eye  spp = 1024  integrator = sppm }

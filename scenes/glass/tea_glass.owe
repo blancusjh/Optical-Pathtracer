@@ -1,0 +1,36 @@
+# TEA GLASS — low sunlight through a glass of black tea standing on white paper. The curved glass
+# and the tea focus the sun into a bright spot in the glass's shadow, which opens into an amber cone:
+# the tea absorbs violet and blue strongly and red hardly at all (Beer–Lambert over the path through
+# it), so the light it transmits is amber. Where the light passes the glass's thick rim and base
+# without the tea, the glass alone disperses it, and a small rainbow runs along the caustic's edge.
+# (Inspired by "Tea Glass Caustic", V. Abbasian, OPN Photo Contest 2025, honorable mention.)
+units = m
+
+world {
+    sky = uniform(rgb(0.9, 0.95, 1.0, luminance = 0.05))
+    sun { elevation = 16deg  azimuth = 0deg  luminance = 1.2e5 }   # behind the glass, light toward −y
+}
+
+# Black tea: water's index with the absorption of a strong brew (1/m). Across the glass (~7 cm) it
+# passes 0.7% at 550 nm, 12% at 600 nm, 43% at 650 nm and 70% at 700 nm: a deep red-amber, orange
+# where the light crosses less of it.
+medium tea { base = water
+             absorption = tabulated(lambda = [380, 400, 450, 500, 550, 600, 650, 700, 750, 800],
+                                    values = [520, 400, 250, 140, 70, 30, 12, 5, 3.2, 3.2]) }
+
+# Watercolour paper: its grain is a relief of ~0.1 mm over ~1 mm, which the low sun rakes.
+material paper { type = diffuse  texture = noise(a = rgb(0.86, 0.86, 0.84), b = rgb(0.78, 0.78, 0.76), scale = 0.6mm)
+                 relief = noise(scale = 0.8mm, depth = 0.12mm, octaves = 3) }
+
+body Paper { type = sheet  size = (0.9, 0.9)  position = (0, -0.1, 0)  material = paper }
+
+# A tea glass with a bowl-rounded bottom and a thick base, turned from its profile, 65 mm of tea.
+body Glass { type = vessel
+             outer = [(0, 0), (26mm, 0, 18mm), (40mm, 50mm, 30mm), (39mm, 90mm)]
+             inner = [(0, 10mm), (22mm, 10mm, 14mm), (37mm, 50mm, 28mm), (36.5mm, 90mm)]
+             rim = round  glass = N-BK7  liquid = tea  level = 65mm  position = (0, 0, 0.2mm) }   # 0.2 mm above the paper: no shared face at float precision
+
+observer Eye { position = (0.0, -0.20, 0.24)  look_at = (0.0, -0.10, 0.0)  up = (0, 1, 0)
+               fov = 46deg  pupil = 4mm  focus = 0.27  resolution = (720, 900) }
+
+render { detector = Eye  spp = 1024  integrator = vcm }

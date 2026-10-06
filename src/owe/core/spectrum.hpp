@@ -77,5 +77,12 @@ private:
 
 // Partition-of-unity basis used by rgbReflectance/rgbIlluminant.
 void rgbBasis(double lambdaNm, double& br, double& bg, double& bb);
+// The calibrated weights of the three basis spectra for linear sRGB (r, g, b): a linear map A·rgb
+// (Spectrum::rgbReflectance clamps them to [0, 1], rgbIlluminant to ≥ 0).
+void rgbToBasisWeights(double r, double g, double b, double w[3]);
+void rgbBasisMatrix(double A[3][3]);
+// rgbIlluminant(r, g, b) = norm · Σ max(0, wₖ) Bₖ(λ) · B(λ, 6504 K) · 1e-13, with this norm (Y = 1 for
+// white).
+double rgbIlluminantNorm();
 
 }  // namespace owe

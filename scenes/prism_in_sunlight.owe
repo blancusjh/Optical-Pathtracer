@@ -1,0 +1,33 @@
+# PRISM IN SUNLIGHT — low sunlight through a slit in a black card falls on an upright 60° N-SF11
+# prism standing on a dark floor. The beams are seen where they graze the floor: the white beam
+# arriving, the spectrum leaving at ~66° from it (each wavelength refracted by n(λ) at both faces:
+# 1.84 at 405 nm, 1.77 at 706 nm), white beams reflected by the faces, and fainter beams from
+# internal reflections. Where the beam is still narrow the colours overlap into white; further out
+# they separate. Vertex connection and merging (VCM: bidirectional paths and photon merging, combined
+# by MIS) forms the streaks.
+# (After "Dispersive prism", Wikimedia Commons: real sunlight, no post-processing.)
+units = m
+
+world {
+    sky = uniform(rgb(1, 1, 1, luminance = 0.01))
+    sun { elevation = 11deg  azimuth = 270deg  luminance = 1.2e5 }   # light travelling along +x
+}
+
+material floor { type = diffuse  texture = noise(a = rgb(0.075, 0.075, 0.08), b = rgb(0.05, 0.05, 0.055), scale = 3mm) }
+material card  { type = diffuse  reflectance = 0.03 }
+
+body Floor { type = sheet  size = (2.0, 2.0)  position = (0.2, 0, 0)  material = floor }
+
+# A black screen 2 m wide and 30 cm high with a 12 mm slit, 25 cm before the prism: its long low-sun
+# shadow darkens the floor all around, so the only sunlight in view comes through the slit.
+body CardA { type = sheet  size = (1.0, 0.30)  position = (-0.25,  0.506, 0.15)  axis = (-1, 0, 0)  up = (0, 0, 1)  material = card }
+body CardB { type = sheet  size = (1.0, 0.30)  position = (-0.25, -0.506, 0.15)  axis = (-1, 0, 0)  up = (0, 0, 1)  material = card }
+
+# A 60° equilateral N-SF11 prism, 50 mm faces, 80 mm tall, turned close to minimum deviation.
+body Prism { type = prism  apex = 60deg  side = 50mm  length = 80mm  medium = N-SF11
+             position = (0, 0, 0.0402)  rotate = (0, 0, -33.2deg) }   # 0.2 mm above the floor: no shared face
+
+observer Eye { position = (0.12, -0.26, 0.20)  look_at = (0.05, 0.06, 0.0)  up = (0, 0, 1)
+               fov = 62deg  pupil = 4mm  focus = 0.37  resolution = (960, 640) }
+
+render { detector = Eye  spp = 1024  integrator = vcm }

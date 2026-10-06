@@ -30,6 +30,15 @@ bool sampleLightFrom(const World& w, const Vec3& p, const Wavelengths& wl, Rng& 
         ls.boundary = kNone;
         return true;
     }
+    if (L.kind == LightEntry::Kind::Environment) {
+        double pdfDir;
+        if (!w.env.sampleMap(u1, u2, ls.wi, pdfDir)) return false;
+        ls.dist = Inf;
+        for (int i = 0; i < NW; ++i) ls.Le[i] = w.env.sky(ls.wi, wl.lambda[size_t(i)]);
+        ls.pdf = sel * pdfDir;
+        ls.boundary = kNone;
+        return true;
+    }
     const Boundary& b = w.boundaries()[L.boundary];
     Vec3 pL, nL;
     double pdfW;
@@ -286,10 +295,15 @@ Spec4 Tracer::radiance(Ray ray, uint32_t region, Wavelengths& wl, Rng& rng, Tran
                     sun[i] = world_.env.sun(ray.d, wl.lambda[size_t(i)]);
                 }
                 double w = (specular || sun.isZero()) ? 1.0 : powerHeuristic(prevPdf, sunPdf());
+                // An environment map is also a light for next-event estimation: MIS.
+                const int envLight = world_.environmentLight();
+                double wSky = 1;
+                if (envLight >= 0 && !specular)
+                    wSky = powerHeuristic(prevPdf, world_.lightSelectPdf(size_t(envLight)) * world_.env.mapPdf(ray.d));
                 if (rec)
                     pushVertex(rec, ray.o + ray.d * (2 * world_.sceneRadius() + length(ray.o - world_.sceneCenter())),
                                ray.d, EventKind::Escape, kNone, region, region, nMed, nMed, 1, 1, 0, 0, opl, beta[0]);
-                contribute(rec ? rec->v.size() - 1 : 0, beta * (sky + sun * w), sun.isZero() ? "sky" : "sun+sky", false);
+                contribute(rec ? rec->v.size() - 1 : 0, beta * (sky * wSky + sun * w), sun.isZero() ? "sky" : "sun+sky", false);
             } else if (region != world_.ambientRegion()) {
                 st.leaks++;
             }
@@ -320,7 +334,8 @@ Spec4 Tracer::radiance(Ray ray, uint32_t region, Wavelengths& wl, Rng& rng, Tran
                     double pl = lightPdf(prevP, hit);
                     if (pl > 0) w = powerHeuristic(prevPdf, pl);
                 }
-                contribute(vIndex, beta * wl.eval(e.radiance) * w, world_.boundaryLabel(hit.boundary), false);
+                // The emitter's label only names the contribution in a recorded path (no allocation otherwise).
+                contribute(vIndex, beta * wl.eval(e.radiance) * w, rec ? world_.boundaryLabel(hit.boundary) : std::string(), false);
             }
         }
 
@@ -413,6 +428,11 @@ void Tracer::traceParticle(const Detector& det, Wavelengths wl, Rng& rng, Film& 
     bool fromSky = rng.uniform() < pSky;
     size_t li = 0;
     if (!fromSky) li = w.pickLight(rng.uniform());
+    // An environment map is both the sky and a light in the list: either way the photon is a sky
+    // photon, emitted with the combined probability of the two choices.
+    const int envLight = w.environmentLight();
+    if (!fromSky && int(li) == envLight) fromSky = true;
+    const double pSkyPhoton = pSky + (envLight >= 0 ? (1 - pSky) * w.lightSelectPdf(size_t(envLight)) : 0.0);
     if (fromSky || w.lights()[li].kind == LightEntry::Kind::Sun) {
         // Distant emission (sky dome or sun): pick a direction, then a disk covering the world.
         double R = w.sceneRadius() * 1.001;
@@ -420,10 +440,15 @@ void Tracer::traceParticle(const Detector& det, Wavelengths wl, Rng& rng, Film& 
         double pdfDir, sel;
         if (fromSky) {
             Draw2 u(rng);
-            toward = sampleUniformSphere(u.u1, u.u2);
-            pdfDir = 1 / (4 * Pi);
+            if (w.env.skyModel == Environment::Sky::Map) {
+                // The map's own distribution (luminance × sin θ).
+                if (!w.env.sampleMap(u.u1, u.u2, toward, pdfDir)) return;
+            } else {
+                toward = sampleUniformSphere(u.u1, u.u2);
+                pdfDir = 1 / (4 * Pi);
+            }
             for (int i = 0; i < NW; ++i) beta[i] = w.env.sky(toward, wl.lambda[size_t(i)]);
-            sel = pSky;
+            sel = pSkyPhoton;
         } else {
             double cosMax = std::cos(w.env.sunAngularRadius);
             Frame f(w.env.sunDir);
@@ -605,7 +630,7 @@ void Tracer::traceParticle(const Detector& det, Wavelengths wl, Rng& rng, Film& 
         if (fromFront && int(hit.boundary) == targetBoundary) {
             int px, py;
             double area;
-            if (det.pixelOfHit(hit, px, py, area)) deposit(px, py, beta * (1 / area));
+            if (det.pixelOfHit(hit, rng, px, py, area)) deposit(px, py, beta * (1 / area));
         }
         if (o.type == SurfaceType::Detector) {
             pushVertex(rec, hit.p, ray.d, EventKind::Detect, hit.boundary, inc, inc, nMed, nMed, 1, 1, 0, 0, opl, beta[0]);

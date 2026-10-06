@@ -1,0 +1,87 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "Gregorian scientific albedo sphere"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0
+    }
+  ],
+  "meshes": [
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "indices": 3
+        }
+      ]
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 1847328,
+      "uri": "the_gregorian_moon.bin"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 397836
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 397836,
+      "byteLength": 397836
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 795672,
+      "byteLength": 265224
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 1060896,
+      "byteLength": 786432
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 33153,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 33153,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 33153,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5125,
+      "count": 196608,
+      "type": "SCALAR"
+    }
+  ]
+}

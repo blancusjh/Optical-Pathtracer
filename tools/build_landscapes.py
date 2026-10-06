@@ -47,8 +47,6 @@ class Terrain:
         return a+(b-a)*u+(c-b)*v if u>=v else a+(c-d)*u+(d-a)*v
 
     def protected(self,x,y):
-        if self.scene=='the_temple':
-            return smooth(0,2,max(abs(x)-22,-12-y,y-48))
         r=math.hypot(x,y)
         if self.scene=='the_observatory':return smooth(10,15,r)
         return smooth(3,7,r)*smooth(13,20,math.hypot(x-450,y))
@@ -100,7 +98,9 @@ class Landscape:
             filename=self.scene+'_'+name+'.obj';mesh.write(OUT/filename)
             # Separate flat ground from its index-matched reference boundary;
             # coincident transmissive/opaque hits could skip the visible sheet.
-            lines.append(f'body Landscape_{name} {{ type = mesh file = "../models/landscapes/{filename}" material = {self.materials[name]} position = (0, 0, 0.0005) }}')
+            # Terrain, rock and plants are curved surfaces: smooth shading normals (edges sharper
+            # than the default 30° crease, such as rock fractures, stay sharp).
+            lines.append(f'body Landscape_{name} {{ type = mesh file = "../models/landscapes/{filename}" material = {self.materials[name]} normals = smooth position = (0, 0, 0.0005) }}')
             print(f'{self.scene}/{name}: {len(mesh.faces):,} triangles',flush=True)
         lines.append('# END LANDSCAPE MODELS')
         path=ROOT/'scenes'/(self.scene+'.owe');source=path.read_text()
@@ -258,30 +258,6 @@ def alpine(model):
     print(f'Alpine woodland: {len(accepted)} slope-grounded trees',flush=True)
 
 
-def mediterranean(model):
-    t=model.terrain;rng=random.Random(7418)
-    stone=model.part('Limestone_outcrops','hillside');herbs=model.part('Dry_tussocks','olive')
-    # A broken rocky verge softens the precinct's hard rectangular edge.
-    for k in range(950):
-        side=rng.randrange(4)
-        if side<2:x=rng.choice((-1,1))*rng.uniform(22.1,39);y=rng.uniform(-22,57)
-        else:x=rng.uniform(-35,35);y=rng.uniform(-25,-12.2) if side==2 else rng.uniform(48.2,60)
-        if abs(x)<3 and y<0:continue  # keep the approach readable
-        size=rng.uniform(.035,.40)
-        if k%29==0:size=rng.uniform(.8,1.8)
-        rock(stone,(x,y,t.height(x,y)-size*.12),(size,size*.6,size*.5),rng,.25+rng.uniform(-.35,.35))
-    for k in range(12000):
-        x=rng.uniform(-47,47);y=rng.uniform(-30,68)
-        if -22.1<x<22.1 and -12.1<y<48.1:continue
-        if abs(x)<2.4 and y<0 or noise(x*.6,y*.6)<.4:continue
-        grass(herbs,(x,y,t.height(x,y)+.002),rng,rng.uniform(.12,.45))
-    for k in range(140):
-        x=rng.uniform(-130,130);y=rng.uniform(-65,150)
-        if -42<x<42 and -32<y<72:continue
-        size=rng.uniform(.7,3.2)
-        rock(stone,(x,y,t.height(x,y)-size*.2),(size*1.4,size*.7,size*.62),rng,.3)
-
-
 def observatory(model):
     t=model.terrain;rng=random.Random(2352);stone=model.part('Hillside_outcrops','rock')
     for k in range(520):
@@ -293,15 +269,15 @@ def observatory(model):
 
 def build(scene):
     model=Landscape(scene)
-    ground(model,{'the_telescope':'alpine','the_temple':'hillside','the_observatory':'rock'}[scene])
-    {'the_telescope':alpine,'the_temple':mediterranean,'the_observatory':observatory}[scene](model)
+    ground(model,{'the_telescope':'alpine','the_observatory':'rock'}[scene])
+    {'the_telescope':alpine,'the_observatory':observatory}[scene](model)
     model.save()
 
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('scene',nargs='?',default='all',choices=('all','telescope','temple','observatory'))
+    parser.add_argument('scene',nargs='?',default='all',choices=('all','telescope','observatory'))
     args=parser.parse_args()
     # The terrain sampler is a CMake target of the engine (built on demand, kept up to date by CMake).
     subprocess.run(['cmake','--build','build','--target','sample_landscape'],cwd=ROOT,check=True)
-    for name in ('telescope','temple','observatory') if args.scene=='all' else (args.scene,):build('the_'+name)
+    for name in ('telescope','observatory') if args.scene=='all' else (args.scene,):build('the_'+name)

@@ -91,4 +91,11 @@ struct NavigationCamera {
         position = target - forward * distance;
     }
 };
+// The viewer's free eye takes the pixel response of the view it starts from (an observer's
+// pixel_filter); from a camera or sensor it keeps the observer default. With the pose, pupil, focus
+// and field from NavigationCamera::apply, a free eye placed at a saved observer's pose is that
+// observer: no mode, no substitute image, the same measurement.
+inline void adoptPixelResponse(IdealObserver& eye, const Detector& base) {
+    eye.pixelSigma = dynamic_cast<const IdealObserver*>(&base) ? base.pixelSigma : IdealObserver::kDefaultPixelSigma;
+}
 } // namespace owe

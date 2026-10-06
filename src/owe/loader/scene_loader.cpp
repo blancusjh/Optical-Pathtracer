@@ -1,6 +1,7 @@
 #include "owe/loader/scene_loader.hpp"
 
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <functional>
 #include <set>
@@ -297,6 +298,23 @@ private:
         else if (v.str == "bands") t.kind = Texture::Kind::Bands;
         else if (v.str == "radial") t.kind = Texture::Kind::Radial;
         else if (v.str == "marble") t.kind = Texture::Kind::Marble;
+        else if (v.str == "image") {
+            // image("file.jpg", scale = 0.5, mapping = planar | triplanar | uv): an sRGB colour image
+            // as reflectance (linear RGB through the RGB reflectance basis), one image per `scale`,
+            // or placed by a model's own texture coordinates (uv).
+            t.kind = Texture::Kind::Image;
+            auto f = v.get("file");
+            if (!f && !v.items.empty()) f = v.items[0];
+            if (!f) fail(v, "image texture needs a file");
+            t.image = image(str(*f), v);
+            t.a = Spectrum::rgbReflectance(1, 0, 0);
+            t.b = Spectrum::rgbReflectance(0, 1, 0);
+            t.c = Spectrum::rgbReflectance(0, 0, 1);
+            std::string m = getStr(v, "mapping", "planar");
+            if (m == "triplanar") t.mapping = Texture::Mapping::Triplanar;
+            else if (m == "uv") t.mapping = Texture::Mapping::UV;
+            else if (m != "planar") fail(v, "mapping must be planar, triplanar or uv");
+        }
         else fail(v, "unknown texture '" + v.str + "'");
         if (auto a = v.get("a")) t.a = spectrum(*a, false);
         if (auto b = v.get("b")) t.b = spectrum(*b, false);
@@ -305,6 +323,18 @@ private:
         if (auto p = v.get("snow_line")) t.param = len(*p);
         if (auto p = v.get("turbulence")) t.param = num(*p);
         return t;
+    }
+
+    // Images are shared by every texture and environment that names them.
+    std::shared_ptr<const ImageRGB> image(const std::string& file, const Value& where) const {
+        const std::string path = std::filesystem::path(file).is_absolute() ? file : (std::filesystem::path(base_) / file).string();
+        auto it = images_.find(path);
+        if (it != images_.end()) return it->second;
+        try {
+            return images_[path] = loadImage(path);
+        } catch (const std::exception& e) {
+            fail(where, e.what());
+        }
     }
 
     // ------------------------------------------------------------ registries
@@ -347,11 +377,13 @@ private:
             o.type = SurfaceType::Conductor;
             std::string m = getStr(b, "metal", "aluminium");
             if (!catalogConductor(m, o.conductor)) fail(b, "unknown metal '" + m + "'");
-            o.roughness = getNum(b, "roughness", 0);
+            roughness(b, o);
             o.reflectance = b.has("tint") ? spectrum(need(b, "tint"), false) : Spectrum::constant(1.0);
         } else if (type == "dielectric") {
             o.type = SurfaceType::Dielectric;
-            o.roughness = getNum(b, "roughness", 0);
+            roughness(b, o);
+        } else if (type == "stained_glass") {
+            stainedGlass(b, o);
         } else if (type == "absorber" || type == "black") {
             o.type = SurfaceType::Absorber;
         } else if (type == "null") {
@@ -360,9 +392,98 @@ private:
             fail(b, "unknown material type '" + type + "'");
         }
         if (auto bk = b.get("back")) o.backAbsorbs = str(*bk) == "black";
+        relief(b, o);
         uint32_t id = w_.addOptics(o);
         if (!name.empty()) materials_[name] = id;
         return id;
+    }
+
+    // type = stained_glass (thin coloured-glass slab; GPU): transmittance = <spectrum> | image(…),
+    // gain, density, thickness, index, haze (diffusely transmitted fraction), reflectance (the same
+    // image) with reflection_scale, glass_mask = image(…, mapping = uv), mask_threshold, stone_material.
+    void stainedGlass(const Value& b, SurfaceOptics& o) {
+        o.type = SurfaceType::StainedGlass;
+        StainedGlass& g = o.glass;
+        std::string colourImage;
+        if (auto t = b.get("transmittance")) {
+            if (t->kind == Value::Kind::Call && t->str == "image") {
+                o.texture = texture(*t);
+                colourImage = o.texture.image ? o.texture.image->path : "";
+            } else {
+                o.reflectance = spectrum(*t, false);
+            }
+        } else {
+            o.reflectance = Spectrum::constant(1.0);
+        }
+        g.gain = getNum(b, "gain", 1);
+        g.density = getNum(b, "density", 1);
+        g.haze = getNum(b, "haze", 0);
+        if (b.has("thickness")) g.thickness = len(need(b, "thickness"));
+        if (!(g.gain > 0) || !(g.density > 0) || !(g.haze >= 0 && g.haze <= 1) || !(g.thickness > 0))
+            fail(b, "stained_glass needs gain > 0, density > 0, 0 ≤ haze ≤ 1 and thickness > 0");
+        if (b.has("haze_angle")) fail(need(b, "haze_angle"), "haze_angle is not supported yet: haze transmits diffusely");
+        if (auto ix = b.get("index")) {
+            const IndexModel m = indexModel(*ix);
+            std::vector<double> ls, ns;
+            for (double l = 360; l <= 830; l += 10) ls.push_back(l), ns.push_back(m.n(l));
+            g.index = Spectrum::tabulated(ls, ns);
+        }
+        if (auto r = b.get("reflectance")) {
+            const bool same = r->kind == Value::Kind::Call && r->str == "image" && o.texture.image &&
+                              texture(*r).image == o.texture.image;
+            if (!same) fail(*r, "a stained_glass reflectance must be its transmittance image (scaled by reflection_scale)");
+            g.reflectionScale = getNum(b, "reflection_scale", 1);
+        } else if (b.has("reflection_scale")) {
+            fail(need(b, "reflection_scale"), "reflection_scale needs reflectance = <the transmittance image>");
+        }
+        if (b.has("roughness") && getNum(b, "roughness", 0) > 0)
+            std::fprintf(stderr, "note: %s: stained_glass roughness is not supported yet; its reflection stays specular\n",
+                         o.name.c_str());
+        if (auto m = b.get("glass_mask")) {
+            if (m->kind != Value::Kind::Call || m->str != "image") fail(*m, "glass_mask must be image(\"file\", mapping = uv)");
+            auto f = m->get("file");
+            if (!f && !m->items.empty()) f = m->items[0];
+            if (!f) fail(*m, "glass_mask needs a file");
+            g.mask = image(str(*f), *m);
+            g.maskThreshold = getNum(b, "mask_threshold", 0.5);
+            const uint32_t stone = b.has("stone_material") ? materialRef(need(b, "stone_material")) : materials_.at("black");
+            const SurfaceType st = w_.optics()[stone].type;
+            if (st != SurfaceType::Diffuse && st != SurfaceType::Conductor && st != SurfaceType::Mirror &&
+                st != SurfaceType::Absorber)
+                fail(b, "stone_material must be opaque (diffuse, conductor, mirror or absorber)");
+            g.stone = int(stone);
+        }
+    }
+
+    // roughness = α, or a material map: roughness = (α_a, α_b[, α_c]) with a texture, one α per
+    // texture component (polished and honed stone, clear and etched glass). A conductor's texture
+    // tints it per component; a dielectric's only carries the map.
+    void roughness(const Value& b, SurfaceOptics& o) {
+        if (auto t = b.get("texture")) o.texture = texture(*t);
+        auto r = b.get("roughness");
+        if (!r) return;
+        if (r->kind != Value::Kind::Tuple) {
+            o.roughness = num(*r);
+            return;
+        }
+        if (r->items.size() < 2 || r->items.size() > 3) fail(*r, "a roughness map is (a, b) or (a, b, c)");
+        if (o.texture.kind == Texture::Kind::None) fail(*r, "a roughness per texture component needs a texture");
+        for (const ValuePtr& v : r->items) o.roughnessMap.push_back(num(*v));
+        o.roughnessMap.resize(3, o.roughnessMap.back());
+        o.roughness = o.roughnessMap[0];  // what backends without material maps use
+    }
+
+    // relief = noise(scale = 0.5mm, depth = 0.03mm, octaves = 3): a surface relief finer than
+    // the geometry, which tilts the shading normal by its slopes (depth / scale).
+    void relief(const Value& b, SurfaceOptics& o) {
+        auto r = b.get("relief");
+        if (!r) return;
+        if (r->kind != Value::Kind::Call || r->str != "noise") fail(*r, "relief must be noise(scale =, depth =)");
+        o.reliefScale = len(need(*r, "scale"));
+        o.reliefDepth = len(need(*r, "depth"));
+        o.reliefOctaves = int(getNum(*r, "octaves", 3));
+        if (!(o.reliefScale > 0) || !(o.reliefDepth >= 0) || o.reliefOctaves < 1 || o.reliefOctaves > 8)
+            fail(*r, "relief needs scale > 0, depth ≥ 0 and 1–8 octaves");
     }
 
     void defineMedium(const Value& b) {
@@ -495,6 +616,21 @@ private:
             if (w_.media()[w_.medium(m.medium)].opaque) {
                 m.transparent = false;
                 m.optics = materials_.at("black");
+            } else if (auto sf = b.get("surface")) {
+                // surface = null: an index-matched medium (haze or smoke in air) whose boundary only
+                // changes the region; light crosses it, shadow rays too, attenuated by the medium.
+                if (str(*sf) != "null") fail(*sf, "a medium body's surface can only be null");
+                SurfaceOptics o;
+                o.name = "null";
+                o.type = SurfaceType::Null;
+                m.optics = w_.addOptics(o);
+            } else if (b.has("texture") || b.has("relief")) {
+                // Its own surface: a material map over the glass (an etched pattern), or a relief.
+                SurfaceOptics o;
+                o.type = SurfaceType::Dielectric;
+                roughness(b, o);
+                relief(b, o);
+                m.optics = w_.addOptics(o);
             } else {
                 m.optics = w_.dielectricOptics(getNum(b, "roughness", 0));
             }
@@ -543,6 +679,16 @@ private:
             } else if (s->kind == Value::Kind::Call && s->str == "uniform") {
                 e.skyModel = Environment::Sky::Uniform;
                 e.zenith = spectrum(*s->items.at(0), true);
+            } else if (s->kind == Value::Kind::Call && s->str == "map") {
+                // map("sky.hdr", rotation = 0deg, scale = 1): an equirectangular HDR environment
+                // (zenith at the top row, azimuth from +x toward +y, turned by rotation).
+                e.skyModel = Environment::Sky::Map;
+                auto f = s->get("file");
+                if (!f && !s->items.empty()) f = s->items[0];
+                if (!f) fail(*s, "map needs a file");
+                e.map = image(str(*f), *s);
+                e.mapRotation = getAng(*s, "rotation", 0);
+                e.mapScale = getNum(*s, "scale", 1);
             } else if (s->kind == Value::Kind::Ident && s->str == "none") {
                 e.skyModel = Environment::Sky::None;
             } else {
@@ -589,6 +735,20 @@ private:
         std::string type = getStr(b, "type", "");
         if (!names_.insert(name).second) fail(b, "duplicate body name '" + name + "'");
         Transform xf = pre * placement(b);
+        // `in = Name`: the body sits inside another body's transparent medium (stones under water).
+        struct Immersion {
+            World& w;
+            ~Immersion() { w.setImmersion(kOutside); }
+        } immersion{w_};
+        if (auto in = b.get("in")) {
+            int host = w_.findBody(str(*in));
+            if (host < 0) fail(*in, "'in' names a body defined earlier (with a transparent medium)");
+            uint32_t region = kOutside;
+            for (uint32_t r = 0; r < w_.regions().size(); ++r)
+                if (w_.regions()[r].body == host && !w_.media()[w_.regions()[r].medium].opaque) { region = r; break; }
+            if (region == kOutside) fail(*in, "body '" + str(*in) + "' has no transparent medium to be inside");
+            w_.setImmersion(region);
+        }
         if (type == "lens") lensBody(b, name, assembly, xf);
         else if (type == "prescription") prescriptionBody(b, name, assembly, xf);
         else if (type == "mirror") {
@@ -678,20 +838,107 @@ private:
                 std::fprintf(stderr, "warning: optional mesh '%s' not found (%s); body skipped\n", name.c_str(), file.c_str());
                 return;
             }
-            MeshData md = loadObj(file, getNum(b, "scale", 1.0) * unit_);
+            MeshData md;
+            try {
+                md = loadModel(file, getNum(b, "scale", 1.0) * unit_);
+                // part = "Glass" | ["Stone", "Lead"]: some of a glTF model's materials. Placement
+                // (model_up, fit_height, ground) measures the whole model, so its parts, loaded as
+                // separate bodies, stay together.
+                if (auto p = b.get("part")) {
+                    std::vector<std::string> names;
+                    if (p->kind == Value::Kind::List)
+                        for (const ValuePtr& it : p->items) names.push_back(str(*it));
+                    else
+                        names.push_back(str(*p));
+                    md = selectParts(md, names);
+                }
+            } catch (const std::runtime_error& e) {
+                fail(b, e.what());
+            }
             prepareImportedMesh(b, md);
             BodyMaterial m = solidMaterial(b);
+            if (w_.optics()[m.optics].texture.mapping == Texture::Mapping::UV && md.uvs.empty())
+                fail(b, "the material's image is mapped by texture coordinates, which " + file + " does not have");
             bool closed = m.transparent;
             if (auto c = b.get("closed")) closed = boolean(*c);
+            std::vector<MeshShape::Corners> shading = meshNormals(b, md);
             if (closed) {
-                buildMesh(w_, name, md, m, assembly, xf);
+                buildMesh(w_, name, md, m, assembly, xf, std::move(shading));
             } else {
                 // Scanned models are rarely watertight or consistently wound: represent an opaque
                 // model as a shell with air on both sides, so orientation and holes cannot matter.
                 int id = w_.addBody(name, "mesh", assembly, xf);
-                w_.addBoundary(id, "surface", std::make_shared<MeshShape>(md.positions, md.triangles, name), Transform{},
-                               kOutside, kOutside, m.optics, m.emission);
+                w_.addBoundary(id, "surface",
+                               std::make_shared<MeshShape>(md.positions, md.triangles, name, std::move(shading), md.uvs),
+                               Transform{}, kOutside, kOutside, m.optics, m.emission);
             }
+        } else if (type == "vessel") {
+            // body Glass { type = vessel  outer = [(r, z), (r, z, fillet), …]  inner = [...]  rim = round | flat
+            //              glass = N-BK7  liquid = water  level = 70mm }
+            VesselSpec vs;
+            auto profile = [&](const char* key) {
+                std::vector<ProfilePoint> pts;
+                for (const ValuePtr& it : need(b, key).items) {
+                    if (!it || it->kind != Value::Kind::Tuple || it->items.size() < 2 || it->items.size() > 3)
+                        fail(b, std::string(key) + " must be a list of (r, z) or (r, z, fillet)");
+                    ProfilePoint q;
+                    q.r = len(*it->items[0]);
+                    q.z = len(*it->items[1]);
+                    if (it->items.size() == 3) q.fillet = len(*it->items[2]);
+                    pts.push_back(q);
+                }
+                return pts;
+            };
+            vs.outer = profile("outer");
+            vs.inner = profile("inner");
+            vs.roundRim = getStr(b, "rim", "round") == "round";
+            vs.glass = getStr(b, "glass", "N-BK7");
+            vs.liquid = getStr(b, "liquid", "water");
+            vs.level = getLen(b, "level", 0);
+            w_.medium(vs.glass);
+            if (vs.level > 0) w_.medium(vs.liquid);
+            try {
+                buildVessel(w_, name, vs, assembly, xf);
+            } catch (const std::exception& e) {
+                fail(b, e.what());
+            }
+        } else if (type == "waves") {
+            // body Pool { type = waves  size = (w, l)  depth = d  margin = m  medium = water  bottom = sand
+            //             walls = tile  waves = [wave(amplitude, wavelength, direction, phase), ...]
+            //                         | ripples(count, seed, wavelength = (min, max), slope, direction, spread) }
+            WaterSpec ws;
+            auto sz = seq(need(b, "size"), 2);
+            ws.halfX = len(*sz[0]) / 2;
+            ws.halfY = len(*sz[1]) / 2;
+            ws.depth = getLen(b, "depth", 0.2);
+            ws.margin = getLen(b, "margin", 0.2 * std::min(ws.halfX, ws.halfY));
+            ws.medium = getStr(b, "medium", "water");
+            ws.rim = getLen(b, "rim", 0.25 * std::max(ws.halfX, ws.halfY));
+            ws.base = getLen(b, "base", 0.25 * ws.depth);
+            w_.medium(ws.medium);
+            if (auto m = b.get("bottom")) ws.bottomOptics = int(materialRef(*m));
+            if (auto m = b.get("walls")) ws.wallOptics = int(materialRef(*m));
+            for (int o : {ws.bottomOptics, ws.wallOptics})
+                if (o >= 0 && w_.optics()[size_t(o)].type == SurfaceType::Dielectric) fail(b, "bottom and walls must be opaque materials");
+            const Value& wv = need(b, "waves");
+            if (wv.kind == Value::Kind::Call && wv.str == "ripples") {
+                auto range = seq(need(wv, "wavelength"), 2);
+                ws.waves = rippleField(int(getNum(wv, "count", 24)), uint64_t(getNum(wv, "seed", 1)), len(*range[0]),
+                                       len(*range[1]), getNum(wv, "slope", 0.1), getAng(wv, "direction", 0),
+                                       getAng(wv, "spread", radians(90)));
+            } else {
+                for (const ValuePtr& it : wv.items) {
+                    if (!it || it->kind != Value::Kind::Call || it->str != "wave") fail(wv, "waves must be a list of wave(...) or ripples(...)");
+                    PlaneWave pw;
+                    const double k = 2 * Pi / len(need(*it, "wavelength")), dir = getAng(*it, "direction", 0);
+                    pw.amplitude = len(need(*it, "amplitude"));
+                    pw.kx = k * std::cos(dir);
+                    pw.ky = k * std::sin(dir);
+                    pw.phase = getAng(*it, "phase", 0);
+                    ws.waves.push_back(pw);
+                }
+            }
+            buildWater(w_, name, ws, assembly, xf);
         } else if (type == "cup") {
             CupRod rod;
             if (auto r = b.get("rod")) {
@@ -735,6 +982,27 @@ private:
 
     // Imported models arrive in arbitrary frames: `model_up` names the model axis that points up,
     // `fit_height` rescales to a physical height, and the result stands on the body origin.
+    // normals = flat (the default: each triangle its own plane) | smooth | smooth(crease = 30deg) |
+    // file (the OBJ's vn). Smooth normals interpolate across every edge whose faces meet at less
+    // than the crease angle; the file's normals are the model maker's.
+    std::vector<MeshShape::Corners> meshNormals(const Value& b, const MeshData& md) {
+        auto v = b.get("normals");
+        if (!v || (v->kind == Value::Kind::Ident && v->str == "flat")) return {};
+        if (v->str == "smooth" && (v->kind == Value::Kind::Ident || v->kind == Value::Kind::Call)) {
+            double crease = v->kind == Value::Kind::Call ? getAng(*v, "crease", radians(30)) : radians(30);
+            if (!(crease > 0 && crease <= Pi)) fail(*v, "crease must be an angle in (0, 180deg]");
+            return smoothNormals(md, crease);
+        }
+        if (v->kind == Value::Kind::Ident && v->str == "file") {
+            try {
+                return fileNormals(md);
+            } catch (const std::exception& e) {
+                fail(*v, e.what());
+            }
+        }
+        fail(*v, "normals must be flat, smooth, smooth(crease = ...) or file");
+    }
+
     void prepareImportedMesh(const Value& b, MeshData& md) {
         if (auto u = b.get("model_up"); u && u->kind == Value::Kind::Tuple) {
             // A measured up vector: apply the minimal rotation taking it to +z (keeps the facing).
@@ -744,6 +1012,7 @@ private:
             if (length(axis) > 1e-12) R = Transform::rotate(axis, std::acos(clampd(dot(up, z), -1, 1)));
             else if (up.z < 0) R = Transform::rotate({1, 0, 0}, Pi);
             for (auto& p : md.positions) p = R.point(p);
+            for (auto& n : md.normals) n = R.vector(n);
         } else if (auto u = b.get("model_up")) {
             std::string a = str(*u);
             Transform R;
@@ -754,6 +1023,7 @@ private:
             else if (a == "-x") R = Transform::rotate({0, 1, 0}, Pi / 2);
             else if (a != "z") fail(*u, "model_up must be one of x, -x, y, -y, z, -z");
             for (auto& p : md.positions) p = R.point(p);
+            for (auto& n : md.normals) n = R.vector(n);
         }
         if (b.has("fit_height") || b.has("ground")) {
             AABB box;
@@ -855,9 +1125,19 @@ private:
             tube = len(*tr);
         }
         std::string rim = getStr(b, "rim", "black");
+        if (tube > 0 && hasMirrors(p))
+            fail(b, "tube = true is not supported for mirror prescriptions yet: use tube = false and a housing");
+        auto mirrorMaterial = [&](const std::string& n) -> uint32_t {
+            auto it = materials_.find(n);
+            if (it == materials_.end()) fail(b, "the lens file's mirror material '" + n + "' is not defined in the scene");
+            const SurfaceType t = w_.optics()[it->second].type;
+            if (t != SurfaceType::Mirror && t != SurfaceType::Conductor) fail(b, "mirror material '" + n + "' must be a mirror or conductor");
+            return it->second;
+        };
         BuiltInstrument bi = buildPrescription(w_, p, name, assembly, xf, tube, index,
                                                rim == "ground" ? LensSpec::Rim::Ground
-                                               : rim == "polished" ? LensSpec::Rim::Polished : LensSpec::Rim::Black);
+                                               : rim == "polished" ? LensSpec::Rim::Polished : LensSpec::Rim::Black,
+                                               mirrorMaterial);
         if (tube > 0) {
             double z0 = -0.01 * bi.lastVertexZ - 1e-3, z1 = bi.lastVertexZ + 1e-3;
             // Blackened inside; an optional finish (brass, paint) on a slightly larger outer shell.
@@ -881,6 +1161,8 @@ private:
                       Transform::translate({0, 0, z1}));
         }
         instruments_[name] = Instrument{bi.assembly, bi.paraxial};
+        if (auto a = b.get("afocal"); a && boolean(*a) && bi.paraxial.exitPupilRadius > 0)
+            w_.addExitPupil({name, bi.assembly, bi.paraxial.exitPupilZ, bi.paraxial.exitPupilRadius});
     }
 
     // ------------------------------------------------------------ detectors
@@ -892,7 +1174,8 @@ private:
     }
 
     // Detector keys: `exposure = EV` (fixed, replaces auto exposure), `white_balance = K | none`,
-    // `sun_share = s` (the sun's share of light samples while this detector renders).
+    // `tone = agx | standard` (the display view transform), `sun_share = s` (the sun's share of
+    // light samples while this detector renders).
     void detectorDisplay(const Value& b) {
         DetectorSettings d;
         if (auto e = b.get("exposure")) { d.hasExposure = true; d.exposure = num(*e); }
@@ -900,8 +1183,26 @@ private:
             d.hasWhiteBalance = true;
             d.whiteBalance = (wb->kind == Value::Kind::Ident && wb->str == "none") ? 0 : num(*wb);
         }
+        if (auto t = b.get("tone")) { d.hasTone = true; d.tone = toneName(*t); }
         if (auto ss = b.get("sun_share")) { d.hasSunShare = true; d.sunShare = num(*ss); }
-        if (d.hasExposure || d.hasWhiteBalance || d.hasSunShare) scene_.display[b.name] = d;
+        if (d.hasExposure || d.hasWhiteBalance || d.hasSunShare || d.hasTone) scene_.display[b.name] = d;
+    }
+    std::string toneName(const Value& v) const {
+        std::string t = str(v);
+        if (t != "agx" && t != "standard") fail(v, "tone must be agx or standard");
+        return t;
+    }
+
+    // `pixel_filter = box | gaussian | gaussian(sigma)`: the pixel response (Detector::pixelSigma,
+    // in pixels). Observers default to gaussian, sensors to box.
+    void pixelFilter(const Value& b, Detector& d) {
+        auto f = b.get("pixel_filter");
+        if (!f) return;
+        if (f->kind == Value::Kind::Ident && f->str == "box") d.pixelSigma = 0;
+        else if (f->kind == Value::Kind::Ident && f->str == "gaussian") d.pixelSigma = IdealObserver::kDefaultPixelSigma;
+        else if (f->kind == Value::Kind::Call && f->str == "gaussian" && f->items.size() == 1) d.pixelSigma = num(*f->items[0]);
+        else fail(*f, "pixel_filter must be box, gaussian or gaussian(sigma in pixels)");
+        if (!(d.pixelSigma >= 0 && d.pixelSigma <= 8)) fail(*f, "pixel filter sigma must be between 0 and 8 pixels");
     }
 
     void observer(const Value& b) {
@@ -920,6 +1221,7 @@ private:
         o->pupilRadius = getRadius(b, "pupil_", -1);
         if (o->pupilRadius < 0) o->pupilRadius = b.has("pupil") ? len(need(b, "pupil")) / 2 : 0;
         if (auto f = b.get("focus")) o->focusDistance = (f->kind == Value::Kind::Number && std::isinf(f->num)) ? Inf : len(*f);
+        pixelFilter(b, *o);
         scene_.detectors.push_back(std::move(o));
     }
 
@@ -944,6 +1246,7 @@ private:
         Vec3 la = vecLen(need(b, "look_at"));
         Vec3 up = b.has("up") ? vecNum(need(b, "up")) : w_.env.up;
         addPhysicalCamera(scene_, b.name, p, c, cameraPlacement(pos, la, up), assembly);
+        pixelFilter(b, *scene_.detectors.back());
     }
 
     void sensor(const Value& b, int assembly) {
@@ -982,6 +1285,7 @@ private:
             d->aimRadius = getRadius(b, "aim_", 0.01);
             if (so.type == SurfaceType::Diffuse) d->aimShare = 0.95;
         }
+        pixelFilter(b, *d);
         scene_.detectors.push_back(std::move(d));
     }
 
@@ -990,6 +1294,13 @@ private:
         scene_.indirectGuide = getStr(b, "indirect_guide", "");
         r.detector = getStr(b, "detector", r.detector);
         r.integrator = getStr(b, "integrator", r.integrator);
+        r.photonRadius = getNum(b, "photon_radius", r.photonRadius);
+        r.photonAlpha = getNum(b, "photon_alpha", r.photonAlpha);
+        r.photonsPerPixel = getNum(b, "photons", r.photonsPerPixel);
+        r.vcmWavelengthGroups = int(getNum(b, "vcm_groups", r.vcmWavelengthGroups));
+        if (r.vcmWavelengthGroups < 1 || r.vcmWavelengthGroups > 8) fail(b, "vcm_groups must be 1 to 8");
+        if (!(r.photonRadius > 0) || !(r.photonAlpha > 0 && r.photonAlpha <= 1) || !(r.photonsPerPixel > 0))
+            fail(b, "photon_radius and photons must be positive, photon_alpha in (0, 1]");
         r.spp = int(getNum(b, "spp", r.spp));
         r.seed = uint64_t(getNum(b, "seed", double(r.seed)));
         r.maxDepth = int(getNum(b, "max_depth", r.maxDepth));
@@ -997,6 +1308,7 @@ private:
         r.fresnelFloor = getNum(b, "fresnel_floor", r.fresnelFloor);
         if (auto wbv = b.get("white_balance")) r.whiteBalance = (wbv->kind == Value::Kind::Ident && wbv->str == "none") ? 0 : num(*wbv);
         if (auto a = b.get("auto_exposure")) r.autoExposure = boolean(*a);
+        if (auto t = b.get("tone")) r.tone = toneName(*t);
     }
 
     Scene& scene_;
@@ -1004,6 +1316,7 @@ private:
     std::string base_;
     double unit_ = 1.0;
     std::map<std::string, uint32_t> materials_;
+    mutable std::map<std::string, std::shared_ptr<const ImageRGB>> images_;
     std::map<std::string, std::pair<TerrainSpec, Transform>> terrains_;
     std::map<std::string, Instrument> instruments_;
     std::set<std::string> names_;

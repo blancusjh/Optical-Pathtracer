@@ -95,6 +95,12 @@ float2 sampleUniformDiskConcentric(float u1, float u2) {
     return float2(r * cos(phi), r * sin(phi));
 }
 
+// Two independent standard normal deviates (Box–Muller).
+float2 sampleStandardNormal2(float u1, float u2) {
+    float r = sqrt(-2 * log(1 - u1)), phi = 2 * kPi * u2;
+    return float2(r * cos(phi), r * sin(phi));
+}
+
 float3 sampleCosineHemisphere(float u1, float u2) {
     float2 d = sampleUniformDiskConcentric(u1, u2);
     float z = safeSqrt(1 - d.x * d.x - d.y * d.y);

@@ -4,7 +4,85 @@
 #include "optics.slang"
 #include "world.slang"
 
+// The first region inconsistency of a pass (as TransportStats::first on the CPU): words 8–15 of
+// g_counters hold a claim flag, the boundary, the ray's region, the boundary's region on the side
+// met, the previous boundary and the camera-relative position (float bits).
+void noteInconsistency(uint boundary, uint rayRegion, uint boundaryRegion, uint previous, float3 p) {
+    uint old;
+    InterlockedCompareExchange(g_counters[8], 0u, 1u, old);
+    if (old != 0) return;
+    g_counters[9] = boundary;
+    g_counters[10] = rayRegion;
+    g_counters[11] = boundaryRegion;
+    g_counters[12] = previous;
+    g_counters[13] = asuint(p.x);
+    g_counters[14] = asuint(p.y);
+    g_counters[15] = asuint(p.z);
+}
+
 // ---------------------------------------------------------------- environment
+
+// Environment map (world.cpp: Environment::mapRGB, sampleMap, mapPdf).
+float2 envMapUV(float3 dir) {
+    GGlobals G = globals();
+    float c = clamp(dot(dir, G.up.xyz), -1.0, 1.0);
+    float u = (atan2(dot(dir, G.envE2.xyz), dot(dir, G.envE1.xyz)) - G.envParams.x) / (2 * kPi);
+    return float2(u - floor(u), acos(c) / kPi);
+}
+float envMapRadiance(float3 dir, float l) {
+    GGlobals G = globals();
+    float2 uv = envMapUV(dir);
+    float3 c = imageBilinear(G.envMap.x, uv.x, uv.y);
+    float3 w = max(float3(dot(G.rgbA[0].xyz, c), dot(G.rgbA[1].xyz, c), dot(G.rgbA[2].xyz, c)), 0.0);
+    return G.envParams.y * G.envParams.w * dot(w, rgbBasis(l)) * planck(l, 6504.0) * 1e-13;
+}
+// Binary search: the last index i in [0, n) with cdf[i] <= a (cdf at scalars[at..at+n]).
+uint cdfIndex(uint at, uint n, float a) {
+    uint lo = 0, len = n;
+    while (len > 0) {
+        uint half = len / 2;
+        if (g_scalars[at + lo + half] <= a) { lo += half + 1; len -= half + 1; }
+        else len = half;
+    }
+    return lo == 0 ? 0 : lo - 1;
+}
+bool sampleEnvMap(float u1, float u2, out float3 dir, out float pdf) {
+    GGlobals G = globals();
+    dir = float3(0, 0, 1);
+    pdf = 0;
+    const float total = G.envParams.z;
+    const uint W = uint(G.envE1.w), H = uint(G.envE2.w);
+    if (!(total > 0)) return false;
+    const float a = u1 * total;
+    const uint j = min(cdfIndex(G.envMap.y, H + 1, a), H - 1);
+    const float m0 = g_scalars[G.envMap.y + j], m1 = g_scalars[G.envMap.y + j + 1];
+    const float tRow = clamp((a - m0) / max(m1 - m0, 1e-30), 0.0, 1.0);
+    const uint row = G.envMap.z + j * (W + 1);
+    const float b = u2 * g_scalars[G.envMore.x + j];
+    const uint i = min(cdfIndex(row, W + 1, b), W - 1);
+    const float c0 = g_scalars[row + i], c1 = g_scalars[row + i + 1];
+    const float tCol = clamp((b - c0) / max(c1 - c0, 1e-30), 0.0, 1.0);
+    const float u = (float(i) + tCol) / float(W), v = (float(j) + tRow) / float(H);
+    const float theta = kPi * v, phi = 2 * kPi * u + G.envParams.x;
+    const float st = sin(theta);
+    if (!(st > 0)) return false;
+    dir = (G.envE1.xyz * cos(phi) + G.envE2.xyz * sin(phi)) * st + G.up.xyz * cos(theta);
+    pdf = (c1 - c0) / total * float(W) * float(H) / (2 * kPi * kPi * st);
+    return pdf > 0;
+}
+float envMapPdf(float3 dir) {
+    GGlobals G = globals();
+    const float total = G.envParams.z;
+    if (!(total > 0)) return 0;
+    const uint W = uint(G.envE1.w), H = uint(G.envE2.w);
+    float c = clamp(dot(dir, G.up.xyz), -1.0, 1.0);
+    float st = sqrt(max(0.0, 1 - c * c));
+    if (!(st > 0)) return 0;
+    float2 uv = envMapUV(dir);
+    uint i = min(uint(uv.x * float(W)), W - 1), j = min(uint(uv.y * float(H)), H - 1);
+    uint row = G.envMap.z + j * (W + 1);
+    return (g_scalars[row + i + 1] - g_scalars[row + i]) / total * float(W) * float(H) / (2 * kPi * kPi * st);
+}
 
 float envSky(float3 dir, float l) {
     GGlobals G = globals();
@@ -16,6 +94,7 @@ float envSky(float3 dir, float l) {
             float t = pow(c, 0.45);
             return spectrumEval(G.sky.z, l) * (1 - t) + spectrumEval(G.sky.y, l) * t;
         }
+        case 3: return envMapRadiance(dir, l);
         default: return 0;
     }
 }
@@ -25,6 +104,38 @@ float envSun(float3 dir, float l) {
 }
 
 // ---------------------------------------------------------------- interfaces at hits
+
+// A stained glass's mask (raw red, nearest texel; sampleAimNormal.x: threshold) says stone here.
+bool stainedIsStone(Optics o, SurfaceHit hit) {
+    if (o.conductorK == kGpuNone || !hit.hasUv) return false;
+    return imageNearestRaw(o.conductorK, hit.uv.x, hit.uv.y) < o.sampleAimNormal.x;
+}
+// The straight transmittance of the stained glass at a hit, per wavelength, and the probability pS
+// that a path takes it (both 0 where the mask says stone).
+float4 stainedStraight(SurfaceHit hit, float3 d, Wavelengths wl, out float pS) {
+    pS = 0;
+    Optics o = loadOptics(g_boundaries[hit.boundary].links.z);
+    if (stainedIsStone(o, hit)) return 0;
+    float3 tex = o.texKind != kTexNone ? textureWeights(o.texKind, o.texScale, o.texParam, hit.pLocal, hit.nLocal, hit.uv, hit.hasUv)
+                                       : float3(1, 0, 0);
+    float cosI = abs(dot(d, hit.n));
+    pS = stainedProbs(o, tex, cosI).y;
+    float keep = 1 - o.sampleAimCenter.z;
+    float4 T = 0;
+    [ForceUnroll] for (int i = 0; i < NW; ++i)
+        if (wl.pdf[i] != 0) T[i] = keep * stainedSlab(o, tex, cosI, wl.lambda[i], kAirIndex).y;
+    return T;
+}
+// At a stained glass, a path passes straight through with probability pS, carrying T/pS: a crossing
+// like a null boundary's (no scattering vertex; region unchanged), which keeps it consistent with
+// next-event estimation, whose shadow rays take the same T. Otherwise the glass scatters it.
+bool passStainedGlass(SurfaceHit hit, float3 d, Wavelengths wl, inout float4 beta, inout Rng rng) {
+    float pS;
+    float4 T = stainedStraight(hit, d, wl, pS);
+    if (!(pS > 0) || rng.uniform() >= pS) return false;
+    beta *= T / pS;
+    return true;
+}
 
 struct HitInterface {
     Interface it;
@@ -38,21 +149,35 @@ HitInterface makeInterface(SurfaceHit hit, float lambda) {
     h.front = b.links.x;
     h.back = b.links.y;
     h.it.optics = loadOptics(b.links.z);
+    if (h.it.optics.type == kSurfStainedGlass && stainedIsStone(h.it.optics, hit))
+        h.it.optics = loadOptics(asuint(h.it.optics.sampleAimNormal.y));  // the mask says stone here
     h.it.n = hit.n;
+    h.it.ns = hit.ns;
     h.it.nFront = regionIndex(h.front, lambda);
     h.it.nBack = regionIndex(h.back, lambda);
     h.it.lambda = lambda;
     h.it.fresnelFloor = globals().misc.z;
     h.it.tex = float3(1, 0, 0);
     if (h.it.optics.texKind != kTexNone)
-        h.it.tex = textureWeights(h.it.optics.texKind, h.it.optics.texScale, h.it.optics.texParam, hit.pLocal, hit.nLocal);
+        h.it.tex = textureWeights(h.it.optics.texKind, h.it.optics.texScale, h.it.optics.texParam, hit.pLocal, hit.nLocal,
+                                  hit.uv, hit.hasUv);
+    h.it.applyMaterialMap();
+    if (h.it.optics.relief.y > 0) {
+        // The relief's slope tilts the shading normal: n − (∇h − (∇h·n) n), in the tangent plane.
+        float3 g = xfVector(b.toWorld, reliefGradient(hit.pLocal, h.it.optics.relief));
+        float3 ns = h.it.ns;
+        float3 tilted = normalize(ns - (g - dot(g, ns) * ns));
+        if (dot(tilted, hit.n) > 1e-3) h.it.ns = tilted;
+    }
     return h;
 }
 // The same interface at another wavelength: only the indices change.
 Interface atWavelength(HitInterface base, float lambda) {
     Interface it = base.it;
-    it.nFront = regionIndex(base.front, lambda);
-    it.nBack = regionIndex(base.back, lambda);
+    if (it.optics.usesIndices()) {
+        it.nFront = regionIndex(base.front, lambda);
+        it.nBack = regionIndex(base.back, lambda);
+    }
     it.lambda = lambda;
     return it;
 }
@@ -93,6 +218,14 @@ bool sampleLightFrom(float3 p, Wavelengths wl, inout Rng rng, out LightSample ls
         ls.dist = infinity();
         ls.Le = wl.eval(G.sun.y);
         ls.pdf = sel / G.misc.x;
+        return true;
+    }
+    if (L.kind == 2) {
+        float pdfDir;
+        if (!sampleEnvMap(u1, u2, ls.wi, pdfDir)) return false;
+        ls.dist = infinity();
+        [ForceUnroll] for (int i = 0; i < NW; ++i) ls.Le[i] = envSky(ls.wi, wl.lambda[i]);
+        ls.pdf = sel * pdfDir;
         return true;
     }
     GBoundary b = g_boundaries[L.boundary];
@@ -176,6 +309,15 @@ float4 transmittance(float3 o, uint region, float3 dir, float dist, Wavelengths 
             return Tr;
         }
         GBoundary b = g_boundaries[h.boundary];
+        if (g_optics[b.links.z].a.x == kSurfStainedGlass) {
+            float pS;
+            Tr *= stainedStraight(h, dir, wl, pS);
+            if (isZero(Tr)) return 0;
+            o = offsetOrigin(h.p, h.n, dir, h.scale);
+            scale = h.scale;
+            if (!isinf(remaining)) remaining -= h.t;
+            continue;
+        }
         if (g_optics[b.links.z].a.x != kSurfNull) return 0;
         region = dot(dir, h.n) < 0 ? b.links.y : b.links.x;
         o = offsetOrigin(h.p, h.n, dir, h.scale);
@@ -224,7 +366,7 @@ ShadowRay prepareDirect(SurfaceHit hit, HitInterface base, float3 d, Wavelengths
     // distance to the light from there, or the margin in transmittance() may not cover it.
     sr.dist = isinf(ls.dist) ? ls.dist : ls.dist - dot(sr.o - hit.p, ls.wi);
     float w = powerHeuristic(ls.pdf, pdfScatter);
-    sr.value = beta * f * ls.Le * (abs(dot(ls.wi, hit.n)) * w / ls.pdf);
+    sr.value = beta * f * ls.Le * (scatterCosine(base.it, -d, ls.wi, kModeRadiance) * w / ls.pdf);
     return sr;
 }
 
@@ -256,6 +398,21 @@ struct PathState {
     // Hybrid: paths eye → D → S⁺ → light belong to light tracing (the partition is disjoint).
     int scatterEvents, nonDeltaEvents, deltaSinceNonDelta;
     bool firstIsNonDelta;
+    bool mediumScattered;  // a medium scattering vertex so far (kFlagMediumOnly counts only such paths)
+#ifdef OWE_SPPM
+    // SPPM camera paths (sppm.slang): the first non-specular surface reached through specular events
+    // only is the visible point. The path then takes next-event estimation and one scatter sample
+    // there, and ends after that sample's segment (its emission, MIS-weighted): everything beyond is
+    // the photons'. A path that scatters in a medium first has no visible point and is path traced.
+    bool vpDone;
+    bool chromatic;    // an absorbing medium on the way (the throughput depends on λ)
+    float pathLength;  // unfolded length from the eye to the visible point
+    float4 vpP;        // position; w: boundary (bits)
+    float4 vpN;        // geometric normal; w: flags (bits)
+    float4 vpD;        // arriving direction; w: unused
+    float4 vpBeta;     // throughput arriving (with the detector's weight)
+    float4 vpTex;      // texture weights; w: the shading normal (octahedral bits) where flag 8
+#endif
 };
 
 PathState startPath(float3 o, float3 d, uint region, Wavelengths wl, float weight) {
@@ -305,6 +462,7 @@ bool stepPath(inout PathState p, inout Rng rng, inout uint4 stats) {
     const int maxDepth = G.limits.x, rrDepth = G.limits.y;
     const uint ambient = G.counts.z;
     const bool partition = (pc.flags & kFlagPartition) != 0;
+    const bool counts = (pc.flags & kFlagMediumOnly) == 0 || p.mediumScattered;  // this path's light is ours
     const float hero = p.wl.hero();
     const int depth = p.depth++;
 
@@ -319,12 +477,16 @@ bool stepPath(inout PathState p, inout Rng rng, inout uint4 stats) {
         float4 sT = sigmaT(med, p.wl);
         float t = -log(1 - rng.uniform()) / sT.x;
         if (t < seg) {
+#ifdef OWE_SPPM
+            if (p.vpDone) return false;  // light scattered in a medium on the way belongs to the photons
+#endif
             float3 x = p.o + p.d * t;
             float pdf0 = sT.x * exp(-sT.x * t);
             [ForceUnroll] for (int i = 0; i < NW; ++i)
                 p.beta[i] *= spectrumEval(g_media[med].props.y, p.wl.lambda[i]) * exp(-sT[i] * t) / pdf0;
             if (depth >= maxDepth) return false;
             float g = g_media[med].g.x;
+            p.mediumScattered = true;
             ShadowRay shadow = prepareDirectMedium(x, p.d, g, p.wl, rng, p.region, p.beta, p.scale);
             float u2 = rng.uniform();  // Draw2 order: last argument first
             float u1 = rng.uniform();
@@ -351,19 +513,25 @@ bool stepPath(inout PathState p, inout Rng rng, inout uint4 stats) {
     } else if (mediumAbsorbs(med)) {
         if (!found) return false;
         [ForceUnroll] for (int i = 0; i < NW; ++i) p.beta[i] *= exp(-spectrumEval(g_media[med].props.x, p.wl.lambda[i]) * seg);
+#ifdef OWE_SPPM
+        p.chromatic = true;
+#endif
     }
 
     const bool ownedByLightTracing =
         partition && p.nonDeltaEvents == 1 && p.firstIsNonDelta && p.deltaSinceNonDelta >= 1;
     if (!found) {
-        if (p.region == ambient && !ownedByLightTracing) {
+        if (p.region == ambient && !ownedByLightTracing && counts) {
             float4 sky, sun;
             [ForceUnroll] for (int i = 0; i < NW; ++i) {
                 sky[i] = envSky(p.d, p.wl.lambda[i]);
                 sun[i] = envSun(p.d, p.wl.lambda[i]);
             }
             float w = (p.specular || isZero(sun)) ? 1.0 : powerHeuristic(p.prevPdf, sunPdf());
-            p.L += p.beta * (sky + sun * w);
+            // An environment map is also a light for next-event estimation: MIS.
+            float wSky = 1;
+            if (G.envMap.w != kGpuNone && !p.specular) wSky = powerHeuristic(p.prevPdf, g_lights[G.envMap.w].pdf * envMapPdf(p.d));
+            p.L += p.beta * (sky * wSky + sun * w);
         } else if (p.region != ambient) {
             stats.w++;
         }
@@ -376,14 +544,18 @@ bool stepPath(inout PathState p, inout Rng rng, inout uint4 stats) {
     uint other = fromFront ? b.links.y : b.links.x;
     if (inc != p.region) {
         stats.z++;
+        noteInconsistency(hit.boundary, p.region, inc, kGpuNone, hit.p);
         p.region = inc;
     }
     uint surfType = g_optics[b.links.z].a.x;
+#ifdef OWE_SPPM
+    if (!p.vpDone) p.pathLength += hit.t;
+#endif
 
     // Emission.
     if (b.links.w != kGpuNone) {
         GEmission e = g_emissions[b.links.w];
-        if (((fromFront && e.front != 0) || (!fromFront && e.back != 0)) && !ownedByLightTracing) {
+        if (((fromFront && e.front != 0) || (!fromFront && e.back != 0)) && !ownedByLightTracing && counts) {
             float w = 1;
             if (!p.specular) {
                 float pl = lightPdf(p.prevP, hit);
@@ -399,6 +571,14 @@ bool stepPath(inout PathState p, inout Rng rng, inout uint4 stats) {
         p.scale = hit.scale;
         return depth < 4 * maxDepth;
     }
+    if (surfType == kSurfStainedGlass && passStainedGlass(hit, p.d, p.wl, p.beta, rng)) {
+        p.o = offsetOrigin(hit.p, hit.n, p.d, hit.scale);
+        p.scale = hit.scale;
+        return depth < 4 * maxDepth;
+    }
+#ifdef OWE_SPPM
+    if (p.vpDone) return false;  // the visible point's scatter sample has met matter: done
+#endif
     if (surfType == kSurfAbsorber || surfType == kSurfDetector) return false;
     if (depth >= maxDepth) return false;
 
@@ -411,8 +591,23 @@ bool stepPath(inout PathState p, inout Rng rng, inout uint4 stats) {
                 break;
             }
     }
+#ifdef OWE_SPPM
+    if (!hi.it.optics.isDelta() && p.nonDeltaEvents == 0) {
+        p.vpDone = true;
+        p.vpP = float4(hit.p, asfloat(hit.boundary));
+        // Flags: valid; secondaries terminated; spectrally free (the eye sees the point directly, so
+        // its throughput is the same at every wavelength and it can take a photon of any λ); smooth
+        // (a shading normal, packed in vpTex.w).
+        const bool free = p.scatterEvents == 0 && !p.chromatic;
+        const bool smooth = hi.it.smooth();
+        p.vpN = float4(hit.n, asfloat(1u | (p.wl.secondaryTerminated() ? 2u : 0u) | (free ? 4u : 0u) | (smooth ? 8u : 0u)));
+        p.vpD = float4(p.d, 0);
+        p.vpBeta = p.beta * p.weight;
+        p.vpTex = float4(hi.it.tex, asfloat(smooth ? octEncode(hi.it.ns) : 0u));
+    }
+#endif
     ShadowRay shadow = (ShadowRay)0;
-    if (!hi.it.optics.isDelta()) shadow = prepareDirect(hit, hi, p.d, p.wl, rng, p.region, p.beta);
+    if (!hi.it.optics.isDelta() && counts) shadow = prepareDirect(hit, hi, p.d, p.wl, rng, p.region, p.beta);
     float u3 = rng.uniform();  // Draw3 order: last argument first
     float u2 = rng.uniform();
     float u1 = rng.uniform();

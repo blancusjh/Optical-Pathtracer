@@ -117,7 +117,8 @@ void CpuRenderer::passPath(int spp) {
                         Ray ray;
                         double weight;
                         double px = x + rng.uniform(), py = y + rng.uniform();
-                        if (!det_->generate(px, py, rng, ray, weight) || weight <= 0) continue;
+                        Vec2 f = det_->filterOffset(rng);
+                        if (!det_->generate(px + f.x, py + f.y, rng, ray, weight) || weight <= 0) continue;
                         Spec4 L = tracer_.radiance(ray, det_->region, wl, rng, stats[tid]);
                         if (L.isZero()) continue;
                         XYZ c = wl.toXYZ(L * weight);
@@ -214,6 +215,9 @@ public:
     std::vector<std::string> integrators() const override { return {"path", "light", "hybrid"}; }
     std::unique_ptr<Renderer> createRenderer(const Scene& scene, int detectorIndex,
                                              const RenderSettings& settings) const override {
+        for (const SurfaceOptics& o : scene.world.optics())
+            if (o.type == SurfaceType::StainedGlass)
+                throw std::runtime_error("material '" + o.name + "' is stained glass, which only the GPU backend renders (--backend gpu)");
         return std::make_unique<CpuRenderer>(scene, detectorIndex, settings);
     }
 };

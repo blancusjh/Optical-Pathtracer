@@ -126,7 +126,7 @@ TEST(moon_eyepiece_saved_glass_view_separates_reflection_from_transmission) {
         for (int i = 0; i < 100000; ++i) {
             Rng rng(i, 19); Ray ray; double weight;
             double x = eye.width * rng.uniform(), y = eye.height * rng.uniform();
-            eye.generate(x, y, rng, ray, weight);
+            if (!eye.generate(x, y, rng, ray, weight)) continue;
             SurfaceHit first;
             if (!sc.world.intersect(ray, Inf, first) ||
                 !sc.world.boundaryLabel(first.boundary).starts_with("MoonScope.L3.")) continue;
@@ -138,10 +138,10 @@ TEST(moon_eyepiece_saved_glass_view_separates_reflection_from_transmission) {
                     const auto& v = path.v[j];
                     reflected |= v.event == EventKind::Reflect || v.event == EventKind::TIR;
                     if (v.event != EventKind::Diffuse) continue;
-                    if (sc.world.boundaryLabel(v.boundary) == "Moon.surface") moon[pose] += c.value[0];
+                    if (sc.world.boundaryLabel(v.boundary) == "Moon.surface") moon[pose] += c.value[0] * weight;
                     else {
                         CHECK(reflected);
-                        reflectedRoom[pose] += c.value[0];
+                        reflectedRoom[pose] += c.value[0] * weight;
                     }
                     break;
                 }
@@ -167,7 +167,7 @@ TEST(observatory_eyepiece_room_light_is_reflected_and_eyecup_reduces_it) {
         for (int i = 0; i < 100000; ++i) {
             Rng rng(i, 19); Ray ray; double weight;
             double x = 40 + 20 * rng.uniform(), y = 40 + 20 * rng.uniform();
-            eye.generate(x, y, rng, ray, weight);
+            if (!eye.generate(x, y, rng, ray, weight)) continue;
             auto wl = Wavelengths::single(550); PathRecord path;
             tracer.radiance(ray, eye.region, wl, rng, stats, &path);
             for (const auto& c : path.c) {
@@ -177,10 +177,10 @@ TEST(observatory_eyepiece_room_light_is_reflected_and_eyecup_reduces_it) {
                     reflected |= v.event == EventKind::Reflect || v.event == EventKind::TIR;
                     if (v.event != EventKind::Diffuse) continue;
                     auto label = sc.world.boundaryLabel(v.boundary);
-                    if (label.starts_with("Saturn")) planet[shield] += c.value[0];
+                    if (label.starts_with("Saturn")) planet[shield] += c.value[0] * weight;
                     else {
                         CHECK(reflected); // room geometry must not replace the transmitted celestial view
-                        room[shield] += c.value[0];
+                        room[shield] += c.value[0] * weight;
                     }
                     break;
                 }
@@ -431,7 +431,7 @@ TEST(camera_f_number_and_pupil_aim) {
     // f_number resizes the physical stop: the paraxial f-number of the built camera matches it.
     // Aiming sensor samples at the exit pupil (mixed with the whole rear opening) agrees with the
     // unaimed estimate within its noise. (A pupil-only aim is biased low by the ghost and veiling
-    // light that leaves the rear element outside the pupil: ~1.8% at f/11 in the_temple.owe.)
+    // light that leaves the rear element outside the pupil: ~1.8% at f/11 with the 85 mm portrait lens.)
     const char* scene = R"(
 units = m
 world { sky = uniform(rgb(0.5, 0.5, 0.5)) }
@@ -463,3 +463,26 @@ camera Cam { lens = "lenses/portrait_85mm.lens" sensor = (36mm, 24mm) resolution
     double aimed = meanY(share, 1024, 9);
     CHECK_NEAR(aimed, m, 5 * std::sqrt(v / ref.size()) + 1e-3 * m);
 }
+
+// An eye beside a telescope's small exit pupil focuses on the planet that part of its pupil receives,
+// not on the black tube its pupil centre looks into (a free eye in the viewer, 2 mm off the axis).
+TEST(accommodation_follows_the_light_the_pupil_receives) {
+    Scene sc = loadScene("scenes/the_observatory.owe");
+    auto& ep = dynamic_cast<IdealObserver&>(*sc.detectors[size_t(sc.findDetector("SaturnEyepiece"))]);
+    for (double back : {0.0, 0.02})
+        for (double side : {0.0, 0.001, 0.002}) {
+            Vec3 eye = ep.position - ep.forward() * back + ep.right() * side;
+            Accommodation a = accommodation(sc, eye, ep.forward(), sc.world.locate(eye), 0.0025);
+            CHECK(a.found);
+            CHECK(a.specular == 9);                // through the whole refractor
+            CHECK(!std::isfinite(a.distance));    // Saturn's image is at infinity
+        }
+    // With nothing but optics between, the line of sight's own object: the room's wall.
+    auto& room = dynamic_cast<IdealObserver&>(*sc.detectors[size_t(sc.findDetector("Room"))]);
+    SurfaceHit hit;
+    CHECK(sc.world.intersect(Ray{room.position, room.forward()}, Inf, hit));
+    Accommodation a = accommodation(sc, room.position, room.forward(), room.region, 0.0025);
+    CHECK(a.found && a.specular == 0);
+    CHECK_REL(a.distance, hit.t, 1e-6);
+}
+
