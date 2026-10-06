@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -21,6 +22,8 @@
 #include "owe/render/exposure.hpp"
 #include "owe/render/output.hpp"
 #include "owe/render/record.hpp"
+#include "owe/scene/geometry.hpp"
+#include "owe/scene/image.hpp"
 #include "navigation.hpp"
 #include "viewer.hpp"
 
@@ -221,7 +224,10 @@ void usage() {
         "  owe backends [NAME]  The backends in this build, their devices and integrators (exit 1 if NAME\n"
         "                       is unavailable here).\n"
         "  owe glass [NAME]    Refractive index model, n at spectral lines, Abbe number.\n"
-        "  owe info <scene.owe>  The world's ontology: media, regions, boundaries, bodies, detectors.\n",
+        "  owe info <scene.owe>  The world's ontology: media, regions, boundaries, bodies, detectors.\n"
+        "  owe model <file.gltf|.glb|.obj> [--scene-dir DIR]\n"
+        "      A model's size, its parts (glTF materials) with their triangles, extents and base-colour images,\n"
+        "      and the paths a scene in DIR (default scenes/) writes to load them.\n",
         backendNames().c_str());
 }
 
@@ -411,6 +417,56 @@ int cmdGlass(const Args& a) {
         std::printf("  λ = %8.3f nm   n = %.6f   (absolute %.6f)   α = %.4g /m\n", l, m.index.nRelative(l), m.n(l),
                     m.absorption.eval(l));
     std::printf("  Abbe number V_d = %.3f\n", abbeNumber(m.index));
+    return 0;
+}
+
+int cmdModel(const Args& a) {
+    namespace fs = std::filesystem;
+    if (a.positional.empty()) throw std::runtime_error("owe model <file.gltf|.glb|.obj> [--scene-dir DIR]");
+    const std::string file = a.positional[0];
+    const MeshData m = loadModel(file);
+    const fs::path sceneDir = a.get("--scene-dir", fs::is_directory("scenes") ? "scenes" : ".");
+    auto fromScene = [&](const std::string& p) { return fs::path(p).lexically_proximate(sceneDir).generic_string(); };
+    struct Box {
+        Vec3 lo{1e300, 1e300, 1e300}, hi{-1e300, -1e300, -1e300};
+        size_t triangles = 0;
+        void add(const Vec3& p) {
+            for (int k = 0; k < 3; ++k) lo[k] = std::min(lo[k], p[k]), hi[k] = std::max(hi[k], p[k]);
+        }
+        std::string size() const {
+            char b[64];
+            std::snprintf(b, sizeof b, "%.3g × %.3g × %.3g", hi.x - lo.x, hi.y - lo.y, hi.z - lo.z);
+            return b;
+        }
+    };
+    Box all;
+    std::vector<Box> parts(m.partNames.size() + 1);  // the last collects triangles without a part
+    for (size_t t = 0; t < m.triangles.size(); ++t) {
+        Box& b = m.part.empty() || m.part[t] >= m.partNames.size() ? parts.back() : parts[m.part[t]];
+        ++b.triangles;
+        for (uint32_t v : m.triangles[t]) {
+            b.add(m.positions[v]);
+            all.add(m.positions[v]);
+        }
+    }
+    std::printf("%s\n  %zu triangles, %zu vertices; texture coordinates: %s; file normals: %s\n", file.c_str(),
+                m.triangles.size(), m.positions.size(), m.uvs.empty() ? "no" : "yes", m.normals.empty() ? "no" : "yes");
+    std::printf("  bounds (file units, z up): x %.4g … %.4g, y %.4g … %.4g, z %.4g … %.4g; size %s\n", all.lo.x, all.hi.x,
+                all.lo.y, all.hi.y, all.lo.z, all.hi.z, all.size().c_str());
+    if (m.partNames.empty()) {
+        std::puts("  no parts (an OBJ file, or a glTF file without materials)");
+    } else {
+        std::printf("\n  %-34s %10s  %-28s %s\n", "part", "triangles", "size", "base-colour image (from the scene)");
+        for (size_t i = 0; i < m.partNames.size(); ++i) {
+            std::string img = m.partImages[i].empty() ? "—" : fromScene(m.partImages[i]);
+            int w = 0, h = 0;
+            if (!m.partImages[i].empty() && imageSize(m.partImages[i], w, h)) img += "  (" + std::to_string(w) + "×" + std::to_string(h) + ")";
+            std::printf("  %-34s %10zu  %-28s %s\n", ("\"" + m.partNames[i] + "\"").c_str(), parts[i].triangles,
+                        parts[i].triangles ? parts[i].size().c_str() : "—", img.c_str());
+        }
+        if (parts.back().triangles) std::printf("  %-34s %10zu  %-28s\n", "(no material)", parts.back().triangles, parts.back().size().c_str());
+    }
+    std::printf("\n  body … { type = mesh  file = \"%s\"  part = \"…\" }\n", fromScene(file).c_str());
     return 0;
 }
 
@@ -878,6 +934,7 @@ int main(int argc, char** argv) {
         if (cmd == "lens") return cmdLens(a);
         if (cmd == "glass") return cmdGlass(a);
         if (cmd == "info") return cmdInfo(a);
+        if (cmd == "model") return cmdModel(a);
         if (cmd == "studio") return cmdStudio(a);
         if (cmd == "view") return cmdView(a);
         if (cmd == "bench") return cmdBench(a);

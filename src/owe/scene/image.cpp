@@ -25,6 +25,11 @@ Vec3 ImageRGB::bilinear(double u, double v) const {
            texel(x1, y1) * (tx * ty);
 }
 
+bool imageSize(const std::string& path, int& width, int& height) {
+    int n = 0;
+    return stbi_info(path.c_str(), &width, &height, &n) != 0;
+}
+
 std::shared_ptr<const ImageRGB> loadImage(const std::string& path) {
     auto img = std::make_shared<ImageRGB>();
     img->path = path;

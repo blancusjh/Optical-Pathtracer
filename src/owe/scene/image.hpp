@@ -29,6 +29,8 @@ struct ImageRGB {
 
 // Loads PNG, JPEG, BMP, TGA or HDR; throws with the reason on failure.
 std::shared_ptr<const ImageRGB> loadImage(const std::string& path);
+// An image file's size from its header, without decoding it; false if it cannot be read.
+bool imageSize(const std::string& path, int& width, int& height);
 double srgbToLinear(double c);
 
 }  // namespace owe
