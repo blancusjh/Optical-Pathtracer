@@ -1,122 +1,79 @@
 # Roadmap
 
-State on 2026-09-29: exposure and free-view image formation, SPPM with photon guiding, photoreal
-shading (smooth normals, material maps, relief, AgX, image textures, HDR skies), BDPT and VCM are
-done on the GPU; glTF models with texture coordinates load (`tests/test_models.cpp`). New work
-goes on the GPU first. The order below is the priority.
+State on 2026-10-05, first version. The GPU renders everything below; new work goes on the GPU
+first, and the CPU reference is not ported.
 
-## 1. Fast loading (next)
+## Done in this version
 
-Measured on an RTX 4060 laptop GPU:
+- **Fast loading.** Kernels compile through a pipeline cache kept on disk (`~/.cache/owe/`, per
+  device and driver), and a renderer compiles only its integrator's kernels, in parallel. With
+  every cache cold, a VCM start dropped from 131 s to 61 s, which is now the largest single
+  kernel. Any later start takes 0.4 s.
+- **`owe model <file>`:** a model's parts, sizes and textures, with the paths a scene writes to
+  load them.
+- **Stained glass** (`type = stained_glass`): a thin slab with Fresnel at both faces and
+  internal transmittance from a picture.
+  - Covers opalescent `haze`, diffuse reflection, and glass masks that hand masked points to an
+    opaque stone material.
+  - Shadow rays cross it, so sunlight through a window is direct lighting.
+  - Specifications: `docs/scenes/chapel.txt`, `docs/scenes/peacock_lamp.txt`.
+- **Mirrors in lens prescriptions:** coaxial `reflect` rows with a bore and spider struts.
+  Paraxial data come from the unfolded system, and `afocal` adjusts the gap marked `solve`.
+  Specification: `docs/scenes/gregorian.txt`.
+- **VCM and BDPT with scattering media,** by partition:
+  - the path tracer takes the paths that scatter in a medium;
+  - VCM or BDPT takes the rest, through media as extinction.
+- **`surface = null`** for index-matched media: haze or smoke in air whose boundary only changes
+  the region.
+- **Scenes:**
+  - the chapel, the Kunstkammer, the Gregorian, the Peacock lamp and the invisible window, all
+    built on museum scans;
+  - an 85 mm physical camera in the study.
 
-| run | time |
-|---|---|
-| `the_study` (vcm), driver cache warm | 0.4 s (`owe render`), 3.5 s for four views (`owe view`) |
-| `the_telescope`, warm | ~4 s each (20 s of CPU on host threads: generated meshes, BVHs) |
-| `the_study` right after a kernel change | 70 s |
-| a two-triangle quad (path) right after a kernel change | 34 s |
+## Engine: what remains
 
-Slow loading is the driver compiling pipelines from cold. It happens after every kernel change
-and whenever NVIDIA's own cache (`~/.cache/nvidia/GLCache`, 441 MB now) evicts them. It runs on
-one thread. Scene loading itself is not the bottleneck. There are twelve large kernels (every
-integrator × hardware/software traversal) of 1.1–2.4 MB of SPIR-V each. The engine passes no
-pipeline cache (`vkCreateComputePipelines(dev, VK_NULL_HANDLE, …)` in `vulkan_context.cpp`).
+1. **Loading:**
+   - Smaller kernels. Find what inflates them (unrolled hero-wavelength loops, BSDF and texture
+     switches inlined at every call site), then try `[noinline]` and specialization constants.
+   - Scene-side caching: write generated meshes and mesh-group BVHs to disk keyed by content
+     hash. The Kunstkammer's scans take ~14 s to load.
+2. **Stained glass, later parts:**
+   - roughness of the reflection;
+   - a forward-scattering `haze_angle` lobe;
+   - reciprocal diffuse transmission (the opalescent lobe uses the incident angle's T).
+3. **Mirrors, later parts:**
+   - folded systems (`out_axis`, the Newtonian);
+   - `tube = true` for reflectors;
+   - refraction on a leg travelling −z;
+   - annular-pupil guiding.
+4. **Volume vertices in VCM** (merging in media, the UPBP family), in place of the partition,
+   where caustics are seen through haze.
+5. **Sun from photographed skies:** move the sun's disc out of an HDR sky into an analytic sun.
+6. **OpenEXR and a celestial frame,** for NASA's Deep Star Maps.
+7. **Heterogeneous media** (density grids, delta tracking): smoke.
+8. **Manifold next-event estimation:** glints (eye → specular chain → sun) and telescope stars.
+9. **BDPT and VCM with physical cameras.**
+10. **Smaller items:**
+    - glTF roughness and normal maps;
+    - OBJ `vt` coordinates;
+    - efficiency-aware MIS and an adaptive photon radius;
+    - VCM with more than one wavelength group;
+    - region inconsistencies where scans and blocks touch (about 1% of paths in the chapel).
 
-1. **Persistent `VkPipelineCache`** in `~/.cache/owe/`, keyed by device, driver version and SPIR-V
-   hash. Pipelines then survive driver-cache eviction.
-2. **Compile only what the integrator needs**, in parallel on host threads. The viewer should
-   compile in the background with a progress note, showing the path tracer while VCM compiles.
-3. **Smaller kernels.** First find what inflates them: unrolled hero-wavelength loops, BSDF and
-   texture switches inlined at every call site, variants built with `#ifdef`. Then try Slang
-   `[noinline]` functions, specialization constants and optimization levels, measuring the
-   compile time per kernel.
-4. **Then scene-side caching:** write the generated meshes and the mesh groups' BVHs to disk as
-   binary files keyed by content hash, and memory-map them. The telescope would
-   then load in well under a second.
+## Scenes: what remains
 
-## 2. Engine: what remains
-
-In priority order after fast loading. GPU first; the CPU reference is not ported.
-
-1. **`owe model <file>`:** list a model's parts, triangle counts, images and bounds, so scene
-   authors know the `part` names and texture files. Small. Today the loader lists the parts only
-   when a `part` name is wrong.
-2. **Stained glass:** a thin coloured-glass surface.
-   - Optics: thin-slab Fresnel with incoherent inter-reflections; transmission goes straight
-     through.
-   - Colour: the internal transmittance at normal incidence comes from a picture mapped with
-     `mapping = uv`, applied as τ^(1/cos θₜ) at oblique incidence. The lead lines are its dark
-     texels.
-   - Scans whose glass is its own glTF material use it through `part =`.
-3. **Sun from photographed skies:** move the sun's disc out of an HDR sky into an analytic sun,
-   for next-event estimation and photon guiding.
-4. **OpenEXR and a celestial frame:** place NASA's Deep Star Maps for the observer's latitude and
-   time.
-5. **Participating media in VCM and SPPM** (photons stored in the medium): visible beams from a
-   crystal, shafts under a rose window. Today BDPT and VCM refuse scattering media.
-6. **Heterogeneous media** (density grids, delta tracking): smoke.
-7. **Manifold next-event estimation** (Phase 5): glints (eye → specular chain → sun) and
-   telescope stars. The benchmarks' glint masks measure it.
-8. **BDPT and VCM with physical cameras:** today they need an ideal observer.
-9. **Smaller items:**
-   - glTF roughness and normal maps (`metallicRoughnessTexture`, `normalTexture`);
-   - OBJ `vt` texture coordinates;
-   - efficiency-aware MIS and an adaptive photon radius, from the method plan;
-   - VCM with wavelength groups (more than 1) is noisier than with 1, so the default is 1.
-   - region inconsistencies around 1e-5 of paths in a few scenes.
-
-## 3. Scene building: what remains
-
-Delegate each scene to an agent. Brief it: GPU only, no edits under `src/`, use the built
-`build/owe`, short renders, no commits.
-
-**Assets.**
-- Sketchfab models are downloaded through the user's logged-in Chromium, with Claude in Chrome
-  (the model page's Download → glTF), into the git-ignored `assets/sketchfab/<slug>/`.
-- `assets/sketchfab/MANIFEST.json` records for each model:
-  - its licence, author and triangle count;
-  - its `.gltf` path;
-  - its materials, with their base-colour textures.
-- CC BY models need credit in the scene's comments and in the README. These are the globe, the
-  Beauvais vault, the Valencia and Southwark windows, and the tellurium.
-- The night skies `assets/hdri/qwantani_night_puresky_4k.hdr` and `kloppenheim_02_puresky_4k.hdr`
-  (Poly Haven, CC0) work today with `sky = map(...)`.
-
-| scene | uses | needs from the engine |
-|---|---|---|
-| Observatory: the Jagiellonian Globe on the desk, gilt (gold conductor tinted by the scan's photograph, `mapping = uv`); a photographed night sky | globe, night skies | nothing (star maps later: §2.4) |
-| Cathedral chapel under the Beauvais vault, sun through stained glass onto the floor | vault, Valencia or Southwark window | stained glass (§2.2) |
-| Tiffany lamp: the Peacock lamp lit from inside, its colours thrown on a room | Peacock lamp | stained glass (§2.2) |
-| Armoury or study still life: polished armour, helmet, rapier, astrolabe, book | Cleveland armour, helmet, rapier, astrolabe, Coptic book | nothing |
-| Instrument room: Gregorian telescope (its mirrors could become real optics), sextant, tellurium | those scans | nothing |
-| Caustic panel (Mitsuba's caustic-design tutorial) | solver and script in `assets/` | nothing |
-| Forest sunbeams: the telescope's forest in fog | existing forest | path tracing works today; VCM needs §2.5 |
-| Crystal and glass sphere with rainbow spots and beams | built from lathes and facets | beams in haze need §2.5 |
-
-**Caustic panel: state and open problems.**
-- In `assets/` (not in git):
-  - the solver [poisson_caustic_design](https://github.com/dylanmsu/poisson_caustic_design)
-    (MIT), built in `assets/tools/`;
-  - `assets/caustic_panel/build_caustic_panel.py`;
-  - the target, Dürer's *Rhinoceros* (NGA 1964.8.697, public domain).
-- The predicted caustic is not recognisable yet. Suspects: the solver's hard-coded index of 1.49
-  and its negated axes. Test it on the solver's own `img/siggraph.png` first.
-- The solver's side walls are not watertight; rebuild them in the script.
-- Then run at 240–300 cells. The fallback solver is
-  [causticsEngineering](https://github.com/MattFerraro/causticsEngineering) (MIT, Julia).
-- Scene plan:
-  - a PMMA panel;
-  - a sun of 0.1° angular diameter (1.7 mm of blur at 1 m);
-  - a black baffle around the panel;
-  - a screen at 1 m;
-  - `vcm`.
-- Under VCM, sun photons spread over the whole scene's disc, so keep the layout compact. Check
-  the panel first with a `sensor` screen and light tracing.
-
-**Existing scenes.** The status page's observatory image is out of date. After the new scenes,
-re-render the gallery (`tools/render_gallery.sh`).
+- **Final renders and the gallery:** re-render `docs/gallery` and add the new scenes to the README
+  with their credits. The CC BY scans are the vault, the Valencia rose, the Southwark window, the
+  globe and the tellurium.
+- **The invisible window:**
+  - the optional colour version: three panels behind red, green and blue filter glasses;
+  - the provenance and licence of the Sacred Heart photograph.
+- **Now possible with media in VCM:**
+  - forest sunbeams in fog;
+  - a crystal with rainbow beams in haze;
+  - the observatory with the Jagiellonian globe under a photographed night sky.
 
 ## Known limitations
 
 - The CPU reference ignores texture coordinates (it projects `uv` images planar), smooth normals
-  and material maps.
+  and material maps, and refuses stained glass.
