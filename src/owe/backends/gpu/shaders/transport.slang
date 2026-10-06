@@ -105,6 +105,38 @@ float envSun(float3 dir, float l) {
 
 // ---------------------------------------------------------------- interfaces at hits
 
+// A stained glass's mask (raw red, nearest texel; sampleAimNormal.x: threshold) says stone here.
+bool stainedIsStone(Optics o, SurfaceHit hit) {
+    if (o.conductorK == kGpuNone || !hit.hasUv) return false;
+    return imageNearestRaw(o.conductorK, hit.uv.x, hit.uv.y) < o.sampleAimNormal.x;
+}
+// The straight transmittance of the stained glass at a hit, per wavelength, and the probability pS
+// that a path takes it (both 0 where the mask says stone).
+float4 stainedStraight(SurfaceHit hit, float3 d, Wavelengths wl, out float pS) {
+    pS = 0;
+    Optics o = loadOptics(g_boundaries[hit.boundary].links.z);
+    if (stainedIsStone(o, hit)) return 0;
+    float3 tex = o.texKind != kTexNone ? textureWeights(o.texKind, o.texScale, o.texParam, hit.pLocal, hit.nLocal, hit.uv, hit.hasUv)
+                                       : float3(1, 0, 0);
+    float cosI = abs(dot(d, hit.n));
+    pS = stainedProbs(o, tex, cosI).y;
+    float keep = 1 - o.sampleAimCenter.z;
+    float4 T = 0;
+    [ForceUnroll] for (int i = 0; i < NW; ++i)
+        if (wl.pdf[i] != 0) T[i] = keep * stainedSlab(o, tex, cosI, wl.lambda[i], kAirIndex).y;
+    return T;
+}
+// At a stained glass, a path passes straight through with probability pS, carrying T/pS: a crossing
+// like a null boundary's (no scattering vertex; region unchanged), which keeps it consistent with
+// next-event estimation, whose shadow rays take the same T. Otherwise the glass scatters it.
+bool passStainedGlass(SurfaceHit hit, float3 d, Wavelengths wl, inout float4 beta, inout Rng rng) {
+    float pS;
+    float4 T = stainedStraight(hit, d, wl, pS);
+    if (!(pS > 0) || rng.uniform() >= pS) return false;
+    beta *= T / pS;
+    return true;
+}
+
 struct HitInterface {
     Interface it;
     uint front, back;
@@ -117,6 +149,8 @@ HitInterface makeInterface(SurfaceHit hit, float lambda) {
     h.front = b.links.x;
     h.back = b.links.y;
     h.it.optics = loadOptics(b.links.z);
+    if (h.it.optics.type == kSurfStainedGlass && stainedIsStone(h.it.optics, hit))
+        h.it.optics = loadOptics(asuint(h.it.optics.sampleAimNormal.y));  // the mask says stone here
     h.it.n = hit.n;
     h.it.ns = hit.ns;
     h.it.nFront = regionIndex(h.front, lambda);
@@ -275,6 +309,15 @@ float4 transmittance(float3 o, uint region, float3 dir, float dist, Wavelengths 
             return Tr;
         }
         GBoundary b = g_boundaries[h.boundary];
+        if (g_optics[b.links.z].a.x == kSurfStainedGlass) {
+            float pS;
+            Tr *= stainedStraight(h, dir, wl, pS);
+            if (isZero(Tr)) return 0;
+            o = offsetOrigin(h.p, h.n, dir, h.scale);
+            scale = h.scale;
+            if (!isinf(remaining)) remaining -= h.t;
+            continue;
+        }
         if (g_optics[b.links.z].a.x != kSurfNull) return 0;
         region = dot(dir, h.n) < 0 ? b.links.y : b.links.x;
         o = offsetOrigin(h.p, h.n, dir, h.scale);
@@ -521,6 +564,11 @@ bool stepPath(inout PathState p, inout Rng rng, inout uint4 stats) {
 
     if (surfType == kSurfNull) {
         p.region = other;
+        p.o = offsetOrigin(hit.p, hit.n, p.d, hit.scale);
+        p.scale = hit.scale;
+        return depth < 4 * maxDepth;
+    }
+    if (surfType == kSurfStainedGlass && passStainedGlass(hit, p.d, p.wl, p.beta, rng)) {
         p.o = offsetOrigin(hit.p, hit.n, p.d, hit.scale);
         p.scale = hit.scale;
         return depth < 4 * maxDepth;

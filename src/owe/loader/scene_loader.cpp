@@ -382,6 +382,8 @@ private:
         } else if (type == "dielectric") {
             o.type = SurfaceType::Dielectric;
             roughness(b, o);
+        } else if (type == "stained_glass") {
+            stainedGlass(b, o);
         } else if (type == "absorber" || type == "black") {
             o.type = SurfaceType::Absorber;
         } else if (type == "null") {
@@ -394,6 +396,63 @@ private:
         uint32_t id = w_.addOptics(o);
         if (!name.empty()) materials_[name] = id;
         return id;
+    }
+
+    // type = stained_glass (thin coloured-glass slab; GPU): transmittance = <spectrum> | image(…),
+    // gain, density, thickness, index, haze (diffusely transmitted fraction), reflectance (the same
+    // image) with reflection_scale, glass_mask = image(…, mapping = uv), mask_threshold, stone_material.
+    void stainedGlass(const Value& b, SurfaceOptics& o) {
+        o.type = SurfaceType::StainedGlass;
+        StainedGlass& g = o.glass;
+        std::string colourImage;
+        if (auto t = b.get("transmittance")) {
+            if (t->kind == Value::Kind::Call && t->str == "image") {
+                o.texture = texture(*t);
+                colourImage = o.texture.image ? o.texture.image->path : "";
+            } else {
+                o.reflectance = spectrum(*t, false);
+            }
+        } else {
+            o.reflectance = Spectrum::constant(1.0);
+        }
+        g.gain = getNum(b, "gain", 1);
+        g.density = getNum(b, "density", 1);
+        g.haze = getNum(b, "haze", 0);
+        if (b.has("thickness")) g.thickness = len(need(b, "thickness"));
+        if (!(g.gain > 0) || !(g.density > 0) || !(g.haze >= 0 && g.haze <= 1) || !(g.thickness > 0))
+            fail(b, "stained_glass needs gain > 0, density > 0, 0 ≤ haze ≤ 1 and thickness > 0");
+        if (b.has("haze_angle")) fail(need(b, "haze_angle"), "haze_angle is not supported yet: haze transmits diffusely");
+        if (auto ix = b.get("index")) {
+            const IndexModel m = indexModel(*ix);
+            std::vector<double> ls, ns;
+            for (double l = 360; l <= 830; l += 10) ls.push_back(l), ns.push_back(m.n(l));
+            g.index = Spectrum::tabulated(ls, ns);
+        }
+        if (auto r = b.get("reflectance")) {
+            const bool same = r->kind == Value::Kind::Call && r->str == "image" && o.texture.image &&
+                              texture(*r).image == o.texture.image;
+            if (!same) fail(*r, "a stained_glass reflectance must be its transmittance image (scaled by reflection_scale)");
+            g.reflectionScale = getNum(b, "reflection_scale", 1);
+        } else if (b.has("reflection_scale")) {
+            fail(need(b, "reflection_scale"), "reflection_scale needs reflectance = <the transmittance image>");
+        }
+        if (b.has("roughness") && getNum(b, "roughness", 0) > 0)
+            std::fprintf(stderr, "note: %s: stained_glass roughness is not supported yet; its reflection stays specular\n",
+                         o.name.c_str());
+        if (auto m = b.get("glass_mask")) {
+            if (m->kind != Value::Kind::Call || m->str != "image") fail(*m, "glass_mask must be image(\"file\", mapping = uv)");
+            auto f = m->get("file");
+            if (!f && !m->items.empty()) f = m->items[0];
+            if (!f) fail(*m, "glass_mask needs a file");
+            g.mask = image(str(*f), *m);
+            g.maskThreshold = getNum(b, "mask_threshold", 0.5);
+            const uint32_t stone = b.has("stone_material") ? materialRef(need(b, "stone_material")) : materials_.at("black");
+            const SurfaceType st = w_.optics()[stone].type;
+            if (st != SurfaceType::Diffuse && st != SurfaceType::Conductor && st != SurfaceType::Mirror &&
+                st != SurfaceType::Absorber)
+                fail(b, "stone_material must be opaque (diffuse, conductor, mirror or absorber)");
+            g.stone = int(stone);
+        }
     }
 
     // roughness = α, or a material map: roughness = (α_a, α_b[, α_c]) with a texture, one α per
@@ -557,6 +616,14 @@ private:
             if (w_.media()[w_.medium(m.medium)].opaque) {
                 m.transparent = false;
                 m.optics = materials_.at("black");
+            } else if (auto sf = b.get("surface")) {
+                // surface = null: an index-matched medium (haze or smoke in air) whose boundary only
+                // changes the region; light crosses it, shadow rays too, attenuated by the medium.
+                if (str(*sf) != "null") fail(*sf, "a medium body's surface can only be null");
+                SurfaceOptics o;
+                o.name = "null";
+                o.type = SurfaceType::Null;
+                m.optics = w_.addOptics(o);
             } else if (b.has("texture") || b.has("relief")) {
                 // Its own surface: a material map over the glass (an etched pattern), or a relief.
                 SurfaceOptics o;

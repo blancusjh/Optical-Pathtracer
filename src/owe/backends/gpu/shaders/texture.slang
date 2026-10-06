@@ -106,6 +106,18 @@ float3 imageBilinear(uint record, float u, float v) {
            imageTexel(hdr, x0, y1) * ((1 - tx) * ty) + imageTexel(hdr, x1, y1) * (tx * ty);
 }
 
+// The red channel as stored, without decoding (masks: classification data, not colour), at the
+// nearest texel; u across, v down, repeating.
+float imageNearestRaw(uint record, float u, float v) {
+    uint4 hdr = uint4(g_texels[4 * record], g_texels[4 * record + 1], g_texels[4 * record + 2], g_texels[4 * record + 3]);
+    const int W = int(hdr.y), H = int(hdr.z);
+    int x = clamp(int(floor((u - floor(u)) * float(W))), 0, W - 1);
+    int y = clamp(int(floor((v - floor(v)) * float(H))), 0, H - 1);
+    uint i = uint(y) * hdr.y + uint(x);
+    if ((hdr.w & 1u) != 0) return asfloat(g_texels[hdr.x + 3 * i]);
+    return float(g_texels[hdr.x + i] & 0xFFu) * (1.0 / 255.0);
+}
+
 // Mixing weights of the spectra a, b, c at a hit (wavelength independent).
 float3 textureWeights(uint kind, float scale, float param, float3 p, float3 n, float2 uv, bool hasUv) {
     switch (kind) {

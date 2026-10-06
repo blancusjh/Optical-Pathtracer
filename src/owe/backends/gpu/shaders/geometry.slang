@@ -794,7 +794,9 @@ bool meshUv(uint slot, float3 p, out float2 uv) {
     return true;
 }
 
-bool isNullBoundary(uint boundary) { return g_optics[g_boundaries[boundary].links.z].a.x == kSurfNull; }
+// Boundaries a shadow ray crosses (null) or is attenuated by (stained glass) rather than stopped.
+bool isPassableType(uint type) { return type == kSurfNull || type == kSurfStainedGlass; }
+bool isNullBoundary(uint boundary) { return isPassableType(g_optics[g_boundaries[boundary].links.z].a.x); }
 
 // Any hit on matter (a triangle whose boundary is not null) in (tmin, tmax); no ordering, first
 // found wins. sawNull reports crossing a null boundary's triangle.

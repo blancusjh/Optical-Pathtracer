@@ -115,6 +115,7 @@ bool sampleScatter(const Interface& it, const Vec3& d, double uc, double u1, dou
         case SurfaceType::Null:
         case SurfaceType::Absorber:
         case SurfaceType::Detector:
+        case SurfaceType::StainedGlass:  // GPU only (the CPU backend refuses such scenes)
             return false;
 
         case SurfaceType::Dielectric: {

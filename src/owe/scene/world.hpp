@@ -56,9 +56,25 @@ enum class SurfaceType {
     Conductor,   // opaque metal: complex-index Fresnel, smooth or GGX-rough
     Mirror,      // opaque specular reflector with prescribed spectral reflectance
     Absorber,    // perfectly black matter
-    Detector     // sensitive surface of a detector; absorbs what it records
+    Detector,    // sensitive surface of a detector; absorbs what it records
+    StainedGlass // thin coloured-glass slab (GPU): Fresnel at both faces, straight and diffuse transmission
 };
 const char* surfaceTypeName(SurfaceType t);
+
+// A thin slab of coloured glass (stained glass, opalescent shades). Its normal-incidence internal
+// transmittance τ₀ = clamp(gain · colour, 0, 1)^density comes from `transmittance` (the material's
+// texture or reflectance spectrum); at angle θₜ inside it is τ₀^(1/cos θₜ). Fresnel acts at both faces
+// with incoherent inter-reflections; a fraction `haze` of the transmitted power leaves diffusely
+// (opalescent glass), the rest straight through, without refraction or a change of region.
+// `reflectionScale` · colour of the remaining absorbed budget is reflected diffusely. A mask image
+// (raw red channel, nearest texel) below `maskThreshold` hands the point to the opaque `stone`.
+struct StainedGlass {
+    double gain = 1, density = 1, haze = 0, reflectionScale = 0, thickness = 0.003;
+    Spectrum index = Spectrum::constant(1.52);
+    std::shared_ptr<const ImageRGB> mask;
+    double maskThreshold = 0.5;
+    int stone = -1;  // optics index of the opaque material where the mask says stone
+};
 
 struct SurfaceOptics {
     std::string name;
@@ -74,6 +90,7 @@ struct SurfaceOptics {
     Spectrum reflectance = Spectrum::constant(1.0);       // diffuse albedo / mirror reflectance
     Texture texture;                                      // overrides reflectance (diffuse) or tint (conductor)
     ConductorSpectrum conductor;                          // Conductor only
+    StainedGlass glass;                                   // StainedGlass only (reflectance/texture: its colour)
     bool backAbsorbs = false;                             // thin opaque sheet with a black back
     int detector = -1;                                    // absorbing detector or diffuse measurement screen
     // Optional diffuse-screen sampling guide, in world coordinates. Mixed with cosine sampling
@@ -85,6 +102,7 @@ struct SurfaceOptics {
         return texture.kind == Texture::Kind::None ? reflectance.eval(lambdaNm) : texture.eval(localP, localN, lambdaNm);
     }
     bool isDelta() const {
+        if (type == SurfaceType::StainedGlass) return glass.haze <= 0 && glass.reflectionScale <= 0;
         return (type == SurfaceType::Dielectric || type == SurfaceType::Conductor) ? roughness < 1e-3
                                                                                    : type == SurfaceType::Mirror;
     }

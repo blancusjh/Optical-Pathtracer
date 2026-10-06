@@ -15,6 +15,7 @@ const char* surfaceTypeName(SurfaceType t) {
         case SurfaceType::Mirror: return "mirror";
         case SurfaceType::Absorber: return "absorber";
         case SurfaceType::Detector: return "detector";
+        case SurfaceType::StainedGlass: return "stained glass";
     }
     return "?";
 }

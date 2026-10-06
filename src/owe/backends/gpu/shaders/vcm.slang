@@ -383,6 +383,12 @@ void traceLightVcm(inout Wavelengths wl, uint group, inout Rng rng, inout uint4 
             if (depth >= 4 * maxDepth) return;
             continue;
         }
+        if (surfType == kSurfStainedGlass && passStainedGlass(hit, d, wl, beta, rng)) {
+            o = offsetOrigin(hit.p, hit.n, d, hit.scale);
+            scale = hit.scale;
+            if (depth >= 4 * maxDepth) return;
+            continue;
+        }
         if (surfType == kSurfDetector || surfType == kSurfAbsorber) return;
         // The MIS quantities arrive at this vertex (SmallVCM's update on hitting a surface).
         const float cosIn = abs(dot(hit.n, d));
@@ -586,6 +592,11 @@ float3 traceCameraVcm(float px, float py, Wavelengths wlIn, uint group, inout Rn
         uint surfType = g_optics[b.links.z].a.x;
         if (surfType == kSurfNull) {
             region = other;
+            o = offsetOrigin(hit.p, hit.n, d, hit.scale);
+            if (depth >= 4 * maxDepth) break;
+            continue;
+        }
+        if (surfType == kSurfStainedGlass && passStainedGlass(hit, d, wl, beta, rng)) {
             o = offsetOrigin(hit.p, hit.n, d, hit.scale);
             if (depth >= 4 * maxDepth) break;
             continue;

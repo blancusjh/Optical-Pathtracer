@@ -223,7 +223,7 @@ bool occluded(float3 o, float3 d, float tmax, out bool sawNull) {
                 LocalHit lh;
                 lh.owner = kGpuNone;
                 if (!intersectShape(b, lo, ld, 0, tmax, lh)) continue;
-                if (g_optics[b.links.z].a.x != kSurfNull) return true;
+                if (!isPassableType(g_optics[b.links.z].a.x)) return true;
                 sawNull = true;
             }
         } else {

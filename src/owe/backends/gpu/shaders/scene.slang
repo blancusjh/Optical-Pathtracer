@@ -27,6 +27,7 @@ static const uint kSurfConductor = 3;
 static const uint kSurfMirror = 4;
 static const uint kSurfAbsorber = 5;
 static const uint kSurfDetector = 6;
+static const uint kSurfStainedGlass = 7;
 
 struct GNode {
     float4 lo;  // w: a (bits)

@@ -140,7 +140,7 @@ std::shared_ptr<const MeshGroups> buildMeshGroups(const World& w) {
     const auto& bs = w.boundaries();
     for (uint32_t i = 0; i < bs.size(); ++i) {
         if (!dynamic_cast<const MeshShape*>(bs[i].shape.get())) continue;
-        const bool null = w.optics()[bs[i].optics].type == SurfaceType::Null;
+        const bool null = passable(w.optics()[bs[i].optics].type);
         MeshGroup* g = nullptr;
         for (MeshGroup& e : out->groups)
             if (e.null == null && sameFrame(bs[e.frame].toWorld, bs[i].toWorld)) g = &e;
@@ -348,7 +348,23 @@ public:
                 r.relief[1] = float(o.reliefDepth);
                 r.relief[2] = float(o.reliefOctaves);
             }
-            if (o.sampleAimShare > 0) {
+            if (o.type == SurfaceType::StainedGlass) {
+                // conductorN: the glass's index; conductorK: the mask image (kGpuNone: none);
+                // sampleAimCenter: gain, density, haze, reflection scale; sampleAimNormal: mask
+                // threshold, the stone's optics (bits), thickness.
+                const StainedGlass& g = o.glass;
+                r.conductorN = spectrum(g.index);
+                r.conductorK = g.mask ? imageRecord(*g.mask) : kGpuNone;
+                r.sampleAimCenter[0] = float(g.gain);
+                r.sampleAimCenter[1] = float(g.density);
+                r.sampleAimCenter[2] = float(g.haze);
+                r.sampleAimCenter[3] = float(g.reflectionScale);
+                r.sampleAimNormal[0] = float(g.maskThreshold);
+                const uint32_t stone = g.stone >= 0 ? uint32_t(g.stone) : kGpuNone;
+                std::memcpy(&r.sampleAimNormal[1], &stone, 4);
+                r.sampleAimNormal[2] = float(g.thickness);
+                r.roughness = 0;
+            } else if (o.sampleAimShare > 0) {
                 set3(r.sampleAimCenter, o.sampleAimCenter - origin, float(o.sampleAimRadius));
                 set3(r.sampleAimNormal, o.sampleAimNormal, float(o.sampleAimShare));
             }
@@ -702,7 +718,7 @@ GpuScene flattenScene(const Scene& scene, int detectorIndex, const RenderSetting
     setCentre(G, w.sceneCenter() - g.origin);
     G.targetBoundary = det.boundary() >= 0 ? uint32_t(det.boundary()) : kGpuNone;
     G.hasNull = std::any_of(w.boundaries().begin(), w.boundaries().end(),
-                            [&](const Boundary& b) { return w.optics()[b.optics].type == SurfaceType::Null; }) ? 1 : 0;
+                            [&](const Boundary& b) { return passable(w.optics()[b.optics].type); }) ? 1 : 0;
 
     // Kernels index these arrays unconditionally; keep every buffer non-empty.
     if (g.triangles.empty()) g.triangles.push_back({});

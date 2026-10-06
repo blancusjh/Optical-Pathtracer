@@ -423,6 +423,12 @@ void traceParticle(inout Wavelengths wl, inout Rng rng, inout uint4 stats) {
             if (depth >= 4 * maxDepth) break;
             continue;
         }
+        if (surfType == kSurfStainedGlass && passStainedGlass(hit, d, wl, beta, rng)) {
+            o = offsetOrigin(hit.p, hit.n, d, hit.scale);
+            scale = hit.scale;
+            if (depth >= 4 * maxDepth) break;
+            continue;
+        }
         // A diffuse measurement screen records incident flux and then scatters the reflected
         // fraction. An absorbing detector records flux and terminates the path.
         if (fromFront && hit.boundary == target) {

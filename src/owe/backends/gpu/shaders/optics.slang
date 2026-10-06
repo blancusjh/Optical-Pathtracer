@@ -122,6 +122,8 @@ struct Optics {
     float4 roughMap;
     float4 relief;
     bool isDelta() {
+        // Stained glass: gain, density, haze, reflection scale in sampleAimCenter.
+        if (type == kSurfStainedGlass) return sampleAimCenter.z <= 0 && sampleAimCenter.w <= 0;
         return (type == kSurfDielectric || type == kSurfConductor) ? roughness < 1e-3 : type == kSurfMirror;
     }
     // Whether scattering reads the refractive indices on either side (diffuse and mirror surfaces
@@ -148,6 +150,49 @@ Optics loadOptics(uint id) {
     o.roughMap = g.roughMap;
     o.relief = g.relief;
     return o;
+}
+
+// The reflectance (or a stained glass's colour) of optics o at wavelength l, from texture weights.
+float opticsAlbedo(Optics o, float3 tex, float l) {
+    if (o.texKind == kTexNone) return spectrumEval(o.reflectance, l);
+    float r = tex.x * spectrumEval(o.texA, l);
+    if (tex.y != 0) r += tex.y * spectrumEval(o.texB, l);
+    if (tex.z != 0) r += tex.z * spectrumEval(o.texC, l);
+    return r;
+}
+
+// A thin stained-glass slab met at geometric incidence cosI from a medium of index nOut: specular
+// reflectance R, total transmittance T (straight and diffuse, before the haze split) and diffuse
+// reflectance Rd. Fresnel F at each face, internal transmittance a = τ₀^(1/cos θₜ) with
+// τ₀ = clamp(gain·colour)^density, incoherent inter-reflections:
+//   T = (1−F)² a / (1 − F² a²),   R = F + (1−F)² F a² / (1 − F² a²),   Rd = (1 − R − T)·ρ.
+float3 stainedSlab(Optics o, float3 tex, float cosI, float lambda, float nOut) {
+    float eta = spectrumEval(o.conductorN, lambda) / nOut;
+    float c = clamp(cosI, 0.0, 1.0);
+    float F = fresnelDielectric(c, eta);
+    float cosT = safeSqrt(1 - (1 - c * c) / (eta * eta));
+    float colour = opticsAlbedo(o, tex, lambda);
+    float tau0 = pow(saturate(o.sampleAimCenter.x * colour), o.sampleAimCenter.y);
+    float a = cosT > 1e-6 ? pow(tau0, 1 / cosT) : 0.0;
+    float den = 1 - F * F * a * a;
+    float T = den > 1e-12 ? (1 - F) * (1 - F) * a / den : 0.0;
+    float R = den > 1e-12 ? F + (1 - F) * (1 - F) * F * a * a / den : 1.0;
+    float Rd = max(0.0, 1 - R - T) * saturate(o.sampleAimCenter.w * colour);
+    return float3(R, T, Rd);
+}
+// The probabilities of a stained glass's branches: specular reflection, straight passage, diffuse
+// transmission, diffuse reflection. The same at every wavelength (taken at 550 nm in air), half in
+// proportion to each branch's value there and half uniform over the branches the material has, so
+// a branch that carries light at any wavelength is sampled.
+static const float kAirIndex = 1.00028;
+float4 stainedProbs(Optics o, float3 tex, float cosI) {
+    float3 s = stainedSlab(o, tex, cosI, 550.0, kAirIndex);
+    float h = o.sampleAimCenter.z;
+    float4 v = float4(s.x, (1 - h) * s.y, h * s.y, s.z);
+    float4 on = float4(1, h < 1 ? 1 : 0, h > 0 ? 1 : 0, o.sampleAimCenter.w > 0 ? 1 : 0);
+    float sum = v.x + v.y + v.z + v.w;
+    float4 p = on / (on.x + on.y + on.z + on.w);
+    return sum > 0 ? 0.5 * p + 0.5 * v / sum : p;
 }
 
 struct Interface {
@@ -346,6 +391,31 @@ bool sampleScatterIn(Interface it, float3 d, float uc, float u1, float u2, uint 
             }
             return s.pdf > 0;
         }
+        case kSurfStainedGlass: {
+            // The straight passage was decided before (the kernels' passStainedGlass, a crossing
+            // like a null boundary's): the other branches share the rest, 1 − pS, of the samples.
+            float cosI = abs(dot(d, it.n));
+            float4 p = stainedProbs(o, it.tex, cosI);
+            float3 sl = stainedSlab(o, it.tex, cosI, it.lambda, kAirIndex);
+            float x = uc * (1 - p.y);
+            if (x < p.x) {
+                s.wi = frame.toWorld(float3(-wo.x, -wo.y, wo.z));
+                s.weight = sl.x / p.x;
+                s.delta = true;
+                return s.weight > 0;
+            }
+            bool transmit = x < p.x + p.z;
+            float pb = transmit ? p.z : p.w;
+            float value = transmit ? o.sampleAimCenter.z * sl.y : sl.z;
+            if (!(pb > 0) || !(value > 0)) return false;
+            float3 w = sampleCosineHemisphere(u1, u2);
+            if (fromFront == transmit) w.z = -w.z;
+            s.wi = frame.toWorld(w);
+            s.pdf = pb * abs(w.z) * kInvPi;
+            s.weight = value / pb;
+            s.transmitted = transmit;
+            return true;
+        }
         case kSurfMirror: {
             if (!fromFront && o.backAbsorbs != 0) return false;
             float r = spectrumEval(o.reflectance, it.lambda);
@@ -422,6 +492,14 @@ float evalScatter(Interface it, float3 d, float3 wiWorld, uint mode, out float p
             GGX mf = GGX(o.roughness);
             return evalRoughDielectric(mf, wo, wi, it.nBack / it.nFront, mode, pdf);
         }
+        case kSurfStainedGlass: {
+            float cosI = abs(dot(d, it.n));
+            float4 p = stainedProbs(o, it.tex, cosI);
+            float3 sl = stainedSlab(o, it.tex, cosI, it.lambda, kAirIndex);
+            bool same = sameHemisphere(wo, wi);
+            pdf = (same ? p.w : p.z) * abs(wi.z) * kInvPi;
+            return (same ? sl.z : o.sampleAimCenter.z * sl.y) * kInvPi;
+        }
         default: return 0;
     }
 }
@@ -442,6 +520,11 @@ float secondaryScatterWeight(Interface it, float3 d, ScatterSample s, uint mode)
     float cosI = abs(dot(d, it.ns));
     switch (o.type) {
         case kSurfDielectric: return s.weight;  // (a dispersive interface ends the secondaries)
+        case kSurfStainedGlass: {  // the specular reflection (straight passage is the kernels')
+            float c = abs(dot(d, it.n));
+            float4 p = stainedProbs(o, it.tex, c);
+            return p.x > 0 ? stainedSlab(o, it.tex, c, it.lambda, kAirIndex).x / p.x : 0.0;
+        }
         case kSurfMirror: return spectrumEval(o.reflectance, it.lambda) * adjointCorrection(it, -d, s.wi, mode);
         case kSurfConductor: {
             bool fromFront = dot(d, it.n) < 0;
