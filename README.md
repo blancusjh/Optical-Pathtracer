@@ -17,27 +17,26 @@ every pixel.
 
 | | |
 |---|---|
-| ![The Lens](docs/gallery/the_lens.png) | ![Through the telescope](docs/gallery/telescope_eyepiece.png) |
-| **The Lens** — a loose magnifier over a page: magnified view, dispersion-tinted caustic in its shadow. | **The Telescope** — the eye's pupil placed at the telescope's computed exit pupil: the statue on the ridge, magnified 16× and inverted. |
-| ![Prism in sunlight](docs/gallery/prism_in_sunlight.png) | ![Glass of water](docs/gallery/glass_of_water.png) |
-| **Prism in Sunlight** — low sun through a slit onto an N-SF11 prism: the white beam, the spectrum and the beams its faces reflect, seen where they graze the floor (VCM). | **The Glass of Water** — a rod broken at the water line; the card behind compressed by the water cylinder. |
+| ![The observatory](docs/gallery/observatory_room.png) | ![The desk](docs/gallery/observatory_desk.png) |
+| **The Observatory** — the current brick-and-stone observatory at night: walnut panelling, a woven carpet, candles and two refractors aimed through the dome slit. | **The Astronomer's Desk** — tooled books, an orbital folio, an armillary and a compass under glass, in the observatory's detailed interior. |
+| ![Glass in sunlight](docs/gallery/glass_in_sunlight.png) | ![Tea glass](docs/gallery/tea_glass.png) |
+| **Glass in Sunlight** — a rounded tumbler of water on concrete: the sun forms a cusped caustic in its shadow and another inside the glass (VCM). | **Tea Glass** — low sunlight through black tea on textured paper: amber caustics from spectral absorption, with dispersion along their edge (VCM). |
+| ![The Lens](docs/gallery/the_lens.png) | ![Prism in sunlight](docs/gallery/prism_in_sunlight.png) |
+| **The Lens** — a loose magnifier over a page: magnified view, dispersion-tinted caustic in its shadow. | **Prism in Sunlight** — low sun through a slit onto an N-SF11 prism: the white beam, the spectrum and the beams its faces reflect, seen where they graze the floor (VCM). |
 | ![The study](docs/gallery/study_room.png) | |
 | **The Study** — one sunlit room to walk through: a glass of water and a prism in the sun, a magnifier, a mirror, a lamp, and a telescope aimed out of the window (VCM). | |
 
-| | |
-|---|---|
-| ![The observatory](docs/gallery/observatory_room.png) | ![The desk](docs/gallery/observatory_desk.png) |
-| **The Observatory** — a domed observatory at night, lit by candles; two refractors aim through the slit. | The astronomer's desk: books, an armillary, a compass under glass. |
-| ![Saturn](docs/gallery/observatory_saturn.png) | ![Jupiter](docs/gallery/observatory_jupiter.png) |
-| **Saturn at 126×** through the 150 mm f/15 achromat: the planet and its rings are bodies at 1.28·10¹² m; the Cassini division and the globe's shadow on the rings follow from geometry, the violet halo from the achromat's secondary spectrum. | **Jupiter** through the second refractor. |
-| ![The Moon](docs/gallery/observatory_moon.png) | ![The slit](docs/gallery/observatory_slit.png) |
-| **The Moon at 16×** through the small telescope at the window; its phase follows from where the sun is below the horizon. | The dome slit with the night sky, seen by the naked eye. |
-
 More in [`docs/gallery`](docs/gallery) (each PNG has a JSON record for reproduction).
 
-The scene models have since been refined with jointed paving, branching foliage, slope-grounded
-landscapes, and a brick-and-stone observatory with a detailed study interior. The gallery above
-records the earlier model set. See [`models/README.md`](models/README.md) for the current assets,
+Regenerate the observatory and glass images with the GPU backend:
+
+```sh
+bash tools/render_gallery.sh observatory_room observatory_desk glass_in_sunlight tea_glass
+```
+
+The observatory and glass images above are rendered from the current scenes. Scene models include
+jointed paving, branching foliage, slope-grounded landscapes, and the observatory's detailed
+interior. See [`models/README.md`](models/README.md) for the assets,
 regeneration commands and the live Blender review (`bash tools/review_models.sh`). The models are
 ordinary meshes: they change no transport, and every backend renders them.
 

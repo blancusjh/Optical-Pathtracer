@@ -1,17 +1,18 @@
 {
   "engine": "optical-world-engine 0.1.0",
-  "backend": "cpu-reference (IEEE-754 double)",
-  "scene": {"path": "scenes/the_observatory.owe", "fnv1a64": "f5adc5204ea18548", "edits": []},
-  "detector": {"name": "Room", "description": "ideal observer 'Room' 800x500, fovY=80 deg, pupil diameter=5 mm, focus=3.500000 m", "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ"},
+  "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+  "scene": {"path": "scenes/the_observatory.owe", "fnv1a64": "f7d59fa4025a8e5a", "edits": []},
+  "detector": {"name": "Room", "description": "ideal observer 'Room' 800x500, fovY=80 deg, pupil diameter=5 mm, focus=3.500000 m, pixel filter gaussian(0.4)", "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ", "pixel_response": "square * gaussian(sigma 0.400000 px)"},
+  "observer_pose": {"position_m": [3.7000000000000002, -0.29999999999999999, 47.998975950800535], "look_at_m": [-1.6000000000000001, 0.90000000000000002, 48.088975950800538], "up": [0, 0, 1], "fov_deg": 80, "pupil_radius_m": 0.0025000000000000001, "focus_distance_m": 3.5, "width": 800, "height": 500},
   "integrator": "path",
   "sampling": {"wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm", "fresnel": "stochastic branch selection", "nee": true, "mis": "power heuristic", "russian_roulette_depth": 6, "fresnel_floor": 0},
   "seed": 1,
-  "samples_per_pixel": 512,
-  "passes": 1,
+  "samples_per_pixel": 4096,
+  "passes": 8,
   "max_depth": 64,
-  "display": {"exposure_ev": 0, "auto_exposure": true, "white_balance_kelvin": 2000},
-  "render_seconds": 1475.78,
-  "statistics": {"paths": 204800000, "segments": 1328352849, "region_inconsistencies": 0, "leaks": 0},
-  "mean_Y": 0.00355763,
-  "world": {"media": [{"name": "air", "index": "ciddor-air", "n_d": 1.00028}, {"name": "opaque", "index": "constant(1)", "n_d": 1}, {"name": "N-BK7", "index": "sellmeier(B1=1.03961 C1=0.0060007, B2=0.231792 C2=0.0200179, B3=1.01047 C3=103.561) rel. air", "n_d": 1.51722}, {"name": "F2", "index": "sellmeier(B1=1.34533 C1=0.00997744, B2=0.209073 C2=0.0470451, B3=0.937357 C3=111.887) rel. air", "n_d": 1.62049}], "regions": 74, "boundaries": 3649, "bodies": 88, "assemblies": 6}
+  "display": {"exposure_ev": 0, "auto_exposure": true, "auto_gain_ev": 14.9748, "white_balance_kelvin": 0, "tone": "agx"},
+  "render_seconds": 208.144,
+  "statistics": {"paths": 1638400000, "segments": 8314787272, "region_inconsistencies": 14102, "leaks": 645, "first_inconsistency": {"boundary": "BookB.Upper.surface", "ray_region": "ambient[air]"}},
+  "mean_Y": 1.86197e-05,
+  "world": {"media": [{"name": "air", "index": "ciddor-air", "n_d": 1.00028}, {"name": "opaque", "index": "constant(1)", "n_d": 1}, {"name": "N-BK7", "index": "sellmeier(B1=1.03961 C1=0.0060007, B2=0.231792 C2=0.0200179, B3=1.01047 C3=103.561) rel. air", "n_d": 1.51722}, {"name": "F2", "index": "sellmeier(B1=1.34533 C1=0.00997744, B2=0.209073 C2=0.0470451, B3=0.937357 C3=111.887) rel. air", "n_d": 1.62049}], "regions": 72, "boundaries": 3727, "bodies": 166, "assemblies": 6}
 }
