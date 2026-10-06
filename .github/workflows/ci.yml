@@ -9,6 +9,16 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      # Scene models are in Git LFS; cache them so pushes do not spend the LFS bandwidth quota.
+      - name: List LFS objects
+        run: git lfs ls-files --long | cut -d' ' -f1 | sort > .lfs-ids
+      - uses: actions/cache@v4
+        with:
+          path: .git/lfs
+          key: lfs-${{ hashFiles('.lfs-ids') }}
+          restore-keys: lfs-
+      - name: Fetch LFS objects
+        run: git lfs pull
       - name: Install toolchain
         run: sudo apt-get update && sudo apt-get install -y ninja-build zlib1g-dev
       - name: Configure
@@ -22,6 +32,9 @@ jobs:
       - name: Smoke-render every scene
         run: |
           for s in scenes/*.owe; do
+            # Scenes built on downloaded museum scans (assets/, not in the repository) or on
+            # GPU-only materials (stained glass) are not rendered by this CPU job.
+            if grep -q '\.\./assets/\|stained_glass' "$s"; then echo "skip $s"; continue; fi
             build/owe render "$s" --spp 1 --resolution 64x48 --out "build/$(basename "$s" .owe)"
           done
       - name: Smoke-test the studio (aperture and focus edits)
@@ -37,6 +50,16 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      # Scene models are in Git LFS; cache them so pushes do not spend the LFS bandwidth quota.
+      - name: List LFS objects
+        run: git lfs ls-files --long | cut -d' ' -f1 | sort > .lfs-ids
+      - uses: actions/cache@v4
+        with:
+          path: .git/lfs
+          key: lfs-${{ hashFiles('.lfs-ids') }}
+          restore-keys: lfs-
+      - name: Fetch LFS objects
+        run: git lfs pull
       - name: Install toolchain and a software Vulkan driver
         run: sudo apt-get update && sudo apt-get install -y ninja-build zlib1g-dev libvulkan1 mesa-vulkan-drivers
       - name: Configure (fetches Vulkan-Headers, volk and slangc)
@@ -50,7 +73,7 @@ jobs:
       - name: GPU against CPU on a scene
         run: |
           if build/owe backends gpu; then
-            build/owe compare scenes/glass_of_water.owe:Eye --backend gpu --spp 16 --runs 6 --resolution 32x24
+            build/owe compare scenes/glass/glass_of_water.owe:Eye --backend gpu --spp 16 --runs 6 --resolution 32x24
           fi
 
   # Apple silicon: the GPU backend through MoltenVK.
@@ -58,6 +81,16 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
+      # Scene models are in Git LFS; cache them so pushes do not spend the LFS bandwidth quota.
+      - name: List LFS objects
+        run: git lfs ls-files --long | cut -d' ' -f1 | sort > .lfs-ids
+      - uses: actions/cache@v4
+        with:
+          path: .git/lfs
+          key: lfs-${{ hashFiles('.lfs-ids') }}
+          restore-keys: lfs-
+      - name: Fetch LFS objects
+        run: git lfs pull
       - name: Install toolchain and MoltenVK
         run: brew install ninja molten-vk vulkan-loader sdl3
       - name: Configure (fetches Vulkan-Headers, volk and slangc)
