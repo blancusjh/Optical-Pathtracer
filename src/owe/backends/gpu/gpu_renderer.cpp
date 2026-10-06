@@ -63,6 +63,7 @@ struct PushConstants {  // mirrors shaders/scene.slang
     uint32_t extra[4];
 };
 constexpr uint32_t kFlagPartition = 1;
+constexpr uint32_t kFlagMediumOnly = 2;  // scene.slang: the path tracer's share of a VCM render with scattering media
 
 struct PixelState {  // mirrors shaders/scene.slang
     uint32_t rng[4];
@@ -137,11 +138,11 @@ public:
         merging_ = I == "vcm";
         if (vcm_ && !dynamic_cast<const IdealObserver*>(det_))
             throw std::runtime_error("the " + I + " integrator needs an observer (eye); use path, light or sppm for sensors and cameras");
+        // With scattering media, VCM and BDPT take the paths without a medium scattering vertex
+        // (media as extinction) and the path tracer, in a pass of its own, all the others.
         if (vcm_)
             for (const Medium& m : scene.world.media())
-                if (m.scatters())
-                    throw std::runtime_error("the " + I + " integrator does not handle scattering media ('" + m.name +
-                                             "'); use path or sppm");
+                if (m.scatters()) mediumPartition_ = true;
         sppm_ = I == "sppm";
         camera_ = I == "path" || I == "hybrid";
         particles_ = I == "light" || I == "hybrid";
@@ -150,6 +151,7 @@ public:
         H_ = det_->height;
         film_ = Film(W_, H_);
         lightFilm_ = Film(W_, H_);
+        mediumFilm_ = Film(W_, H_);
         gs_ = flattenScene(scene, detectorIndex, settings_);
         ctx_ = acquireContext(settings_.device);
         rayQuery_ = ctx_->rayQuery() && hardwareTraversalWanted();
@@ -171,7 +173,7 @@ public:
         auto plain = [&](std::unique_ptr<Kernel>& slot, const unsigned char* code, size_t bytes, const char* name) {
             jobs.push_back(KernelJob{&slot, code, bytes, name, false});
         };
-        if (camera_)
+        if (camera_ || mediumPartition_)
             tracing(pathKernel_, owe_kernel_path_rq, owe_kernel_path_rq_size, "path (ray queries)", owe_kernel_path,
                     owe_kernel_path_size, "path");
         if (particles_)
@@ -272,6 +274,7 @@ public:
         }
         film_ = Film(W_, H_);
         lightFilm_ = Film(W_, H_);
+        mediumFilm_ = Film(W_, H_);
         particleCount_ = 0;
         passes_ = 0;
         totalSpp_ = 0;
@@ -290,6 +293,7 @@ public:
         if (particles_) passParticles(uint32_t(spp));
         if (sppm_) passSppm(uint32_t(spp));
         if (vcm_) passVcm(uint32_t(spp));
+        if (mediumPartition_) passPath(uint32_t(spp), mediumFilm_, kFlagMediumOnly);
         passes_++;
         totalSpp_ += spp;
         seconds_ += std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
@@ -303,8 +307,10 @@ public:
         const double lightNorm = particleCount_ > 0 ? 1.0 / particleCount_ : 0;
         for (size_t i = 0; i < size_t(W_) * H_; ++i) {
             double norm = film_.samples[i] > 0 ? 1.0 / film_.samples[i] : 0;
+            const double mediumNorm = mediumFilm_.samples.empty() || mediumFilm_.samples[i] == 0 ? 0 : 1.0 / mediumFilm_.samples[i];
             for (int c = 0; c < 3; ++c)
-                img.xyz[3 * i + c] = film_.xyz[3 * i + c] * norm + lightFilm_.xyz[3 * i + c] * lightNorm;
+                img.xyz[3 * i + c] = film_.xyz[3 * i + c] * norm + lightFilm_.xyz[3 * i + c] * lightNorm +
+                                     (mediumPartition_ ? mediumFilm_.xyz[3 * i + c] * mediumNorm : 0.0);
         }
         if (sppm_ && iterations_ > 0) {
             // L = L_direct / iterations (above) + τ / (N_emitted · π r²).
@@ -739,13 +745,16 @@ private:
         return pc;
     }
 
-    // Camera paths: one thread per pixel, `spp` samples in slices of chunk_.
-    void passPath(uint32_t spp) {
+    // Camera paths: one thread per pixel, `spp` samples in slices of chunk_, into `film` (the medium
+    // partition's own, with kFlagMediumOnly).
+    void passPath(uint32_t spp) { passPath(spp, film_, 0); }
+    void passPath(uint32_t spp, Film& film, uint32_t extraFlags) {
         ctx_->submit([&](VkCommandBuffer cmd) {
             vkCmdFillBuffer(cmd, buffers_[kCounters].buffer, 0, VK_WHOLE_SIZE, 0);
             transferToCompute(cmd);
         });
         PushConstants pc = push(spp);
+        pc.flags |= extraFlags;
         const uint32_t gx = (uint32_t(W_) + kPathGroup - 1) / kPathGroup, gy = (uint32_t(H_) + kPathGroup - 1) / kPathGroup;
         // Samples per dispatch adapt to keep each submission near 50 ms; dispatches are batched
         // into submissions of ~100 ms.
@@ -777,10 +786,10 @@ private:
         const PixelState* px = static_cast<const PixelState*>(pixelReadback_.mapped);
         TransportStats st;
         for (int i = 0; i < W_ * H_; ++i) {
-            film_.xyz[3 * size_t(i)] += px[i].acc[0];
-            film_.xyz[3 * size_t(i) + 1] += px[i].acc[1];
-            film_.xyz[3 * size_t(i) + 2] += px[i].acc[2];
-            film_.samples[size_t(i)] += spp;
+            film.xyz[3 * size_t(i)] += px[i].acc[0];
+            film.xyz[3 * size_t(i) + 1] += px[i].acc[1];
+            film.xyz[3 * size_t(i) + 2] += px[i].acc[2];
+            film.samples[size_t(i)] += spp;
             st.paths += px[i].stats[0];
             st.segments += px[i].stats[1];
             st.inconsistencies += px[i].stats[2];
@@ -868,6 +877,7 @@ private:
     // BDPT/VCM: whether it merges, the light vertex cache's capacity and its budget per light path
     // (grown when a pass fills it).
     bool vcm_ = false, merging_ = false;
+    bool mediumPartition_ = false;  // VCM/BDPT with scattering media: a path-traced pass for medium-scattered paths
     uint32_t cacheCapacity_ = 0;
     double vertexBudget_ = 6;
     bool vcmSizePending_ = false;
@@ -879,6 +889,7 @@ private:
     float r0PerMetre_ = 0, r0Floor_ = 0;
     std::vector<float> sppmState_;
     Film film_;       // camera-path estimates (per-pixel sample counts)
+    Film mediumFilm_; // the path tracer's medium-scattered paths in a VCM/BDPT render
     Film lightFilm_;  // particle splats (normalised by the particle count)
     double particleCount_ = 0;
     int passes_ = 0;
