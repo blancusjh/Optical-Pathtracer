@@ -1125,9 +1125,19 @@ private:
             tube = len(*tr);
         }
         std::string rim = getStr(b, "rim", "black");
+        if (tube > 0 && hasMirrors(p))
+            fail(b, "tube = true is not supported for mirror prescriptions yet: use tube = false and a housing");
+        auto mirrorMaterial = [&](const std::string& n) -> uint32_t {
+            auto it = materials_.find(n);
+            if (it == materials_.end()) fail(b, "the lens file's mirror material '" + n + "' is not defined in the scene");
+            const SurfaceType t = w_.optics()[it->second].type;
+            if (t != SurfaceType::Mirror && t != SurfaceType::Conductor) fail(b, "mirror material '" + n + "' must be a mirror or conductor");
+            return it->second;
+        };
         BuiltInstrument bi = buildPrescription(w_, p, name, assembly, xf, tube, index,
                                                rim == "ground" ? LensSpec::Rim::Ground
-                                               : rim == "polished" ? LensSpec::Rim::Polished : LensSpec::Rim::Black);
+                                               : rim == "polished" ? LensSpec::Rim::Polished : LensSpec::Rim::Black,
+                                               mirrorMaterial);
         if (tube > 0) {
             double z0 = -0.01 * bi.lastVertexZ - 1e-3, z1 = bi.lastVertexZ + 1e-3;
             // Blackened inside; an optional finish (brass, paint) on a slightly larger outer shell.
