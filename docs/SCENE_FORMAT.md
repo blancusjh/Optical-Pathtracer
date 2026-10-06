@@ -257,3 +257,14 @@ S3      -810.8     95.0    air     12.5
 Each row is a surface; `medium` is the medium *after* it. Consecutive non-air rows form one
 cemented body; `stop` on an air–air row creates an iris. The table is a view: loading it
 produces regions, boundaries, rims and mounts.
+
+Mirrors (coaxial): `reflect material=Name substrate=length [hole=diameter]
+[support=spider(count=N,width=w,angle=deg,outer_radius=r)]` makes a row a mirror of that scene
+material (a mirror or conductor) on an opaque backing, with an optional central bore and opaque
+struts behind it. R and t are signed in a fixed chart whose +z is the incoming light's direction;
+reflection reverses the travel, so t is negative on a leg travelling −z (a Gregorian:
+`P -900 -600 air 54 k=-1 reflect material=Speculum substrate=4 hole=26 stop`, then a concave
+ellipsoidal secondary with a positive t back through the bore). With mirrors, `afocal = true`
+adjusts the one gap marked `solve`; the paraxial data (focal length, magnification, pupils,
+`exit_pupil`) follow the unfolded system, each mirror a lens of power −2 d n / R for travel d.
+Refraction on a −z leg, folded mirrors (`out_axis`) and `tube = true` are not supported yet.

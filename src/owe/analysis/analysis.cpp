@@ -11,16 +11,18 @@ namespace {
 struct LensWorld {
     Scene scene;
     BuiltInstrument bi;
-    size_t surfaces = 0;
+    size_t surfaces = 0, mirrors = 0;
 };
 
 void makeLensWorld(const Prescription& p, LensWorld& lw) {
     lw.bi = buildPrescription(lw.scene.world, p, "lens", -1, Transform{}, 0.0, catalogIndex(), LensSpec::Rim::Black);
     lw.scene.world.build();
     lw.surfaces = 0;
+    lw.mirrors = 0;
     for (size_t i = 0; i < p.surfaces.size(); ++i) {
         std::string before = i == 0 ? p.ambient : p.surfaces[i - 1].medium;
-        if (!(before == p.ambient && p.surfaces[i].medium == p.ambient)) lw.surfaces++;
+        if (p.surfaces[i].reflect) lw.mirrors++;
+        else if (!(before == p.ambient && p.surfaces[i].medium == p.ambient)) lw.surfaces++;
     }
 }
 
@@ -35,12 +37,13 @@ TracedRay traceThrough(const LensWorld& lw, const Vec3& origin, const Vec3& dir,
     PathRecord rec = tr.walk(Ray{origin, dir}, lw.scene.world.ambientRegion(), lambda, WalkMode::PrimaryTransmission, rng, 64);
     TracedRay r;
     if (rec.v.size() < 2 || rec.v.back().event != EventKind::Escape) return r;
-    size_t refr = 0;
+    size_t refr = 0, refl = 0;
     for (auto& v : rec.v) {
         if (v.event == EventKind::Refract) refr++;
+        else if (v.event == EventKind::Reflect && lw.mirrors > 0) refl++;
         else if (v.event != EventKind::Emit && v.event != EventKind::Escape) return r;
     }
-    if (refr != lw.surfaces) return r;
+    if (refr != lw.surfaces || refl != lw.mirrors) return r;
     const PathVertex& last = rec.v[rec.v.size() - 2];
     r.p = last.p;
     r.d = last.dOut;

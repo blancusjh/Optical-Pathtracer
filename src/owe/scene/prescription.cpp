@@ -67,10 +67,37 @@ Prescription parsePrescription(const std::string& text, const std::string& origi
             for (size_t i = 5; i < tok.size(); ++i) {
                 const std::string& x = tok[i];
                 if (x == "stop") { s.stop = true; continue; }
+                if (x == "reflect") { s.reflect = true; continue; }
+                if (x == "solve") { s.solve = true; continue; }
                 auto eq = x.find('=');
                 if (eq == std::string::npos) throw std::runtime_error(ctx + ": unexpected token '" + x + "'");
                 std::string k = x.substr(0, eq);
+                if (k == "material") { s.material = x.substr(eq + 1); continue; }
+                if (k == "out_axis") throw std::runtime_error(ctx + ": out_axis (folded, non-coaxial mirrors) is not supported yet");
+                if (k == "support") {
+                    // spider(count=N,width=w,angle=deg,outer_radius=r)
+                    std::string v = x.substr(eq + 1);
+                    if (v.rfind("spider(", 0) != 0 || v.back() != ')') throw std::runtime_error(ctx + ": support must be spider(...)");
+                    std::istringstream args(v.substr(7, v.size() - 8));
+                    std::string kv;
+                    while (std::getline(args, kv, ',')) {
+                        auto e = kv.find('=');
+                        if (e == std::string::npos) throw std::runtime_error(ctx + ": spider takes name=value pairs");
+                        std::string n = kv.substr(0, e);
+                        double val = parseNumber(kv.substr(e + 1), ctx);
+                        if (n == "count") s.spiderCount = int(val);
+                        else if (n == "width") s.spiderWidth = val * unit;
+                        else if (n == "angle") s.spiderAngle = val * Pi / 180;
+                        else if (n == "outer_radius") s.spiderOuter = val * unit;
+                        else throw std::runtime_error(ctx + ": unknown spider parameter '" + n + "'");
+                    }
+                    if (s.spiderCount < 1 || !(s.spiderWidth > 0) || !(s.spiderOuter > 0))
+                        throw std::runtime_error(ctx + ": spider needs count >= 1, width > 0 and outer_radius > 0");
+                    continue;
+                }
                 double v = parseNumber(x.substr(eq + 1), ctx);
+                if (k == "substrate") { s.substrate = v * unit; continue; }
+                if (k == "hole") { s.hole = v * unit; continue; }
                 if (k == "k") s.k = v;
                 else if (k.size() > 1 && k[0] == 'A') {
                     int order = std::stoi(k.substr(1));
@@ -81,11 +108,36 @@ Prescription parsePrescription(const std::string& text, const std::string& origi
                 } else throw std::runtime_error(ctx + ": unknown key '" + k + "'");
             }
             if (std::isinf(s.t)) throw std::runtime_error(ctx + ": thickness must be finite");
+            if (s.reflect && (s.material.empty() || !(s.substrate > 0)))
+                throw std::runtime_error(ctx + ": a reflecting row needs material= and substrate= > 0");
+            if (s.reflect && s.hole >= 2 * s.sd) throw std::runtime_error(ctx + ": the hole must be smaller than the mirror");
             p.surfaces.push_back(s);
         }
     }
     if (p.surfaces.empty()) throw std::runtime_error(origin + ": prescription has no surfaces");
+    if (hasMirrors(p)) {
+        // Coaxial mirrors: each leg's t carries the sign of its travel; glass only on +z legs.
+        double dir = 1;
+        for (size_t i = 0; i < p.surfaces.size(); ++i) {
+            const PrescriptionSurface& sf = p.surfaces[i];
+            if (sf.reflect) {
+                if (sf.medium != p.ambient) throw std::runtime_error(origin + ": " + sf.label + ": a mirror reflects into the ambient medium");
+                dir = -dir;
+            } else if (dir < 0) {
+                throw std::runtime_error(origin + ": " + sf.label + ": refraction on a leg travelling -z is not supported yet");
+            }
+            if (i + 1 < p.surfaces.size() && sf.t * dir <= 0)
+                throw std::runtime_error(origin + ": " + sf.label + ": t must have the sign of the travel (" +
+                                         (dir > 0 ? "+" : "-") + "z) after this row");
+        }
+    }
     return p;
+}
+
+bool hasMirrors(const Prescription& p) {
+    for (const auto& s : p.surfaces)
+        if (s.reflect) return true;
+    return false;
 }
 
 Prescription loadPrescription(const std::string& path) {
@@ -131,27 +183,37 @@ struct M2 {
     }
 };
 // Element list: refraction at surface i then transfer t_i (except after the last).
+// Mirror systems are unfolded: transfers are |t| along the travel, and a mirror met travelling
+// d = ±1 acts as a thin lens of power −2 d n / R (fixed-chart R): phi is each surface's power.
 struct ParaxialSystem {
-    std::vector<double> c, nBefore, nAfter, t;
+    std::vector<double> c, nBefore, nAfter, t, phi, z;  // z: vertex positions in the fixed chart
+    double dirLast = 1;                                 // travel after the last surface
 };
 ParaxialSystem makeSystem(const Prescription& p, double l, const IndexFn& index) {
     ParaxialSystem s;
     double nPrev = index(p.ambient, l);
+    double dir = 1, z = 0;
     for (const auto& sf : p.surfaces) {
-        s.c.push_back(std::isinf(sf.R) ? 0.0 : 1.0 / sf.R);
+        const double c = std::isinf(sf.R) ? 0.0 : 1.0 / sf.R;
+        s.c.push_back(c);
         s.nBefore.push_back(nPrev);
         double n = index(sf.medium, l);
         s.nAfter.push_back(n);
-        s.t.push_back(sf.t);
+        s.phi.push_back(sf.reflect ? -2 * dir * n * c : (n - nPrev) * c);
+        if (sf.reflect) dir = -dir;
+        s.t.push_back(std::abs(sf.t));
+        s.z.push_back(z);
+        z += sf.t;
         nPrev = n;
     }
+    s.dirLast = dir;
     return s;
 }
 // Matrix from just before surface i0 to just after surface i1 (inclusive), transfers between them.
 M2 systemMatrix(const ParaxialSystem& s, size_t i0, size_t i1) {
     M2 m;
     for (size_t i = i0; i <= i1; ++i) {
-        M2 R{1, 0, -(s.nAfter[i] - s.nBefore[i]) * s.c[i], 1};
+        M2 R{1, 0, -s.phi[i], 1};
         m = R * m;
         if (i < i1) {
             M2 T{1, s.t[i] / s.nAfter[i], 0, 1};
@@ -170,7 +232,7 @@ Paraxial paraxialAnalysis(const Prescription& p, double l, const IndexFn& index)
     r.A = m.a; r.B = m.b; r.C = m.c; r.D = m.d;
     double n0 = s.nBefore[0], nk = s.nAfter[N - 1];
     std::vector<double> z(N, 0.0);
-    for (size_t i = 1; i < N; ++i) z[i] = z[i - 1] + s.t[i - 1];
+    for (size_t i = 1; i < N; ++i) z[i] = z[i - 1] + s.t[i - 1];  // unfolded
     r.length = z[N - 1];
     double scale = 1e-12 * (1 + std::abs(m.a) + std::abs(m.d));
     r.afocal = std::abs(m.c) * std::max(1.0, r.length) < scale * 1e3 || std::abs(m.c) < 1e-9;
@@ -201,7 +263,7 @@ Paraxial paraxialAnalysis(const Prescription& p, double l, const IndexFn& index)
         for (size_t i = 0; i < N; ++i) {
             double ratio = std::abs(y) / std::max(p.surfaces[i].sd, 1e-12);
             if (ratio > best) { best = ratio; stop = int(i); }
-            nu -= (s.nAfter[i] - s.nBefore[i]) * s.c[i] * y;
+            nu -= s.phi[i] * y;
             if (i + 1 < N) y += s.t[i] * nu / s.nAfter[i];
         }
     }
@@ -214,17 +276,18 @@ Paraxial paraxialAnalysis(const Prescription& p, double l, const IndexFn& index)
         for (size_t i = size_t(stop) + 1; i < N; ++i) {
             y += s.t[i - 1] * nu / s.nAfter[i - 1];
             yM += s.t[i - 1] * nuM / s.nAfter[i - 1];
-            double phi = (s.nAfter[i] - s.nBefore[i]) * s.c[i];
+            double phi = s.phi[i];
             nu -= phi * y;
             nuM -= phi * yM;
         }
-        // Chief ray (through the stop centre) crosses the axis at the exit pupil.
+        // Chief ray (through the stop centre) crosses the axis at the exit pupil; the fixed chart
+        // places it along the last leg's travel.
         double u = nu / nk;
-        double zLast = z[N - 1];
-        if (size_t(stop) == N - 1) { r.exitPupilZ = z[N - 1]; r.exitPupilRadius = stopR; }
+        double zLast = s.z[N - 1];
+        if (size_t(stop) == N - 1) { r.exitPupilZ = zLast; r.exitPupilRadius = stopR; }
         else if (u != 0) {
             double dz = -y / u;
-            r.exitPupilZ = zLast + dz;
+            r.exitPupilZ = zLast + s.dirLast * dz;
             // Height of the stop-edge ray at the pupil plane gives the pupil radius.
             r.exitPupilRadius = std::abs(yM + dz * nuM / nk);
         }
@@ -237,7 +300,7 @@ Paraxial paraxialAnalysis(const Prescription& p, double l, const IndexFn& index)
         for (int i = stop - 1; i >= 0; --i) {
             y -= s.t[size_t(i)] * nu / s.nAfter[size_t(i)];
             yM -= s.t[size_t(i)] * nuM / s.nAfter[size_t(i)];
-            double phi = (s.nAfter[size_t(i)] - s.nBefore[size_t(i)]) * s.c[size_t(i)];
+            double phi = s.phi[size_t(i)];
             nu += phi * y;
             nuM += phi * yM;
         }
@@ -256,27 +319,35 @@ Paraxial paraxialAnalysis(const Prescription& p, double l, const IndexFn& index)
 }
 
 double solveAfocal(Prescription& p, double l, const IndexFn& index) {
-    // Largest air gap between two powered groups.
+    // The gap marked `solve` (mirror systems: exactly one), else the largest air gap.
     size_t gap = p.surfaces.size();
     double best = -1;
+    int marked = 0;
     for (size_t i = 0; i + 1 < p.surfaces.size(); ++i)
-        if (p.surfaces[i].medium == p.ambient && p.surfaces[i].t > best) { best = p.surfaces[i].t; gap = i; }
+        if (p.surfaces[i].solve) { gap = i; ++marked; }
+    if (marked > 1) throw std::runtime_error("solveAfocal: more than one gap is marked solve");
+    if (marked == 0 && hasMirrors(p)) throw std::runtime_error("solveAfocal: mark the gap to adjust with solve");
+    if (marked == 0)
+        for (size_t i = 0; i + 1 < p.surfaces.size(); ++i)
+            if (p.surfaces[i].medium == p.ambient && p.surfaces[i].t > best) { best = p.surfaces[i].t; gap = i; }
     if (gap == p.surfaces.size()) throw std::runtime_error("solveAfocal: no air gap to adjust");
-    // C is affine in the gap.
+    // C is affine in the gap's length; its sign (the leg's travel) is kept.
     double old = p.surfaces[gap].t;
+    const double sign = old < 0 ? -1 : 1;
     p.surfaces[gap].t = 0;
     double c0 = paraxialAnalysis(p, l, index).C;
-    p.surfaces[gap].t = 1;
+    p.surfaces[gap].t = sign;
     double c1 = paraxialAnalysis(p, l, index).C;
     if (c1 == c0) { p.surfaces[gap].t = old; throw std::runtime_error("solveAfocal: gap does not affect power"); }
     double g = -c0 / (c1 - c0);
     if (!(g > 0)) { p.surfaces[gap].t = old; throw std::runtime_error("solveAfocal: no positive afocal separation"); }
-    p.surfaces[gap].t = g;
+    p.surfaces[gap].t = sign * g;
     return g;
 }
 
 BuiltInstrument buildPrescription(World& w, const Prescription& p, const std::string& name, int parent,
-                                  const Transform& xf, double tubeRadius, const IndexFn& index, LensSpec::Rim rim) {
+                                  const Transform& xf, double tubeRadius, const IndexFn& index, LensSpec::Rim rim,
+                                  const MaterialFn& materialOf) {
     BuiltInstrument bi;
     bi.assembly = w.addAssembly(name, parent, xf);
     bi.paraxial = paraxialAnalysis(p, p.wavelength, index);
@@ -286,9 +357,46 @@ BuiltInstrument buildPrescription(World& w, const Prescription& p, const std::st
     bi.lastVertexZ = bi.vertexZ[N - 1];
     size_t i = 0;
     int group = 0;
+    double dir = 1;  // travel along the fixed chart's z before surface i
     while (i < N) {
         const auto& s = p.surfaces[i];
         std::string before = i == 0 ? p.ambient : p.surfaces[i - 1].medium;
+        if (s.reflect) {
+            // The mirror's own frame has its reflecting face toward +z: met travelling +z, it is
+            // turned over (and its sag with it).
+            SurfaceSpec f;
+            f.R = dir > 0 ? -s.R : s.R;
+            f.k = s.k;
+            f.A = s.A;
+            if (dir > 0)
+                for (double& a : f.A) a = -a;
+            f.semiDiameter = s.sd;
+            uint32_t optics;
+            if (materialOf) optics = materialOf(s.material);
+            else {
+                SurfaceOptics o;
+                o.type = SurfaceType::Mirror;
+                optics = w.addOptics(o);
+            }
+            Transform at = Transform::translate({0, 0, bi.vertexZ[i]});
+            if (dir > 0) at = at * Transform::rotate({1, 0, 0}, Pi);
+            bi.bodies.push_back(buildMirror(w, name + "." + s.label, f, s.substrate, optics, bi.assembly, at, s.hole / 2));
+            bi.maxRadius = std::max(bi.maxRadius, s.sd);
+            // Struts behind the mirror (on the side away from its face), one substrate deep.
+            for (int k = 0; k < s.spiderCount; ++k) {
+                const double a = s.spiderAngle + 2 * Pi * k / s.spiderCount;
+                const double zBack = std::min(0.0, SagSurface(f.curvature(), f.k, f.A, f.semiDiameter).sag(f.semiDiameter)) - s.substrate;
+                Transform strut = at * Transform::rotate({0, 0, 1}, a) *
+                                  Transform::translate({0.5 * s.spiderOuter, 0, zBack - 0.5 * s.substrate - 1e-6});
+                BodyMaterial m;
+                m.optics = w.absorberOptics();
+                bi.bodies.push_back(buildBox(w, name + "." + s.label + ".strut" + std::to_string(k),
+                                             {s.spiderOuter, s.spiderWidth, s.substrate}, m, bi.assembly, strut));
+            }
+            dir = -dir;
+            ++i;
+            continue;
+        }
         if (before == p.ambient && s.medium == p.ambient) {
             if (s.stop && s.sd > 0) {
                 double outer = tubeRadius > s.sd ? tubeRadius : s.sd * 3;
