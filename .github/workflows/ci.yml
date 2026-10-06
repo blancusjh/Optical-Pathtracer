@@ -68,8 +68,13 @@ jobs:
         run: cmake --build build
       - name: Devices
         run: build/owe backends || true
-      - name: Tests (the conformance suite runs on lavapipe when it is usable, else gpu is skipped)
-        run: ctest --test-dir build --output-on-failure
+      # A software Vulkan device takes hours over the whole suite (the scene tests): it runs the
+      # GPU's own tests and a white furnace, then the statistical comparison below.
+      - name: Tests (GPU conformance subset on lavapipe)
+        timeout-minutes: 45
+        run: |
+          ctest --test-dir build -R layering --output-on-failure
+          build/owe_tests gpu_ registry_ backends_white_furnace_closed_diffuse_sphere
       - name: GPU against CPU on a scene
         run: |
           if build/owe backends gpu; then
@@ -99,5 +104,8 @@ jobs:
         run: cmake --build build
       - name: Devices
         run: build/owe backends || true
-      - name: Tests (the conformance suite runs on gpu when the runner exposes a Metal device)
-        run: ctest --test-dir build --output-on-failure
+      - name: Tests (GPU conformance subset on MoltenVK, and the viewer)
+        timeout-minutes: 45
+        run: |
+          ctest --test-dir build -R "layering|viewer" --output-on-failure
+          build/owe_tests gpu_ registry_ backends_white_furnace_closed_diffuse_sphere
