@@ -252,6 +252,7 @@ build/owe emit   scenes/prism_in_sunlight.owe --from -0.3,0,0.098 --dir 0.9816,0
 build/owe lens   lenses/kepler_16x.lens --afocal --fields 0,0.3,0.6
 build/owe glass  N-SF11
 build/owe model  assets/sketchfab/<slug>/scene.gltf                 # a model's parts, sizes and textures
+build/owe render scenes/the_study.owe --detector Cam --integrator path --set Cam.f_number=8   # the 85 mm camera
 build/owe info   scenes/the_telescope.owe                           # the world's ontology
 build/owe bench --backend gpu                                        # throughput on the canonical suite
 build/owe backends                                                   # what this build can run on
@@ -263,7 +264,19 @@ A `camera` is a physical camera: lens bodies from a prescription, a housing, mou
 aperture stop and a sensor surface. `f_number` resizes the physical stop, and `focus` moves
 the sensor to the real plane of best focus for that object distance. Both are ordinary scene
 values, so they can be changed from the command line with `--set` (any `Block.key=value`) or
-live in the studio.
+live in the studio:
+
+```
+$ build/owe studio scenes/the_study.owe --detector Cam --integrator path --resolution 300x200
+camera 'Cam' ...
+EFL 86.3 mm, f/2.80, focus 1.340 m; depth of field 1.322 m to 1.358 m (CoC 29 µm)
+> render 16 4                       # 4 passes of 16 spp; studio.png/.pfm/.json after each
+> set Cam.f_number=11               # the stop closes; the scene is rebuilt and refined afresh
+> set Cam.focus=1.8 m
+> render 32 4
+> probe 150 100                     # why is this pixel this colour?
+> detector Room                     # any observer, camera or sensor
+```
 
 Commands: `set`, `unset`, `edits`, `detector`, `size WxH`, `backend NAME`, `render [SPP] [PASSES]`,
 `reset`, `exposure EV|auto`, `info`, `probe X Y [N]`, `quit`. `backend gpu` moves the same session

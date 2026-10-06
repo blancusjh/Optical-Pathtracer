@@ -110,6 +110,13 @@ observer Magnifier { position = (-0.3, 1.02, 1.08)  look_at = (-0.3, 1.17, 0.75)
 observer Eyepiece  { position = exit_pupil("Telescope")  look_at = (8, 60, 8)  up = (0, 0, 1)  fov = 40deg  pupil = 3mm  focus = 0.23
                      resolution = (480, 480) }
 
+# A physical camera: an 85 mm Petzval-type portrait lens with a real stop and sensor, focused on
+# the glass of water, the prism beyond it out of focus. VCM needs an ideal eye, so render it with path (or sppm):
+#   owe render scenes/the_study.owe --detector Cam --integrator path --set Cam.f_number=8
+camera Cam { lens = "../lenses/portrait_85mm.lens"  sensor = (36mm, 24mm)  resolution = (600, 400)
+             position = (-0.9, 0.35, 1.0)  look_at = (0.28, 1.3, 0.8)  up = (0, 0, 1)
+             focus = 1.34  f_number = 2.8 }
+
 # A quarter of a light subpath per pixel and iteration: the room's walls keep paths long, and fewer
 # paths keep merging affordable (MIS weighs the strategies for whatever number there are).
 render { detector = Room  spp = 256  integrator = vcm  photons = 0.25 }

@@ -187,7 +187,7 @@ void usage() {
         "  owe lens <file.lens> [--fields 0,5,10] [--afocal] [--svg F] [--field DEG] [--rays N]\n"
         "      Paraxial and real-ray analysis of a lens prescription built as physical bodies.\n"
         "\n"
-        "  owe studio <scene.owe> [--detector NAME] [--resolution WxH] [--out PREFIX] [--backend NAME]\n"
+        "  owe studio <scene.owe> [--detector NAME] [--resolution WxH] [--out PREFIX] [--backend NAME] [--integrator NAME]\n"
         "                         [--set Block.key=value ...]\n"
         "      Interactive session: tune aperture, focus, placement, backend or any scene value and\n"
         "      refine the image pass by pass (reads commands from stdin; type help).\n"
@@ -590,7 +590,8 @@ int cmdBench(const Args& a) {
     if (cases.empty())
         cases = {{"scenes/the_lens.owe", "Eye"},          {"scenes/prism_in_sunlight.owe", "Eye"},
                  {"scenes/glass/glass_of_water.owe", "Eye"}, {"scenes/the_study.owe", "Magnifier"},
-                 {"scenes/the_telescope.owe", "Eyepiece"}, {"scenes/the_observatory.owe", "SaturnEyepiece"},
+                 {"scenes/the_telescope.owe", "Eyepiece"}, {"scenes/the_study.owe", "Cam"},
+                 {"scenes/the_observatory.owe", "SaturnEyepiece"},
                  {"scenes/camera_obscura.owe", "Inside"}};
     const int spp = std::stoi(a.get("--spp", "16"));
     const std::string res = a.get("--resolution", "256x192");
@@ -791,6 +792,7 @@ int cmdStudio(const Args& a) {
         }
         RenderSettings rs = scene->settingsFor(di);
         if (!backendName.empty()) rs.backend = backendName;
+        if (a.has("--integrator")) rs.integrator = a.get("--integrator");
         if (a.has("--device")) rs.device = std::stoi(a.get("--device"));
         std::string note = adaptToBackend(rs);
         if (!note.empty()) std::printf("note: %s\n", note.c_str());
