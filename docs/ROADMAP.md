@@ -16,7 +16,7 @@ first, and the CPU reference is not ported.
   - Covers opalescent `haze`, diffuse reflection, and glass masks that hand masked points to an
     opaque stone material.
   - Shadow rays cross it, so sunlight through a window is direct lighting.
-  - Specifications: `docs/scenes/chapel.txt`, `docs/scenes/peacock_lamp.txt`.
+  - Specification: `docs/scenes/peacock_lamp.txt`.
 - **Mirrors in lens prescriptions:** coaxial `reflect` rows with a bore and spider struts.
   Paraxial data come from the unfolded system, and `afocal` adjusts the gap marked `solve`.
   Specification: `docs/scenes/gregorian.txt`.
@@ -26,7 +26,7 @@ first, and the CPU reference is not ported.
 - **`surface = null`** for index-matched media: haze or smoke in air whose boundary only changes
   the region.
 - **Scenes:**
-  - the chapel, the Kunstkammer, the Gregorian, the Peacock lamp and the invisible window, all
+  - the Kunstkammer, the Gregorian, the Peacock lamp and the invisible window, all
     built on museum scans;
   - an 85 mm physical camera in the study.
 
@@ -58,13 +58,12 @@ first, and the CPU reference is not ported.
     - OBJ `vt` coordinates;
     - efficiency-aware MIS and an adaptive photon radius;
     - VCM with more than one wavelength group;
-    - region inconsistencies where scans and blocks touch (about 1% of paths in the chapel).
+    - region inconsistencies where scans and blocks touch.
 
 ## Scenes: what remains
 
 - **Final renders and the gallery:** re-render `docs/gallery` and add the new scenes to the README
-  with their credits. The CC BY scans are the vault, the Valencia rose, the Southwark window, the
-  globe and the tellurium.
+  with their credits. The CC BY scans include the globe and the tellurium.
 - **The invisible window:**
   - the optional colour version: three panels behind red, green and blue filter glasses;
   - the provenance and licence of the Sacred Heart photograph.
