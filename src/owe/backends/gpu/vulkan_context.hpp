@@ -68,6 +68,8 @@ public:
     void destroy(Buffer& b);
     // Copies host data into a device buffer (through a temporary staging buffer).
     void upload(const Buffer& dst, const void* data, size_t bytes);
+    // The same at a byte offset into dst, through a staging buffer of at most 64 MB reused per slice.
+    void uploadAt(const Buffer& dst, VkDeviceSize offset, const void* data, size_t bytes);
 
     // Records into the context's command buffer and submits it, waiting for completion.
     template <class F>

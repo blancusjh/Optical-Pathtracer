@@ -400,22 +400,18 @@ public:
     void finishImages() {
         const size_t header = 4 * images_.size();
         g_.texels.assign(std::max<size_t>(header, 4), 0);
+        g_.images = images_;
+        size_t at = g_.texels.size();
         for (size_t i = 0; i < images_.size(); ++i) {
             const ImageRGB& img = *images_[i];
-            g_.texels[4 * i] = uint32_t(g_.texels.size());
+            if (at > 0xFFFFFFFFull) throw std::runtime_error("images exceed the GPU's 16 GB texel addressing");
+            g_.texels[4 * i] = uint32_t(at);
             g_.texels[4 * i + 1] = uint32_t(img.width);
             g_.texels[4 * i + 2] = uint32_t(img.height);
-            g_.texels[4 * i + 3] = img.srgb8.empty() ? 1u : 0u;
-            if (!img.srgb8.empty()) {
-                g_.texels.insert(g_.texels.end(), img.srgb8.begin(), img.srgb8.end());
-            } else {
-                for (float f : img.rgb) {
-                    uint32_t u;
-                    std::memcpy(&u, &f, 4);
-                    g_.texels.push_back(u);
-                }
-            }
+            g_.texels[4 * i + 3] = img.hdr ? 1u : 0u;
+            at += img.hdr ? img.rgb.size() : img.srgb8.size();
         }
+        g_.texelWords = at;
     }
 
     void push4(double a, double b = 0, double c = 0, double d = 0) {
@@ -616,7 +612,7 @@ size_t GpuScene::bytes() const {
            shapeData.size() * 4 + triangles.size() * sizeof(GTriangle) + regions.size() * 4 +
            media.size() * sizeof(GMedium) + spectra.size() * sizeof(GSpectrum) + scalars.size() * 4 +
            optics.size() * sizeof(GOptics) + emissions.size() * sizeof(GEmission) + lights.size() * sizeof(GLight) +
-           texels.size() * 4 + normals.size() * 4;
+           texelWords * 4 + normals.size() * 4;
 }
 
 namespace {

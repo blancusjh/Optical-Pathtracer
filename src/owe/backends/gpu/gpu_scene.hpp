@@ -177,8 +177,12 @@ struct GpuScene {
     std::vector<float> scalars;        // spectrum tables, index coefficients, mesh CDFs
     // Images (textures, environment maps): a header of (offset, width, height, flags) per image,
     // then the texels: 8-bit sRGB images one word each (R | G<<8 | B<<16, decoded in the kernel),
-    // HDR images three float words (flags bit 0).
+    // HDR images three float words (flags bit 0). `texels` holds the header only; the renderer
+    // uploads each image's words from `images` at the offsets the header gives (no host copy of
+    // them all at once), `texelWords` in all.
     std::vector<uint32_t> texels;
+    std::vector<const ImageRGB*> images;
+    size_t texelWords = 0;
     // Corner words of smooth and textured meshes: per triangle, three shading normals in the mesh's
     // frame, each a unit vector in octahedral coordinates (2 × 16-bit snorm, x low), then three
     // texture coordinates (u, v as float bits), as GTriangle's flags say.

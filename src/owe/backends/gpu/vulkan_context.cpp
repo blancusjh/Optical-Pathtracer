@@ -506,6 +506,21 @@ void Context::upload(const Buffer& dst, const void* data, size_t bytes) {
     destroy(staging);
 }
 
+void Context::uploadAt(const Buffer& dst, VkDeviceSize offset, const void* data, size_t bytes) {
+    if (bytes == 0) return;
+    const size_t slice = std::min<size_t>(bytes, size_t(64) << 20);
+    Buffer staging = createHostBuffer(slice, false);
+    for (size_t done = 0; done < bytes; done += slice) {
+        const size_t n = std::min(slice, bytes - done);
+        std::memcpy(staging.mapped, static_cast<const char*>(data) + done, n);
+        submit([&](VkCommandBuffer cmd) {
+            VkBufferCopy region{0, offset + done, n};
+            vkCmdCopyBuffer(cmd, staging.buffer, dst.buffer, 1, &region);
+        });
+    }
+    destroy(staging);
+}
+
 void Context::begin() {
     vkCheck(vkResetCommandBuffer(cmd_, 0), "vkResetCommandBuffer");
     VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};

@@ -1,9 +1,11 @@
 #include "owe/loader/scene_loader.hpp"
 
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <limits>
 #include <set>
 #include <sstream>
 #include <stdexcept>
@@ -326,15 +328,19 @@ private:
     }
 
     // Images are shared by every texture and environment that names them.
+    // An image is read in two steps: its size now, from the file's header, and its texels once the
+    // whole scene is known (fitTextureBudget), so that each is decoded at the size it will keep.
     std::shared_ptr<const ImageRGB> image(const std::string& file, const Value& where) const {
         const std::string path = std::filesystem::path(file).is_absolute() ? file : (std::filesystem::path(base_) / file).string();
         auto it = images_.find(path);
         if (it != images_.end()) return it->second;
-        try {
-            return images_[path] = loadImage(path);
-        } catch (const std::exception& e) {
-            fail(where, e.what());
-        }
+        auto img = std::make_shared<ImageRGB>();
+        img->path = path;
+        if (!imageSize(path, img->width, img->height) || img->width <= 0 || img->height <= 0)
+            fail(where, "cannot read image " + path);
+        img->hdr = imageIsHdr(path);
+        images_[path] = img;
+        return img;
     }
 
     // ------------------------------------------------------------ registries
@@ -1343,6 +1349,63 @@ private:
     double unit_ = 1.0;
     std::map<std::string, uint32_t> materials_;
     mutable std::map<std::string, std::shared_ptr<const ImageRGB>> images_;
+
+public:
+    // The scene's images over the texture budget (OWE_TEXTURE_BUDGET_MB, 2048 by default; 0: none)
+    // are halved, largest first, until they fit. The files stay at their full resolution; a
+    // render at a few megapixels cannot show an 8192² photograph's finest texels anyway.
+    void fitTextureBudget() {
+        double mb = 2048;
+        if (const char* e = std::getenv("OWE_TEXTURE_BUDGET_MB"); e && *e) mb = std::atof(e);
+        const size_t budget = mb > 0 ? size_t(mb * 1024 * 1024) : std::numeric_limits<size_t>::max();
+        // Plan the halvings on the sizes alone: the largest image first, until all fit.
+        struct Plan {
+            std::shared_ptr<const ImageRGB> img;
+            int w, h, halvings = 0;
+            size_t bytes() const { return size_t(w) * size_t(h) * (img->hdr ? 12 : 4); }
+        };
+        std::vector<Plan> plans;
+        size_t total = 0;
+        for (auto& [path, img] : images_) {
+            plans.push_back({img, img->width, img->height});
+            total += plans.back().bytes();
+        }
+        const size_t before = total;
+        while (total > budget) {
+            Plan* largest = nullptr;
+            for (Plan& p : plans)
+                if (!largest || p.bytes() > largest->bytes()) largest = &p;
+            if (!largest || (largest->w < 2 && largest->h < 2)) break;
+            total -= largest->bytes();
+            largest->w = std::max(1, largest->w / 2);
+            largest->h = std::max(1, largest->h / 2);
+            largest->halvings++;
+            total += largest->bytes();
+        }
+        // Decode one image at a time and halve it at once: memory holds one image at full size at
+        // most. The images are the loader's own, shared read-only once loaded.
+        for (Plan& p : plans) {
+            ImageRGB& img = const_cast<ImageRGB&>(*p.img);
+            try {
+                std::shared_ptr<const ImageRGB> full = loadImage(img.path);
+                ImageRGB tmp = *full;
+                full.reset();
+                for (int k = 0; k < p.halvings; ++k) halveImage(tmp);
+                img = std::move(tmp);
+            } catch (const std::exception& e) {
+                throw std::runtime_error(img.path + ": " + e.what());
+            }
+        }
+        if (before > budget) {
+            std::fprintf(stderr, "textures: %.0f MB over the %.0f MB budget, now %.0f MB (OWE_TEXTURE_BUDGET_MB):\n",
+                         before / 1048576.0, mb, total / 1048576.0);
+            for (const Plan& p : plans)
+                if (p.halvings > 0)
+                    std::fprintf(stderr, "  %s → %d×%d\n", std::filesystem::path(p.img->path).filename().string().c_str(), p.w, p.h);
+        }
+    }
+
+private:
     std::map<std::string, std::pair<TerrainSpec, Transform>> terrains_;
     std::map<std::string, Instrument> instruments_;
     std::set<std::string> names_;
@@ -1357,6 +1420,7 @@ Scene loadSceneFromString(const std::string& text, const std::string& baseDir, c
     ValuePtr doc = parseSceneText(text, origin);
     Loader ld(scene, baseDir);
     ld.run(*doc);
+    ld.fitTextureBudget();
     scene.build();
     if (scene.detectors.empty()) throw std::runtime_error(origin + ": scene defines no observer, camera or sensor");
     return scene;
@@ -1413,6 +1477,7 @@ Scene loadSceneWithEdits(const std::string& p, const std::vector<std::string>& e
     for (auto& e : edits) applySceneEdit(*doc, e);
     Loader ld(scene, dir);
     ld.run(*doc);
+    ld.fitTextureBudget();
     scene.build();
     if (scene.detectors.empty()) throw std::runtime_error(p + ": scene defines no observer, camera or sensor");
     return scene;

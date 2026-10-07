@@ -236,8 +236,15 @@ public:
         vec(kEmissions, gs_.emissions);
         vec(kLights, gs_.lights);
         vec(kTop, gs_.topRecord);
-        vec(kTexels, gs_.texels);
-        std::vector<uint32_t>().swap(gs_.texels);  // uploaded; nothing reads the host copy again
+        // Images: the header, then each image's words in place (never all of them copied at once).
+        buffers_[kTexels] = ctx_->createDeviceBuffer(std::max<size_t>(gs_.texelWords, 4) * 4);
+        ctx_->uploadAt(buffers_[kTexels], 0, gs_.texels.data(), gs_.texels.size() * 4);
+        for (size_t i = 0; i < gs_.images.size(); ++i) {
+            const ImageRGB& img = *gs_.images[i];
+            const void* words = img.hdr ? static_cast<const void*>(img.rgb.data()) : static_cast<const void*>(img.srgb8.data());
+            const size_t bytes = img.hdr ? img.rgb.size() * 4 : img.srgb8.size() * 4;
+            ctx_->uploadAt(buffers_[kTexels], VkDeviceSize(gs_.texels[4 * i]) * 4, words, bytes);
+        }
         vec(kNormals, gs_.normals);
         // Integrator buffers a kernel does not use are bound as placeholders (every kernel has the
         // same layout).

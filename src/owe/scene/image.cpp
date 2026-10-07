@@ -1,5 +1,6 @@
 #include "owe/scene/image.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <stdexcept>
@@ -34,6 +35,45 @@ Vec3 ImageRGB::bilinear(double u, double v) const {
     return texel(x0, y0) * ((1 - tx) * (1 - ty)) + texel(x1, y0) * (tx * (1 - ty)) + texel(x0, y1) * ((1 - tx) * ty) +
            texel(x1, y1) * (tx * ty);
 }
+
+size_t imageBytes(const ImageRGB& img) { return img.hdr ? img.rgb.size() * sizeof(float) : img.srgb8.size() * 4; }
+
+void halveImage(ImageRGB& img) {
+    if (img.width < 2 && img.height < 2) return;
+    const int W = std::max(1, img.width / 2), H = std::max(1, img.height / 2);
+    auto src = [&](int x, int y) { return size_t(std::min(y, img.height - 1)) * img.width + size_t(std::min(x, img.width - 1)); };
+    if (img.hdr) {
+        std::vector<float> out(size_t(W) * H * 3);
+        for (int y = 0; y < H; ++y)
+            for (int x = 0; x < W; ++x)
+                for (int c = 0; c < 3; ++c)
+                    out[3 * (size_t(y) * W + x) + c] =
+                        0.25f * (img.rgb[3 * src(2 * x, 2 * y) + c] + img.rgb[3 * src(2 * x + 1, 2 * y) + c] +
+                                 img.rgb[3 * src(2 * x, 2 * y + 1) + c] + img.rgb[3 * src(2 * x + 1, 2 * y + 1) + c]);
+        img.rgb.swap(out);
+    } else {
+        // The encoded bytes are averaged as stored: colour maps lose a little contrast, data maps
+        // (normals, roughness) stay as they are meant to be read.
+        std::vector<uint32_t> out(size_t(W) * H);
+        for (int y = 0; y < H; ++y)
+            for (int x = 0; x < W; ++x) {
+                const uint32_t q[4] = {img.srgb8[src(2 * x, 2 * y)], img.srgb8[src(2 * x + 1, 2 * y)],
+                                       img.srgb8[src(2 * x, 2 * y + 1)], img.srgb8[src(2 * x + 1, 2 * y + 1)]};
+                uint32_t v = 0;
+                for (int c = 0; c < 3; ++c) {
+                    uint32_t s = 0;
+                    for (uint32_t t : q) s += (t >> (8 * c)) & 0xFFu;
+                    v |= ((s + 2) / 4) << (8 * c);
+                }
+                out[size_t(y) * W + x] = v;
+            }
+        img.srgb8.swap(out);
+    }
+    img.width = W;
+    img.height = H;
+}
+
+bool imageIsHdr(const std::string& path) { return stbi_is_hdr(path.c_str()) != 0; }
 
 bool imageSize(const std::string& path, int& width, int& height) {
     int n = 0;

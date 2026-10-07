@@ -87,6 +87,10 @@ triplanar | planar`, `scale`):
   default (glTF's metallic-roughness maps keep roughness in green), or `r`, `b`.
 - `owe model` lists a glTF part's normal and metallic-roughness images.
 
+Images are kept within a texture budget, 2048 MB by default (`OWE_TEXTURE_BUDGET_MB`, 0 for none):
+when a scene's images exceed it, the largest are halved (a box filter, which keeps the mean) until
+they fit, and the log lists them. The files keep their full resolution.
+
 `relief = noise(scale =, depth =, octaves = 3)` gives any surface a relief finer than its geometry:
 a height `depth · fbm(p / scale)` in the body's frame whose slopes (about depth / scale) tilt the
 shading normal, so a low sun rakes a paper's grain or a concrete floor's pores. Transport treats it

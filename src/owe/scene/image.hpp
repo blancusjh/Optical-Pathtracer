@@ -35,8 +35,15 @@ struct ImageRGB {
 
 // Loads PNG, JPEG, BMP, TGA or HDR; throws with the reason on failure.
 std::shared_ptr<const ImageRGB> loadImage(const std::string& path);
+// Halves an image in each direction (a 2 × 2 box filter, which keeps its mean; an odd last row or
+// column is averaged with its neighbour).
+void halveImage(ImageRGB& img);
+// The bytes an image takes (4 per 8-bit texel, 12 per HDR texel).
+size_t imageBytes(const ImageRGB& img);
 // An image file's size from its header, without decoding it; false if it cannot be read.
 bool imageSize(const std::string& path, int& width, int& height);
+// Whether an image file holds HDR (Radiance) data, from its header.
+bool imageIsHdr(const std::string& path);
 double srgbToLinear(double c);
 
 }  // namespace owe
