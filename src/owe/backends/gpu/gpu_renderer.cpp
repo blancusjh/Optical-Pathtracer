@@ -237,6 +237,7 @@ public:
         vec(kLights, gs_.lights);
         vec(kTop, gs_.topRecord);
         vec(kTexels, gs_.texels);
+        std::vector<uint32_t>().swap(gs_.texels);  // uploaded; nothing reads the host copy again
         vec(kNormals, gs_.normals);
         // Integrator buffers a kernel does not use are bound as placeholders (every kernel has the
         // same layout).

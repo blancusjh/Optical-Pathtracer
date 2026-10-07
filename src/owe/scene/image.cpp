@@ -1,5 +1,6 @@
 #include "owe/scene/image.hpp"
 
+#include <array>
 #include <cmath>
 #include <stdexcept>
 
@@ -13,6 +14,15 @@
 namespace owe {
 
 double srgbToLinear(double c) { return c <= 0.04045 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4); }
+
+const float* ImageRGB::srgbLut() {
+    static const std::array<float, 256> lut = [] {
+        std::array<float, 256> t{};
+        for (int i = 0; i < 256; ++i) t[size_t(i)] = float(srgbToLinear(i / 255.0));
+        return t;
+    }();
+    return lut.data();
+}
 
 Vec3 ImageRGB::bilinear(double u, double v) const {
     const double x = (u - std::floor(u)) * width - 0.5, y = (v - std::floor(v)) * height - 0.5;
@@ -43,15 +53,10 @@ std::shared_ptr<const ImageRGB> loadImage(const std::string& path) {
     } else {
         unsigned char* data = stbi_load(path.c_str(), &img->width, &img->height, &n, 3);
         if (!data) throw std::runtime_error("cannot read image " + path + ": " + stbi_failure_reason());
-        float lut[256];
-        for (int i = 0; i < 256; ++i) lut[i] = float(srgbToLinear(i / 255.0));
         const size_t count = size_t(img->width) * img->height;
-        img->rgb.resize(count * 3);
         img->srgb8.resize(count);
-        for (size_t i = 0; i < count; ++i) {
-            for (int c = 0; c < 3; ++c) img->rgb[3 * i + c] = lut[data[3 * i + c]];
+        for (size_t i = 0; i < count; ++i)
             img->srgb8[i] = uint32_t(data[3 * i]) | uint32_t(data[3 * i + 1]) << 8 | uint32_t(data[3 * i + 2]) << 16;
-        }
         stbi_image_free(data);
     }
     if (img->width <= 0 || img->height <= 0) throw std::runtime_error("empty image " + path);
