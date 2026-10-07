@@ -339,6 +339,7 @@ struct MeshData {
     // image (a path, empty if none). Empty for OBJ files and builders.
     std::vector<uint32_t> part;
     std::vector<std::string> partNames, partImages;
+    std::vector<std::string> partNormalImages, partRoughnessImages;  // glTF normal, metallic-roughness (empty: none)
     void addTriangle(const Vec3& a, const Vec3& b, const Vec3& c);
     void addQuad(const Vec3& a, const Vec3& b, const Vec3& c, const Vec3& d);  // CCW
     void append(const MeshData& o, const Transform& xf);

@@ -69,6 +69,8 @@ struct GOptics {
     float4 sampleAimNormal; // normal, mixture share
     float4 roughMap;        // material map: roughness of texture components a, b, c; w: 1 if mapped
     float4 relief;          // relief: scale, depth, octaves (depth 0: none)
+    uint4 maps;             // normal map, roughness map (image record | mapping bits; kGpuNone: none), scales (bits)
+    float4 mapParams;       // normal strength, 1 for DirectX normals, roughness channel, unused
 };
 
 struct GEmission {

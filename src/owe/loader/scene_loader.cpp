@@ -393,6 +393,7 @@ private:
         }
         if (auto bk = b.get("back")) o.backAbsorbs = str(*bk) == "black";
         relief(b, o);
+        imageMaps(b, o);
         uint32_t id = w_.addOptics(o);
         if (!name.empty()) materials_[name] = id;
         return id;
@@ -471,6 +472,29 @@ private:
         for (const ValuePtr& v : r->items) o.roughnessMap.push_back(num(*v));
         o.roughnessMap.resize(3, o.roughnessMap.back());
         o.roughness = o.roughnessMap[0];  // what backends without material maps use
+    }
+
+    // normal_map = image("file", mapping = uv | triplanar | planar, scale =), normal_strength,
+    // normal_convention = opengl | directx; roughness_map = image(…), roughness_channel = r | g | b.
+    void imageMaps(const Value& b, SurfaceOptics& o) {
+        auto map = [&](const char* key, ImageMap& out) {
+            auto v = b.get(key);
+            if (!v) return;
+            if (v->kind != Value::Kind::Call || v->str != "image") fail(*v, std::string(key) + " must be image(\"file\", mapping = …)");
+            const Texture t = texture(*v);
+            out.image = t.image;
+            out.mapping = t.mapping;
+            out.scale = t.scale;
+        };
+        map("normal_map", o.normalImage);
+        map("roughness_map", o.roughnessImage);
+        o.normalStrength = getNum(b, "normal_strength", 1);
+        const std::string conv = getStr(b, "normal_convention", "opengl");
+        if (conv != "opengl" && conv != "directx") fail(b, "normal_convention must be opengl or directx");
+        o.normalDirectX = conv == "directx";
+        const std::string ch = getStr(b, "roughness_channel", "g");
+        if (ch != "r" && ch != "g" && ch != "b") fail(b, "roughness_channel must be r, g or b");
+        o.roughnessChannel = ch == "r" ? 0 : ch == "g" ? 1 : 2;
     }
 
     // relief = noise(scale = 0.5mm, depth = 0.03mm, octaves = 3): a surface relief finer than
@@ -624,12 +648,14 @@ private:
                 o.name = "null";
                 o.type = SurfaceType::Null;
                 m.optics = w_.addOptics(o);
-            } else if (b.has("texture") || b.has("relief")) {
-                // Its own surface: a material map over the glass (an etched pattern), or a relief.
+            } else if (b.has("texture") || b.has("relief") || b.has("normal_map") || b.has("roughness_map")) {
+                // Its own surface: a material map over the glass (an etched pattern), a relief, or
+                // image maps.
                 SurfaceOptics o;
                 o.type = SurfaceType::Dielectric;
                 roughness(b, o);
                 relief(b, o);
+                imageMaps(b, o);
                 m.optics = w_.addOptics(o);
             } else {
                 m.optics = w_.dielectricOptics(getNum(b, "roughness", 0));

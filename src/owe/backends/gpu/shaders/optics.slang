@@ -121,6 +121,8 @@ struct Optics {
     float4 sampleAimCenter, sampleAimNormal;
     float4 roughMap;
     float4 relief;
+    uint4 maps;
+    float4 mapParams;
     bool isDelta() {
         // Stained glass: gain, density, haze, reflection scale in sampleAimCenter.
         if (type == kSurfStainedGlass) return sampleAimCenter.z <= 0 && sampleAimCenter.w <= 0;
@@ -149,6 +151,8 @@ Optics loadOptics(uint id) {
     o.sampleAimNormal = g.sampleAimNormal;
     o.roughMap = g.roughMap;
     o.relief = g.relief;
+    o.maps = g.maps;
+    o.mapParams = g.mapParams;
     return o;
 }
 

@@ -137,6 +137,48 @@ bool passStainedGlass(SurfaceHit hit, float3 d, Wavelengths wl, inout float4 bet
     return true;
 }
 
+// The shading normal tilted by a tangent-space normal map (OpenGL convention: green toward the top
+// of the picture, i.e. decreasing v; DirectX flips it). The tangent frame: the triangle's dP/du and
+// −dP/dv for uv mapping; the projection's axes for planar and triplanar mapping, each axis's tilt
+// added to the shading normal with the triplanar weights.
+float3 tangentToWorld(float3 t, float3 T, float3 U, float3 N) {
+    T = T - N * dot(N, T);
+    float lt = length(T);
+    if (!(lt > 1e-12)) return N;
+    T /= lt;
+    U = U - N * dot(N, U) - T * dot(T, U);
+    float lu = length(U);
+    if (!(lu > 1e-12)) return N;
+    U /= lu;
+    return normalize(T * t.x + U * t.y + N * t.z);
+}
+float3 normalMapTexel(Optics o, uint rec, float u, float v) {
+    float3 t = imageBilinearRaw(rec, u, v) * 2 - 1;
+    if (o.mapParams.y != 0) t.y = -t.y;
+    t.xy *= o.mapParams.x;
+    return t;
+}
+float3 normalMapped(GBoundary b, SurfaceHit hit, Optics o) {
+    const uint word = o.maps.x, rec = word & 0x3FFFFFFFu;
+    const float scale = asfloat(o.maps.z);
+    const float3 N = hit.ns;
+    float3 dpdu, dpdv;
+    if ((word & 0x40000000u) != 0 && hit.hasUv && hit.tri != kGpuNone && meshUvFrame(hit.tri, dpdu, dpdv))
+        return tangentToWorld(normalMapTexel(o, rec, hit.uv.x, hit.uv.y), xfVector(b.toWorld, dpdu),
+                              -xfVector(b.toWorld, dpdv), N);
+    const float3 X = xfVector(b.toWorld, float3(1, 0, 0)), Y = xfVector(b.toWorld, float3(0, 1, 0)),
+                 Z = xfVector(b.toWorld, float3(0, 0, 1));
+    const float3 p = hit.pLocal;
+    if ((word & 0x80000000u) == 0) return tangentToWorld(normalMapTexel(o, rec, 0.5 + p.x / scale, 0.5 - p.y / scale), X, Y, N);
+    float3 a = pow(abs(hit.nLocal), float3(4));
+    a /= max(a.x + a.y + a.z, 1e-30);
+    float3 sum = N;
+    sum += a.x * (tangentToWorld(normalMapTexel(o, rec, 0.5 + p.y / scale, 0.5 - p.z / scale), Y, Z, N) - N);
+    sum += a.y * (tangentToWorld(normalMapTexel(o, rec, 0.5 + p.x / scale, 0.5 - p.z / scale), X, Z, N) - N);
+    sum += a.z * (tangentToWorld(normalMapTexel(o, rec, 0.5 + p.x / scale, 0.5 - p.y / scale), X, Y, N) - N);
+    return normalize(sum);
+}
+
 struct HitInterface {
     Interface it;
     uint front, back;
@@ -162,6 +204,16 @@ HitInterface makeInterface(SurfaceHit hit, float lambda) {
         h.it.tex = textureWeights(h.it.optics.texKind, h.it.optics.texScale, h.it.optics.texParam, hit.pLocal, hit.nLocal,
                                   hit.uv, hit.hasUv);
     h.it.applyMaterialMap();
+    if (h.it.optics.maps.y != kGpuNone) {
+        // A roughness map: α is the square of the channel's value (perceptual roughness).
+        float3 c = mapValue(h.it.optics.maps.y, asfloat(h.it.optics.maps.w), hit.pLocal, hit.nLocal, hit.uv, hit.hasUv);
+        float r = c[int(h.it.optics.mapParams.z)];
+        h.it.optics.roughness = r * r;
+    }
+    if (h.it.optics.maps.x != kGpuNone) {
+        float3 mapped = normalMapped(b, hit, h.it.optics);
+        if (dot(mapped, hit.n) > 1e-3) h.it.ns = mapped;
+    }
     if (h.it.optics.relief.y > 0) {
         // The relief's slope tilts the shading normal: n − (∇h − (∇h·n) n), in the tangent plane.
         float3 g = xfVector(b.toWorld, reliefGradient(hit.pLocal, h.it.optics.relief));

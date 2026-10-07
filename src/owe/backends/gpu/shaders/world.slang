@@ -12,6 +12,7 @@ struct SurfaceHit {
     float3 nLocal;
     float2 uv;      // texture coordinates (textured meshes, where hasUv)
     bool hasUv;
+    uint tri;       // meshes: the hit triangle's record (normal maps' tangent frame); else kGpuNone
     uint boundary;
     float scale;    // float error scale of the boundary's local frame (ray offsets)
 };
@@ -76,10 +77,12 @@ bool intersectWorld(float3 o, float3 d, float tmax, out SurfaceHit hit) {
     hit.p = xfPoint(b.toWorld, bestLocal.p);
     hit.n = normalize(xfVector(b.toWorld, bestLocal.n));
     hit.ns = hit.n;
+    hit.tri = kGpuNone;
     if (asuint(b.boxLo.w) == kShapeMesh) {
         float3 ns = meshShadingNormal(bestLocal.slot, bestLocal.p, bestLocal.n);
         if (any(ns != bestLocal.n)) hit.ns = normalize(xfVector(b.toWorld, ns));
         hit.hasUv = meshUv(bestLocal.slot, bestLocal.p, hit.uv);
+        hit.tri = bestLocal.slot;
     }
     hit.boundary = bestB;
     hit.scale = b.misc.x;
@@ -182,10 +185,12 @@ bool intersectWorld(float3 o, float3 d, float tmax, out SurfaceHit hit) {
     hit.p = xfPoint(b.toWorld, bestLocal.p);
     hit.n = normalize(xfVector(b.toWorld, bestLocal.n));
     hit.ns = hit.n;
+    hit.tri = kGpuNone;
     if (asuint(b.boxLo.w) == kShapeMesh) {
         float3 ns = meshShadingNormal(bestLocal.slot, bestLocal.p, bestLocal.n);
         if (any(ns != bestLocal.n)) hit.ns = normalize(xfVector(b.toWorld, ns));
         hit.hasUv = meshUv(bestLocal.slot, bestLocal.p, hit.uv);
+        hit.tri = bestLocal.slot;
     }
     hit.boundary = bestB;
     hit.scale = b.misc.x;

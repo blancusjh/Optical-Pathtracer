@@ -794,6 +794,27 @@ bool meshUv(uint slot, float3 p, out float2 uv) {
     return true;
 }
 
+// A textured triangle's derivatives of position along its texture coordinates, in its local frame
+// (false: no texture coordinates, or degenerate ones).
+bool meshUvFrame(uint slot, out float3 dpdu, out float3 dpdv) {
+    dpdu = 0;
+    dpdv = 0;
+    GTriangle tri = g_triangles[slot];
+    uint cw = asuint(tri.v2.w);
+    if (cw == kGpuNone || (cw & kCornerUvs) == 0) return false;
+    uint w = (cw & kCornerIndex) + ((cw & kCornerNormals) != 0 ? 3 : 0);
+    float2 t0 = float2(asfloat(g_normals[w]), asfloat(g_normals[w + 1]));
+    float2 t1 = float2(asfloat(g_normals[w + 2]), asfloat(g_normals[w + 3]));
+    float2 t2 = float2(asfloat(g_normals[w + 4]), asfloat(g_normals[w + 5]));
+    float2 du = t1 - t0, dv = t2 - t0;
+    float3 e1 = tri.v1.xyz - tri.v0.xyz, e2 = tri.v2.xyz - tri.v0.xyz;
+    float det = du.x * dv.y - du.y * dv.x;
+    if (abs(det) < 1e-20) return false;
+    dpdu = (e1 * dv.y - e2 * du.y) / det;
+    dpdv = (e2 * du.x - e1 * dv.x) / det;
+    return true;
+}
+
 // Boundaries a shadow ray crosses (null) or is attenuated by (stained glass) rather than stopped.
 bool isPassableType(uint type) { return type == kSurfNull || type == kSurfStainedGlass; }
 bool isNullBoundary(uint boundary) { return isPassableType(g_optics[g_boundaries[boundary].links.z].a.x); }

@@ -343,6 +343,21 @@ public:
             }
             if (o.roughnessMap.size() == 3 && o.texture.kind != Texture::Kind::None)
                 for (int k = 0; k < 4; ++k) r.roughMap[k] = k < 3 ? float(o.roughnessMap[size_t(k)]) : 1.0f;
+            auto mapWord = [&](const ImageMap& m) -> uint32_t {
+                if (!m.image) return kGpuNone;
+                uint32_t rec = imageRecord(*m.image);
+                if (m.mapping == Texture::Mapping::Triplanar) rec |= 0x80000000u;
+                if (m.mapping == Texture::Mapping::UV) rec |= 0x40000000u;
+                return rec;
+            };
+            r.maps[0] = mapWord(o.normalImage);
+            r.maps[1] = mapWord(o.roughnessImage);
+            const float ns = float(o.normalImage.scale), rs = float(o.roughnessImage.scale);
+            std::memcpy(&r.maps[2], &ns, 4);
+            std::memcpy(&r.maps[3], &rs, 4);
+            r.mapParams[0] = float(o.normalStrength);
+            r.mapParams[1] = o.normalDirectX ? 1.0f : 0.0f;
+            r.mapParams[2] = float(o.roughnessChannel);
             if (o.reliefDepth > 0) {
                 r.relief[0] = float(o.reliefScale);
                 r.relief[1] = float(o.reliefDepth);

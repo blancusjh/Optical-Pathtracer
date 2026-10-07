@@ -463,6 +463,11 @@ int cmdModel(const Args& a) {
             if (!m.partImages[i].empty() && imageSize(m.partImages[i], w, h)) img += "  (" + std::to_string(w) + "×" + std::to_string(h) + ")";
             std::printf("  %-34s %10zu  %-28s %s\n", ("\"" + m.partNames[i] + "\"").c_str(), parts[i].triangles,
                         parts[i].triangles ? parts[i].size().c_str() : "—", img.c_str());
+            if (i < m.partNormalImages.size() && !m.partNormalImages[i].empty())
+                std::printf("  %-34s %10s  %-28s normal: %s\n", "", "", "", fromScene(m.partNormalImages[i]).c_str());
+            if (i < m.partRoughnessImages.size() && !m.partRoughnessImages[i].empty())
+                std::printf("  %-34s %10s  %-28s metallic-roughness (roughness in g): %s\n", "", "", "",
+                            fromScene(m.partRoughnessImages[i]).c_str());
         }
         if (parts.back().triangles) std::printf("  %-34s %10zu  %-28s\n", "(no material)", parts.back().triangles, parts.back().size().c_str());
     }

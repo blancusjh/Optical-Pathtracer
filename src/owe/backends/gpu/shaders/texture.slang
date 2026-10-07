@@ -118,6 +118,38 @@ float imageNearestRaw(uint record, float u, float v) {
     return float(g_texels[hdr.x + i] & 0xFFu) * (1.0 / 255.0);
 }
 
+// Data maps (normals, roughness): texels as stored, without sRGB decoding, bilinear and repeating.
+float3 imageTexelRaw(uint4 hdr, int x, int y) {
+    uint i = uint(y) * hdr.y + uint(x);
+    if ((hdr.w & 1u) != 0) {
+        uint o = hdr.x + 3 * i;
+        return float3(asfloat(g_texels[o]), asfloat(g_texels[o + 1]), asfloat(g_texels[o + 2]));
+    }
+    uint v = g_texels[hdr.x + i];
+    return float3(float(v & 0xFFu), float((v >> 8) & 0xFFu), float((v >> 16) & 0xFFu)) * (1.0 / 255.0);
+}
+float3 imageBilinearRaw(uint record, float u, float v) {
+    uint4 hdr = uint4(g_texels[4 * record], g_texels[4 * record + 1], g_texels[4 * record + 2], g_texels[4 * record + 3]);
+    const int W = int(hdr.y), H = int(hdr.z);
+    float x = (u - floor(u)) * float(W) - 0.5, y = (v - floor(v)) * float(H) - 0.5;
+    float fx = floor(x), fy = floor(y), tx = x - fx, ty = y - fy;
+    int x0 = ((int(fx) % W) + W) % W, x1 = (x0 + 1) % W;
+    int y0 = ((int(fy) % H) + H) % H, y1 = (y0 + 1) % H;
+    return imageTexelRaw(hdr, x0, y0) * ((1 - tx) * (1 - ty)) + imageTexelRaw(hdr, x1, y0) * (tx * (1 - ty)) +
+           imageTexelRaw(hdr, x0, y1) * ((1 - tx) * ty) + imageTexelRaw(hdr, x1, y1) * (tx * ty);
+}
+// A data map's value at a hit, placed like an image texture (word: record | 31 triplanar | 30 uv).
+float3 mapValue(uint word, float scale, float3 p, float3 n, float2 uv, bool hasUv) {
+    const uint rec = word & 0x3FFFFFFFu;
+    if ((word & 0x40000000u) != 0 && hasUv) return imageBilinearRaw(rec, uv.x, uv.y);
+    if ((word & 0x80000000u) == 0) return imageBilinearRaw(rec, 0.5 + p.x / scale, 0.5 - p.y / scale);
+    float3 a = pow(abs(n), float3(4));
+    a /= max(a.x + a.y + a.z, 1e-30);
+    return imageBilinearRaw(rec, 0.5 + p.y / scale, 0.5 - p.z / scale) * a.x +
+           imageBilinearRaw(rec, 0.5 + p.x / scale, 0.5 - p.z / scale) * a.y +
+           imageBilinearRaw(rec, 0.5 + p.x / scale, 0.5 - p.y / scale) * a.z;
+}
+
 // Mixing weights of the spectra a, b, c at a hit (wavelength independent).
 float3 textureWeights(uint kind, float scale, float param, float3 p, float3 n, float2 uv, bool hasUv) {
     switch (kind) {

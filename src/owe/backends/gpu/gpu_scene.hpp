@@ -95,6 +95,8 @@ struct alignas(16) GOptics {
     float sampleAimNormal[4]; // normal, mixture share
     float roughMap[4];        // material map: roughness of texture components a, b, c; w: 1 if mapped
     float relief[4];          // relief: scale, depth, octaves; w: unused (depth 0: none)
+    uint32_t maps[4];         // normal map, roughness map (image record | mapping bits; kGpuNone: none), their scales (float bits)
+    float mapParams[4];       // normal strength, 1 for DirectX normals, roughness channel, unused
 };
 
 struct alignas(16) GEmission {

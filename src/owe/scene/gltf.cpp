@@ -34,6 +34,14 @@ const char* resultName(cgltf_result r) {
 
 // The image a material's base colour comes from, as a path beside the model; empty when it has
 // none or the image is embedded in a buffer.
+std::string textureImage(const cgltf_texture* t, const std::filesystem::path& dir) {
+    if (!t || !t->image || !t->image->uri || std::strncmp(t->image->uri, "data:", 5) == 0) return {};
+    std::string uri = t->image->uri;
+    cgltf_decode_uri(uri.data());
+    uri.resize(std::strlen(uri.c_str()));
+    return (dir / uri).lexically_normal().string();
+}
+
 std::string baseColorImage(const cgltf_material& m, const std::filesystem::path& dir) {
     if (!m.has_pbr_metallic_roughness) return {};
     const cgltf_texture* t = m.pbr_metallic_roughness.base_color_texture.texture;
@@ -61,6 +69,9 @@ MeshData loadGltf(const std::string& path, double scale) {
         const cgltf_material& mat = raw->materials[i];
         m.partNames.push_back(mat.name && *mat.name ? mat.name : "material" + std::to_string(i));
         m.partImages.push_back(baseColorImage(mat, dir));
+        m.partNormalImages.push_back(textureImage(mat.normal_texture.texture, dir));
+        m.partRoughnessImages.push_back(
+            mat.has_pbr_metallic_roughness ? textureImage(mat.pbr_metallic_roughness.metallic_roughness_texture.texture, dir) : "");
     }
     const uint32_t unnamed = uint32_t(raw->materials_count);  // primitives without a material
     bool anyNormals = false, anyUvs = false, anyUnnamed = false;
@@ -172,6 +183,8 @@ MeshData loadGltf(const std::string& path, double scale) {
     if (anyUnnamed) {
         m.partNames.push_back("unnamed");
         m.partImages.emplace_back();
+        m.partNormalImages.emplace_back();
+        m.partRoughnessImages.emplace_back();
     }
     return m;
 }
@@ -198,6 +211,8 @@ MeshData selectParts(const MeshData& m, const std::vector<std::string>& names) {
     out.normals = m.normals;
     out.partNames = m.partNames;
     out.partImages = m.partImages;
+    out.partNormalImages = m.partNormalImages;
+    out.partRoughnessImages = m.partRoughnessImages;
     for (size_t t = 0; t < m.triangles.size(); ++t) {
         if (!keep[m.part[t]]) continue;
         out.triangles.push_back(m.triangles[t]);

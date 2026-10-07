@@ -76,6 +76,13 @@ struct StainedGlass {
     int stone = -1;  // optics index of the opaque material where the mask says stone
 };
 
+// A data image (not colour: read raw, without sRGB decoding) placed like a texture image.
+struct ImageMap {
+    std::shared_ptr<const ImageRGB> image;
+    Texture::Mapping mapping = Texture::Mapping::Planar;
+    double scale = 1;
+};
+
 struct SurfaceOptics {
     std::string name;
     SurfaceType type = SurfaceType::Dielectric;
@@ -87,6 +94,14 @@ struct SurfaceOptics {
     // whose slopes tilt the shading normal (paper grain, a concrete's pores, hammered metal).
     double reliefScale = 0, reliefDepth = 0;
     int reliefOctaves = 3;
+    // Image maps (GPU): a tangent-space normal map (OpenGL convention: green toward +v up the
+    // picture; DirectX flips it), scaled by normalStrength, tilts the shading normal; a roughness
+    // map gives the GGX α as the square of a channel's value (perceptual roughness, as glTF and
+    // Poly Haven store it).
+    ImageMap normalImage, roughnessImage;
+    double normalStrength = 1;
+    bool normalDirectX = false;
+    int roughnessChannel = 1;  // 0 r, 1 g (glTF's metallic-roughness), 2 b
     Spectrum reflectance = Spectrum::constant(1.0);       // diffuse albedo / mirror reflectance
     Texture texture;                                      // overrides reflectance (diffuse) or tint (conductor)
     ConductorSpectrum conductor;                          // Conductor only
