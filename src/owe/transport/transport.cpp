@@ -12,7 +12,14 @@ struct LightSample {
     Spec4 Le;
     double pdf = 0;  // solid angle, including light selection
     uint32_t boundary = kNone;
+    SurfaceHit endpoint;
+    uint32_t region = kNone;
 };
+
+double sampledAnchorError(const Boundary& boundary, const Vec3& local, const Vec3& world) {
+    return contactError(std::max({maxAbsComponent(world), maxAbsComponent(local), maxAbsComponent(boundary.toWorld.t),
+                  maxAbsComponent(boundary.shape->bounds().extent())}));
+}
 
 bool sampleLightFrom(const World& w, const Vec3& p, const Wavelengths& wl, Rng& rng, LightSample& ls) {
     if (w.lights().empty()) return false;
@@ -54,6 +61,12 @@ bool sampleLightFrom(const World& w, const Vec3& p, const Wavelengths& wl, Rng& 
     ls.Le = ((cosL > 0 && e.front) || (cosL < 0 && e.back)) ? wl.eval(e.radiance) : Spec4(0.0);
     ls.pdf = sel * pdfW;
     ls.boundary = L.boundary;
+    ls.endpoint.p = pW;
+    ls.endpoint.n = nW;
+    ls.endpoint.boundary = L.boundary;
+    ls.endpoint.prim = b.shape->sampledPrimitive(u3);
+    ls.endpoint.error = sampledAnchorError(b, pL, pW);
+    ls.region = cosL > 0 ? b.front : b.back;
     return true;
 }
 
@@ -127,17 +140,25 @@ static Interface atWavelength(const Interface& base, const World& w, const Surfa
     return it;
 }
 
-Spec4 Tracer::transmittance(Vec3 o, uint32_t region, const Vec3& dir, double dist, const Wavelengths& wl,
-                            uint32_t* finalRegion) const {
+Spec4 Tracer::transmittance(const Endpoint& start, const Vec3& dir, double dist, const Wavelengths& wl,
+                            uint32_t* finalRegion, const Endpoint* endpoint) const {
+    uint32_t region = start.region;
     Spec4 Tr(1.0);
+    Ray ray{start.p, dir, start.boundary, region, start.normal, start.primitive, start.error};
     double remaining = dist;
-    double margin = std::isinf(dist) ? 0 : 1e-7 * dist + 1e-12;
+    const double endError = endpoint ? std::max(endpoint->error, contactError(
+        std::max({dist, maxAbsComponent(endpoint->p), maxAbsComponent(start.p)}))) : 0;
+    const double margin = std::isinf(dist) || endpoint ? 0 : 1e-7 * dist + 1e-12;
     for (int guard = 0; guard < 256; ++guard) {
         SurfaceHit h;
-        double tmax = std::isinf(remaining) ? Inf : remaining - margin;
-        if (tmax <= 0) break;
-        bool found = world_.intersect(Ray{o, dir}, tmax, h);
-        double seg = found ? h.t : remaining;
+        double tmax = std::isinf(remaining) ? Inf : (endpoint ? remaining + endError : remaining - margin);
+        if (tmax <= 0) {
+            if (finalRegion) *finalRegion = region;
+            return Tr;
+        }
+        ray.regionHint = region;
+        bool found = world_.intersect(ray, tmax, h);
+        double seg = found ? std::min(h.t, remaining) : remaining;
         const Medium& m = world_.mediumOf(region);
         if (m.absorbs() || m.scatters()) {
             if (std::isinf(seg)) return Spec4(0.0);
@@ -148,14 +169,54 @@ Spec4 Tracer::transmittance(Vec3 o, uint32_t region, const Vec3& dir, double dis
             if (finalRegion) *finalRegion = region;
             return Tr;
         }
+        bool endpointFace = endpoint && h.boundary == endpoint->boundary;
+        if (endpointFace)
+            endpointFace = world_.boundaries()[h.boundary].shape->sameFace(endpoint->primitive, h.prim);
+        if (endpointFace && !h.ambiguousContact &&
+            std::abs(h.t - remaining) <= endError && dot(h.n, endpoint->normal) > 0 && region == endpoint->region) {
+            if (finalRegion) *finalRegion = region;
+            return Tr;  // exclude only the destination's own face, never its neighborhood
+        }
+        if (endpoint && dot(h.p - endpoint->p, dir) > 0) {
+            // A broad numerical query can discover matter beyond the source.
+            // The source-local forward proof checked the actual open segment.
+            if (finalRegion) *finalRegion = region;
+            return Tr;
+        }
         const Boundary& b = world_.boundaries()[h.boundary];
+        uint32_t incident = dot(dir, h.n) < 0 ? b.front : b.back;
+        if (incident != region || h.ambiguousContact) return Spec4(0.0);
         if (world_.optics()[b.optics].type != SurfaceType::Null) return Spec4(0.0);
         region = dot(dir, h.n) < 0 ? b.back : b.front;
-        o = offsetOrigin(h.p, h.n, dir);
+        ray = world_.spawnRay(h, dir, region);
         if (!std::isinf(remaining)) remaining -= h.t;
     }
     if (finalRegion) *finalRegion = region;
-    return Tr;
+    // Exhausting the progress guard is not evidence that the remaining segment is clear.
+    return Spec4(0.0);
+}
+
+Spec4 Tracer::connectionTransmittance(Endpoint source, const Endpoint& target, const Wavelengths& wl) const {
+    const Vec3 delta = source.p - target.p;
+    const double distance = length(delta);
+    if (!(distance > 0)) return Spec4(0.0);
+    const Vec3 direction = delta / distance;
+    const double error = contactError(std::max({distance, maxAbsComponent(source.p), maxAbsComponent(target.p)}));
+    if (source.boundary != kNone) {
+        const Boundary& b = world_.boundaries()[source.boundary];
+        source.error = std::max(source.error, sampledAnchorError(b, b.toLocal.point(source.p), source.p));
+    }
+    // Check the source neighborhood before excluding its own face in the reciprocal walk.
+    SurfaceHit contact;
+    Ray proof{source.p, -direction, source.boundary, source.region, source.normal, source.primitive, source.error};
+    proof.forwardOnly = true;
+    if (world_.intersect(proof, std::max(error, source.error), contact)) {
+        if (contact.ambiguousContact || world_.optics()[world_.boundaries()[contact.boundary].optics].type != SurfaceType::Null)
+            return Spec4(0.0);
+    }
+    uint32_t arrival = kNone;
+    Spec4 tr = transmittance(target, direction, distance, wl, &arrival, &source);
+    return arrival == source.region ? tr : Spec4(0.0);
 }
 
 double Tracer::lightPdf(const Vec3& ref, const SurfaceHit& hit) const {
@@ -196,9 +257,12 @@ Spec4 Tracer::directLighting(const SurfaceHit& hit, const Interface* surface, co
         cosFactor = std::abs(dot(ls.wi, hit.n));
         const Boundary& b = world_.boundaries()[hit.boundary];
         startRegion = dot(ls.wi, hit.n) > 0 ? b.front : b.back;
-        origin = offsetOrigin(hit.p, hit.n, ls.wi);
+        origin = hit.p;
     }
-    Spec4 Tr = transmittance(origin, startRegion, ls.wi, ls.dist, wl);
+    const Endpoint start = surface ? Endpoint(hit, startRegion) : Endpoint(origin, startRegion);
+    const Spec4 Tr = std::isfinite(ls.dist)
+        ? connectionTransmittance(Endpoint(ls.endpoint, ls.region), start, wl)
+        : transmittance(start, ls.wi, Inf, wl);
     if (Tr.isZero()) return Spec4(0.0);
     double w = powerHeuristic(ls.pdf, pdfScatter);
     if (source) *source = ls.boundary == kNone ? std::string("sun") : world_.boundaryLabel(ls.boundary);
@@ -241,6 +305,7 @@ Spec4 Tracer::radiance(Ray ray, uint32_t region, Wavelengths& wl, Rng& rng, Tran
 
     for (int depth = 0;; ++depth) {
         SurfaceHit hit;
+        ray.regionHint = region;
         bool found = world_.intersect(ray, Inf, hit);
         st.segments++;
         const Medium& med = world_.mediumOf(region);
@@ -315,10 +380,11 @@ Spec4 Tracer::radiance(Ray ray, uint32_t region, Wavelengths& wl, Rng& rng, Tran
         bool fromFront = dot(ray.d, hit.n) < 0;
         uint32_t inc = fromFront ? b.front : b.back;
         uint32_t other = fromFront ? b.back : b.front;
-        if (inc != region) {
+        if (inc != region || hit.ambiguousContact) {
             st.noteInconsistency(hit.boundary, region, inc, lastBoundary, hit.p);
             region = inc;
         }
+        if (hit.ambiguousContact) break;
         const SurfaceOptics& o = world_.optics()[b.optics];
         lastBoundary = hit.boundary;
         size_t vIndex = rec ? rec->v.size() : 0;
@@ -342,7 +408,7 @@ Spec4 Tracer::radiance(Ray ray, uint32_t region, Wavelengths& wl, Rng& rng, Tran
         if (o.type == SurfaceType::Null) {
             if (rec) { rec->v[vIndex].event = EventKind::Pass; rec->v[vIndex].regionTo = other; rec->v[vIndex].T = 1; }
             region = other;
-            ray.o = offsetOrigin(hit.p, hit.n, ray.d);
+            ray = world_.spawnRay(hit, ray.d, region);
             if (depth >= 4 * maxDepth_) break;
             continue;
         }
@@ -394,7 +460,7 @@ Spec4 Tracer::radiance(Ray ray, uint32_t region, Wavelengths& wl, Rng& rng, Tran
         prevPdf = s.pdf;
         prevP = hit.p;
         noteScatter(s.delta);
-        ray = Ray{offsetOrigin(hit.p, hit.n, s.wi), s.wi};
+        ray = world_.spawnRay(hit, s.wi, region);
         if (depth >= rrDepth_) {
             double q = std::min(1.0, beta.maxValue());
             if (rng.uniform() >= q) {
@@ -477,6 +543,12 @@ void Tracer::traceParticle(const Detector& det, Wavelengths wl, Rng& rng, Film& 
         Draw3 ua(rng);
         b.shape->sampleArea(ua.u1, ua.u2, ua.u3, pL, nL);
         Vec3 p = b.toWorld.point(pL), n = normalize(b.toWorld.vector(nL));
+        SurfaceHit emission;
+        emission.p = p;
+        emission.n = n;
+        emission.boundary = L.boundary;
+        emission.prim = b.shape->sampledPrimitive(ua.u3);
+        emission.error = sampledAnchorError(b, pL, p);
         double pdfA = 1.0 / b.shape->area();
         // Emitter seen directly by a virtual observer (path tracing owns this under the partition).
         if (det.isVirtual() && !partition_) {
@@ -489,9 +561,9 @@ void Tracer::traceParticle(const Detector& det, Wavelengths wl, Rng& rng, Film& 
                 Vec3 wc = wv / dist;
                 double cosL = dot(n, wc);
                 if ((cosL > 0 && e.front) || (cosL < 0 && e.back)) {
-                    uint32_t startRegion = cosL > 0 ? b.front : b.back, endRegion = kNone;
-                    Spec4 Tr = transmittance(offsetOrigin(p, n, wc), startRegion, wc, dist, wl, &endRegion);
-                    if (!Tr.isZero() && endRegion == det.region)
+                    uint32_t startRegion = cosL > 0 ? b.front : b.back;
+                    Spec4 Tr = connectionTransmittance(Endpoint(emission, startRegion), Endpoint(q, det.region), wl);
+                    if (!Tr.isZero())
                         deposit(px, py, Le * Tr * (std::abs(cosL) * factor / (sel * pdfA)));
                 }
             }
@@ -508,8 +580,8 @@ void Tracer::traceParticle(const Detector& det, Wavelengths wl, Rng& rng, Film& 
         Vec3 dir = f.toWorld(sampleCosineHemisphere(uc.u1, uc.u2));
         // β = Le·cos / (sel · pdfA · sidePdf · cos/π)
         beta = Le * (Pi / (sel * pdfA * sidePdf));
-        ray = Ray{offsetOrigin(p, n, dir), dir};
         region = front ? b.front : b.back;
+        ray = w.spawnRay(emission, dir, region);
         emitterBoundary = L.boundary;
     }
     maskTerminated(wl, beta);
@@ -536,7 +608,6 @@ void Tracer::traceParticle(const Detector& det, Wavelengths wl, Rng& rng, Film& 
         Vec3 wc = wv / dist;
         Spec4 f;
         double cosX = 1;
-        Vec3 origin = hit.p;
         uint32_t startRegion = region;
         if (!surface) {
             f = Spec4(hgPhase(dot(-d, wc), g));
@@ -552,16 +623,16 @@ void Tracer::traceParticle(const Detector& det, Wavelengths wl, Rng& rng, Film& 
             cosX = std::abs(dot(wc, hit.n));
             const Boundary& b = w.boundaries()[hit.boundary];
             startRegion = dot(wc, hit.n) > 0 ? b.front : b.back;
-            origin = offsetOrigin(hit.p, hit.n, wc);
         }
-        uint32_t endRegion = kNone;
-        Spec4 Tr = transmittance(origin, startRegion, wc, dist, wl, &endRegion);
-        if (Tr.isZero() || endRegion != det.region) return;
+        Spec4 Tr = surface ? connectionTransmittance(Endpoint(hit, startRegion), Endpoint(q, det.region), wl)
+                          : connectionTransmittance(Endpoint(hit.p, startRegion), Endpoint(q, det.region), wl);
+        if (Tr.isZero()) return;
         deposit(px, py, beta * f * Tr * (cosX * factor));
     };
 
     for (int depth = 0;; ++depth) {
         SurfaceHit hit;
+        ray.regionHint = region;
         bool found = w.intersect(ray, Inf, hit);
         st.segments++;
         const Medium& med = w.mediumOf(region);
@@ -611,17 +682,18 @@ void Tracer::traceParticle(const Detector& det, Wavelengths wl, Rng& rng, Film& 
         bool fromFront = dot(ray.d, hit.n) < 0;
         uint32_t inc = fromFront ? b.front : b.back;
         uint32_t other = fromFront ? b.back : b.front;
-        if (inc != region) {
+        if (inc != region || hit.ambiguousContact) {
             st.noteInconsistency(hit.boundary, region, inc, lastBoundary, hit.p);
             region = inc;
         }
+        if (hit.ambiguousContact) break;
         const SurfaceOptics& o = w.optics()[b.optics];
         lastBoundary = hit.boundary;
         if (o.type == SurfaceType::Null) {
             pushVertex(rec, hit.p, ray.d, EventKind::Pass, hit.boundary, inc, other, nMed, w.indexOf(other, hero), 1, 1, 0,
                        1, opl, beta[0]);
             region = other;
-            ray.o = offsetOrigin(hit.p, hit.n, ray.d);
+            ray = world_.spawnRay(hit, ray.d, region);
             if (depth >= 4 * maxDepth_) break;
             continue;
         }
@@ -670,7 +742,7 @@ void Tracer::traceParticle(const Detector& det, Wavelengths wl, Rng& rng, Film& 
                                                   TransportMode::Importance);
         if (s.delta) ++deltaEvents;
         if (s.transmitted) region = other;
-        ray = Ray{offsetOrigin(hit.p, hit.n, s.wi), s.wi};
+        ray = world_.spawnRay(hit, s.wi, region);
         if (depth >= rrDepth_) {
             // Particles carry flux, so roulette against the per-event throughput.
             double q = std::min(1.0, w0);
@@ -690,6 +762,7 @@ PathRecord Tracer::walk(Ray ray, uint32_t region, double lambda, WalkMode mode, 
                world_.indexOf(region, lambda), 1, 1, 0, 0, 0, 1);
     for (int ev = 0; ev < maxEvents; ++ev) {
         SurfaceHit hit;
+        ray.regionHint = region;
         bool found = world_.intersect(ray, Inf, hit);
         const Medium& med = world_.mediumOf(region);
         double nMed = med.n(lambda);
@@ -710,7 +783,7 @@ PathRecord Tracer::walk(Ray ray, uint32_t region, double lambda, WalkMode mode, 
         if (o.type == SurfaceType::Null) {
             pushVertex(&rec, hit.p, ray.d, EventKind::Pass, hit.boundary, inc, other, nMed, n2, 1, 1, 0, 1, opl, beta);
             region = other;
-            ray.o = offsetOrigin(hit.p, hit.n, ray.d);
+            ray = world_.spawnRay(hit, ray.d, region);
             continue;
         }
         if (o.type == SurfaceType::Absorber || o.type == SurfaceType::Detector ||
@@ -742,7 +815,7 @@ PathRecord Tracer::walk(Ray ray, uint32_t region, double lambda, WalkMode mode, 
         if (!ok) return rec;
         beta *= s.weight;
         if (s.transmitted) region = other;
-        ray = Ray{offsetOrigin(hit.p, hit.n, s.wi), s.wi};
+        ray = world_.spawnRay(hit, s.wi, region);
     }
     pushVertex(&rec, ray.o, ray.d, EventKind::Terminate, kNone, region, region, 0, 0, 1, 1, 0, 0, opl, beta);
     return rec;

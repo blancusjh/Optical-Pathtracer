@@ -183,7 +183,8 @@ bool SurfaceSensor::generate(double px, double py, Rng& rng, Ray& ray, double& w
         dir = f.toWorld(sampleCosineHemisphere(u.u1, u.u2));
         weight = Pi;
     }
-    ray = Ray{offsetOrigin(p, normal_, dir), dir};
+    ray = Ray{p, dir, boundaryIndex, region, normal_};
+    ray.forwardOnly = true;  // authored sensor plane: strictly past matter is outside its launch hemisphere
     return true;
 }
 

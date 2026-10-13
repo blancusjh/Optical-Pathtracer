@@ -1,0 +1,11 @@
+# Exact physical oracle: an opaque black cover at the sensor plane blocks all
+# incident light. Moving the sensor 1 mm above the cover sees uniform sky (pi E).
+# A displaced launch can skip the distinct contacting cover and falsely see sky.
+units = m
+world { sky = uniform(1) }
+material black { type = absorber }
+sensor Screen { size = (.01,.01) resolution = (4,4) position = (0,0,0)
+ axis = (0,0,1) up = (0,1,0) }
+body Cover { type = sheet size = (100,100) position = (0,0,0)
+ axis = (0,0,1) up = (0,1,0) material = black }
+render { detector = Screen integrator = path spp = 64 seed = 11 max_depth = 2 }

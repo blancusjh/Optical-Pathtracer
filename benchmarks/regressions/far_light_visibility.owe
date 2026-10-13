@@ -1,0 +1,19 @@
+# Oracle: an opaque near-eye screen covers every pupil ray, so every estimator
+# must record exactly zero. Moving NearBlocker aside produces a lit diffuser.
+# At 1e6 m, legacy forward segment margins omit the final 0.1 m (CPU) / 10 m
+# (GPU), falsely permitting distant diffuse-vertex splats through this screen.
+# No external assets, sky, sun, glass, merging-dependent caustic, or region tie.
+units = m
+world { up = (0,1,0) sky = none }
+material white { type = diffuse reflectance = 0.8 }
+material black { type = absorber }
+body FarDiffuser { type = sheet size = (64,64) position = (0,0,1000000)
+ axis = (0,0,-1) up = (0,1,0) material = white }
+body Lamp { type = sphere radius = 2 position = (20,0,999980)
+ material = black emission = 1 }
+body NearBlocker { type = sheet size = (0.02,0.02) position = (0,0,0.025)
+ axis = (0,0,-1) up = (0,1,0) material = black }
+observer Eye { position = (0,0,0) look_at = (0,0,1000000) up = (0,1,0)
+ fov = 0.001deg pupil = 1mm focus = 1000000 resolution = (16,16)
+ exposure = 0 white_balance = none }
+render { detector = Eye integrator = light spp = 128 max_depth = 3 seed = 11 }

@@ -1,0 +1,20 @@
+# Source-end visibility oracle: a0.4m opaque screen0.5m in front of a0.1m
+# emitting sheet at1e6m must block all its energy. Direct emitter splats make
+# the open control deterministic enough without rare tiny-area diffuse hits.
+# Moving SourceBlocker toz1000000.5 places it BEYOND the emitting surface;
+# that control must retain the open image. Moving ittox1 gives an open control.
+units = m
+world { up = (0,1,0) sky = none }
+material white { type = diffuse reflectance = 0.8 }
+material black { type = absorber }
+body FarEmitter { type = sheet size = (0.1,0.1) position = (0,0,1000000)
+ axis = (0,0,-1) up = (0,1,0) material = black emission = 1 }
+body NearBlocker { type = sheet size = (0.02,0.02) position = (1,0,0.025)
+ axis = (0,0,-1) up = (0,1,0) material = black }
+# The0.1m emitter fits the0.175m camera footprint. The0.4m screen covers both.
+body SourceBlocker { type = sheet size = (0.4,0.4) position = (0,0,999999.5)
+ axis = (0,0,-1) up = (0,1,0) material = black }
+observer Eye { position = (0,0,0) look_at = (0,0,1000000) up = (0,1,0)
+ fov = 0.00001deg pupil = 1mm focus = 1000000 resolution = (16,16)
+ exposure = 0 white_balance = none }
+render { detector = Eye integrator = light spp = 128 max_depth = 3 seed = 11 }

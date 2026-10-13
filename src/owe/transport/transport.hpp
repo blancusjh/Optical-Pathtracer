@@ -49,6 +49,22 @@ enum class WalkMode {
     PrimaryTransmission // deterministic: always refract at smooth dielectrics (weight × T), reflect on TIR
 };
 
+// A visibility endpoint carries its geometric identity and numerical uncertainty together.
+// Volume points have no boundary; surface points must retain the primitive and normal.
+struct Endpoint {
+    Vec3 p;
+    uint32_t region = kNone;
+    uint32_t boundary = kNone;
+    Vec3 normal;
+    uint32_t primitive = kNone;
+    double error = 0;
+
+    Endpoint(Vec3 point, uint32_t mediumRegion) : p(point), region(mediumRegion) {}
+    Endpoint(const SurfaceHit& hit, uint32_t mediumRegion)
+        : p(hit.p), region(mediumRegion), boundary(hit.boundary), normal(hit.n),
+          primitive(hit.prim), error(hit.error) {}
+};
+
 class Tracer {
 public:
     Tracer(const Scene& scene, int maxDepth = 64, int rrDepth = 6) : scene_(scene), world_(scene.world),
@@ -76,8 +92,11 @@ public:
 
     // Transmittance along a straight segment through null boundaries; 0 if blocked.
     // dist may be infinite (escape to the environment). finalRegion receives the end region.
-    Spec4 transmittance(Vec3 o, uint32_t region, const Vec3& dir, double dist, const Wavelengths& wl,
-                        uint32_t* finalRegion = nullptr) const;
+    Spec4 transmittance(const Endpoint& start, const Vec3& dir, double dist, const Wavelengths& wl,
+                        uint32_t* finalRegion = nullptr, const Endpoint* end = nullptr) const;
+
+    // Reciprocal finite visibility starts at the accurately represented detector endpoint.
+    Spec4 connectionTransmittance(Endpoint source, const Endpoint& target, const Wavelengths& wl) const;
 
     Interface makeInterface(const SurfaceHit& hit, double lambda) const;
 

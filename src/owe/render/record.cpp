@@ -95,9 +95,14 @@ std::string renderMetadataJSON(const Scene& scene, const Renderer& r, const Rend
     os << "  \"render_seconds\": " << r.seconds() << ",\n";
     os << "  \"statistics\": {\"paths\": " << r.stats().paths << ", \"segments\": " << r.stats().segments
        << ", \"region_inconsistencies\": " << r.stats().inconsistencies << ", \"leaks\": " << r.stats().leaks;
-    if (r.stats().inconsistencies)
-        os << ", \"first_inconsistency\": {\"boundary\": \"" << jsonEscape(w.boundaryLabel(r.stats().first.boundary))
-           << "\", \"ray_region\": \"" << jsonEscape(w.regionLabel(r.stats().first.rayRegion)) << "\"}";
+    if (r.stats().inconsistencies) {
+        const auto& first = r.stats().first;
+        os << ", \"first_inconsistency\": {\"boundary\": \"" << jsonEscape(w.boundaryLabel(first.boundary))
+           << "\", \"ray_region\": \"" << jsonEscape(w.regionLabel(first.rayRegion))
+           << "\", \"expected_region\": \"" << jsonEscape(w.regionLabel(first.boundaryRegion))
+           << "\", \"previous_boundary\": \"" << jsonEscape(w.boundaryLabel(first.previous))
+           << "\", \"position_m\": [" << first.p.x << ", " << first.p.y << ", " << first.p.z << "]}";
+    }
     os << "},\n";
     os << "  \"mean_Y\": " << img.meanY() << ",\n";
     os << "  \"world\": {\"media\": [";

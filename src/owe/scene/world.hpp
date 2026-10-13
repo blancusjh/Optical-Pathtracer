@@ -216,6 +216,8 @@ struct SurfaceHit {
     Vec3 nLocal;
     uint32_t boundary = kNone;
     uint32_t prim = 0;
+    double error = 0;  // carried uncertainty of the ray and shape frame at this anchor
+    bool ambiguousContact = false;
 };
 
 // A light that next-event estimation can sample.
@@ -265,6 +267,9 @@ public:
 
     // --- Queries ---
     bool intersect(const Ray& ray, double tmax, SurfaceHit& hit) const;
+    Ray spawnRay(const SurfaceHit& hit, const Vec3& dir, uint32_t region) const {
+        return Ray{hit.p, dir, hit.boundary, region, hit.n, hit.prim, hit.error};
+    }
     uint32_t locate(const Vec3& p) const;  // region containing p
     Transform assemblyToWorld(int assembly) const;
     Transform bodyToWorld(int body) const;

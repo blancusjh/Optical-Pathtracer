@@ -513,35 +513,180 @@ double World::sceneRadius() const {
     return std::max(1e-3, 0.5 * length(bounds_.extent()));
 }
 
+namespace {
+// Twofold doubles retain the low part of world-origin minus planet-centre subtraction. This
+// uses IEEE double and fma rather than long double, which is not wider on every supported host.
+struct Twofold { double hi, lo; };
+Twofold add(Twofold a, Twofold b) {
+    const double s = a.hi + b.hi, v = s - a.hi;
+    const double e = (a.hi - (s - v)) + (b.hi - v) + a.lo + b.lo;
+    const double h = s + e;
+    return {h, e - (h - s)};
+}
+Twofold mul(Twofold a, Twofold b) {
+    const double p = a.hi * b.hi;
+    const double e = std::fma(a.hi, b.hi, -p) + a.hi * b.lo + a.lo * b.hi + a.lo * b.lo;
+    const double h = p + e;
+    return {h, e - (h - p)};
+}
+double value(Twofold a) { return a.hi + a.lo; }
+
+// An independent compensated quadratic for near-surface spheres. The shape and its native
+// transform remain unchanged; coefficients are formed BEFORE subtraction is rounded to double.
+bool intersectNearSphere(const Boundary& b, const SphereShape& sphere, const Ray& ray, double tmin, double tmax,
+                         LocalHit& h) {
+    Twofold A{0,0}, B{0,0}, C{0,0};
+    const double radius = sphere.radius();
+    Twofold rel[3];
+    for (int k = 0; k < 3; ++k) {
+        rel[k] = add({ray.o[k], 0}, {-b.toWorld.t[k], 0});
+        A = add(A, mul({ray.d[k], 0}, {ray.d[k], 0}));
+        B = add(B, mul(rel[k], {ray.d[k], 0}));
+        C = add(C, mul(rel[k], rel[k]));
+    }
+    const Twofold r2 = mul({radius, 0}, {radius, 0});
+    C = add(C, {-r2.hi, -r2.lo});
+    const Twofold ac = mul(A, C);
+    const double disc = value(add(mul(B, B), {-ac.hi, -ac.lo}));
+    if (disc < 0) return false;
+    const double bv = value(B), av = value(A);
+    const double q = -bv - std::copysign(std::sqrt(disc), bv);
+    double t0 = q / av, t1 = q != 0 ? value(C) / q : t0;
+    if (t0 > t1) std::swap(t0, t1);
+    const double t = t0 > tmin && t0 < tmax ? t0 : t1;
+    if (!(t > tmin && t < tmax)) return false;
+    const Vec3 p = ray.at(t);
+    Vec3 n;
+    for (int k = 0; k < 3; ++k) n[k] = value(add(rel[k], mul({ray.d[k], 0}, {t, 0}))) / radius;
+    h.t = t;
+    h.p = b.toLocal.point(p);
+    h.n = normalize(b.toLocal.vector(n));
+    h.prim = 0;
+    return true;
+}
+bool needsNearSphere(const Boundary& b, const Ray& ray) {
+    const auto* sphere = dynamic_cast<const SphereShape*>(b.shape.get());
+    return sphere && sphere->radius() > 4096 * std::max(1e-9, std::abs(length(ray.o - b.toWorld.t) - sphere->radius()));
+}
+}  // namespace
+
 bool World::intersect(const Ray& ray, double tmax, SurfaceHit& hit) const {
     bool found = false;
     double best = tmax;
     LocalHit lh, bestLocal;
     uint32_t bestB = kNone;
+    bool bestNearSphere = false;
+    bool bestMatches = false, ambiguous = false;
+    double bestError = 0;
     const RaySlabs rs(ray);
-    bvh_.traverse(ray, 0.0, best, [&](uint32_t i, double& tm) {
+    // Transform arithmetic bounds the local uncertainty, not the old transport offset.
+    // Keep this interval distinct from a physical gap: positive roots are never clamped away.
+    const double worldScale = std::max(1e-12, maxAbsComponent(ray.o));
+    const double broadError = std::max(ray.departureError, contactError(std::max(worldScale, maxAbsComponent(bounds_.extent()))));
+    bvh_.traverse(ray, -broadError, best, [&](uint32_t i, double& tm) {
         const Boundary& b = boundaries_[i];
-        // Leaves hold up to 16 overlapping boundaries (lens surfaces inside a tube); their own
-        // boxes reject most before the ray is carried into their frames.
-        double tEnter;
-        if (!rs.hit(b.worldBox, 0.0, tm, tEnter)) return;
+        const bool nearSphere = needsNearSphere(b, ray);
         Ray lr{b.toLocal.point(ray.o), b.toLocal.vector(ray.d)};
-        if (b.shape->intersect(lr, 0.0, tm, lh)) {
-            tm = lh.t;
-            bestLocal = lh;
-            bestB = i;
-            found = true;
+        const double scale = nearSphere ? worldScale : std::max({worldScale, maxAbsComponent(lr.o),
+            maxAbsComponent(b.toWorld.t), maxAbsComponent(b.shape->bounds().extent())});
+        const double anchorError = std::max(ray.departureError,
+            contactError(scale));
+        double error = anchorError;
+        const auto* mesh = dynamic_cast<const MeshShape*>(b.shape.get());
+        const bool knownMeshDeparture = mesh && i == ray.departedBoundary &&
+                                        ray.departedPrimitive < mesh->triangleCount();
+        if (i == ray.departedBoundary) {
+            lr.departedPrimitive = ray.departedPrimitive;
+            lr.departedNormal = b.toLocal.vector(ray.departedNormal);
         }
+        if (knownMeshDeparture) {
+            const auto& tri = mesh->triangles()[ray.departedPrimitive];
+            const auto& positions = mesh->positions();
+            const Vec3 normal = normalize(cross(positions[tri[1]] - positions[tri[0]],
+                                               positions[tri[2]] - positions[tri[0]]));
+            lr.o -= normal * dot(lr.o - positions[tri[0]], normal);
+        }
+        lr.departureError = error;
+        const bool spawned = ray.departedBoundary != kNone;
+        // The native departing plane is known. Its past faces cannot be another
+        // contact, even when their distance is smaller than the anchor error.
+        double tmin = ray.forwardOnly || knownMeshDeparture ? std::nextafter(0.0, -Inf) : (spawned ? -error : 0.0);
+        double tEnter;
+        if (!rs.hit(b.worldBox, tmin, tm, tEnter)) return;
+        auto solve = [&](double lo) {
+            lh.error = 0;
+            const bool solved = nearSphere ? intersectNearSphere(b, static_cast<const SphereShape&>(*b.shape), ray, lo, tm, lh)
+                                          : b.shape->intersect(lr, lo, tm, lh);
+            error = anchorError + lh.error;
+            return solved;
+        };
+        if (!solve(tmin)) return;
+        Vec3 n = b.toWorld.vector(lh.n);
+        uint32_t incident = dot(ray.d, n) < 0 ? b.front : b.back;
+        bool matches = ray.regionHint == kNone || incident == ray.regionHint;
+        // At a contact already crossed in the outgoing direction, the opposite region is
+        // no longer incident. Retain the body's later root rather than excluding the body.
+        auto excludedRoot = [&] {
+            // A grazing ray amplifies a small anchor displacement into a larger
+            // root distance. Compare the displacement normal to the surface.
+            const bool ownNear = std::abs(lh.t * dot(ray.d, normalize(n))) <= error;
+            return spawned && ((std::abs(lh.t) <= error && !matches) ||
+                (ownNear && !mesh && i == ray.departedBoundary &&
+                 (b.front == b.back || lengthSq(ray.departedNormal) > 0) &&
+                 dot(ray.d, n) * dot(ray.d, ray.departedNormal) >= 0));
+        };
+        bool unresolvedRoot = false;
+        for (int retry = 0; excludedRoot(); ++retry) {
+            if (retry == 8) { unresolvedRoot = true; break; }
+            // Advance past only this root. A positive opposite face can be much
+            // closer than the uncertainty of the incoming surface anchor.
+            if (!solve(std::max(0.0, lh.t))) return;
+            n = b.toWorld.vector(lh.n);
+            incident = dot(ray.d, n) < 0 ? b.front : b.back;
+            matches = ray.regionHint == kNone || incident == ray.regionHint;
+        }
+        const double t = std::max(0.0, lh.t);
+        const bool tie = found && std::abs(t - bestLocal.t) <= std::max(error, bestError);
+        const bool readout = optics_[b.optics].type == SurfaceType::Detector && b.front == b.back;
+        const bool bestReadout = found && optics_[boundaries_[bestB].optics].type == SurfaceType::Detector &&
+                                 boundaries_[bestB].front == boundaries_[bestB].back;
+        if (tie && matches && bestMatches && readout != bestReadout) {
+            if (readout) return;  // physical matter precedes a coincident zero-thickness readout
+            ambiguous = false;
+        } else if (tie && ray.regionHint != kNone && matches && bestMatches && i != bestB) ambiguous = true;
+        if (tie && bestMatches && !matches) return;
+        if (!tie) ambiguous = false;
+        bool replace = !found || !tie;
+        if (found && tie) {
+            if (matches != bestMatches) replace = matches;
+            else if (readout != bestReadout) replace = bestReadout;
+            else replace = i < bestB;
+        }
+        if (replace) {
+            bestLocal = lh;
+            bestLocal.t = t;
+            bestB = i;
+            bestNearSphere = nearSphere;
+            bestMatches = matches;
+            bestError = error;
+            found = true;
+            ambiguous = ambiguous || unresolvedRoot;
+        }
+        // Leave a small window open so a coincident boundary with correct incidence can win.
+        best = bestLocal.t;
+        tm = std::min(tmax, best + std::max(error, bestError));
     });
     if (!found) return false;
     const Boundary& b = boundaries_[bestB];
     hit.t = bestLocal.t;
     hit.pLocal = bestLocal.p;
     hit.nLocal = bestLocal.n;
-    hit.p = b.toWorld.point(bestLocal.p);
+    hit.p = bestNearSphere ? ray.at(hit.t) : b.toWorld.point(bestLocal.p);
     hit.n = normalize(b.toWorld.vector(bestLocal.n));
     hit.boundary = bestB;
     hit.prim = bestLocal.prim;
+    hit.error = bestError;
+    hit.ambiguousContact = ambiguous;
     return true;
 }
 

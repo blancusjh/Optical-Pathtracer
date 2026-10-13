@@ -1,0 +1,13 @@
+# A finite emitter makes particle transport hit a physical sensor; a black cover
+# in the sensor plane must absorb all that flux before detection. Raising only
+# the sensor by 1 mm gives a positive control. Sky is absent.
+units = m
+world { sky = none }
+material black { type = absorber }
+sensor Screen { size = (1,1) resolution = (4,4) position = (0,0,0)
+ axis = (0,0,1) up = (0,1,0) }
+body Cover { type = sheet size = (100,100) position = (0,0,0)
+ axis = (0,0,1) up = (0,1,0) material = black }
+body Source { type = disk radius = .1 position = (0,0,.2)
+ axis = (0,0,-1) material = black emission = 1 }
+render { detector = Screen integrator = light spp = 128 seed = 11 max_depth = 2 }

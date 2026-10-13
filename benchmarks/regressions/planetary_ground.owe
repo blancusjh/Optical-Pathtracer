@@ -1,0 +1,12 @@
+# Independent float32 planetary-surface diagnostic; no external assets.
+# Physical ground is z=-0.2. Replace Earth by the documented local box control.
+units = m
+world { sky = uniform(0.1)
+ sun { elevation = 45deg azimuth = 180deg luminance = 10 } }
+material soil { type = diffuse reflectance = rgb(0.3,0.3,0.3) }
+material marker { type = diffuse reflectance = rgb(0.7,0.15,0.1) }
+body Earth { type = sphere radius = 6371000 position = (0,0,-6371000.2) material = soil }
+body Witness { type = sphere radius = 0.05 position = (0,0,0.05) material = marker }
+observer Eye { position = (0,-0.7,0.4) look_at = (0,0,-0.1) up = (0,0,1)
+ fov = 35deg pupil = 0 resolution = (64,64) exposure = 0 white_balance = none }
+render { detector = Eye integrator = path spp = 16 seed = 7 max_depth = 8 }

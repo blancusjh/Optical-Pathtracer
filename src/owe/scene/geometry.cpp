@@ -392,6 +392,12 @@ bool WaveSurface::intersect(const Ray& ray, double tmin, double tmax, LocalHit& 
         hit.p = p;
         hit.n = normalAt(p.x, p.y);
         hit.prim = 0;
+        double heightValue, gx, gy;
+        height(p.x, p.y, heightValue, gx, gy);
+        hit.error = std::abs(p.z - heightValue) / std::sqrt(1 + gx * gx + gy * gy);
+        if (ray.departedPrimitive != 0xFFFFFFFEu &&
+            std::abs(tr * dot(d, hit.n)) <= ray.departureError + hit.error &&
+            dot(d, hit.n) * dot(d, ray.departedNormal) >= 0) return false;
         return true;
     };
     for (int i = 0; i < 4096 && t < tb; ++i) {
@@ -401,10 +407,12 @@ bool WaveSurface::intersect(const Ray& ray, double tmin, double tmax, LocalHit& 
             double tn = t;
             for (int k = 0; k < 8; ++k) {
                 const double fn = f(tn, dfdt);
-                if (std::abs(fn) < tol || std::abs(dfdt) < 1e-12) break;
+                const double arithmeticTol = 8 * std::numeric_limits<double>::epsilon() *
+                    std::max({1e-12, amp_, maxAbsComponent(ray.at(tn))});
+                if (std::abs(fn) < arithmeticTol || std::abs(dfdt) < 1e-12) break;
                 tn -= fn / dfdt;
             }
-            if (tn >= t - 1e3 * tol && std::abs(f(tn, dfdt)) < 1e3 * tol) return accept(tn);
+            if (tn >= t - 1e3 * tol && std::abs(f(tn, dfdt)) < 1e3 * tol && accept(tn)) return true;
             step = std::max(minStep, 2 * std::abs(ft) / L);  // a grazing approach: move past it
         }
         const double tn = std::min(t + step, tb);
@@ -418,7 +426,7 @@ bool WaveSurface::intersect(const Ray& ray, double tmin, double tmax, LocalHit& 
                 const double fm = f(m, dm);
                 if ((fm < 0) == (fa < 0)) { a = m; fa = fm; } else { b = m; }
             }
-            return accept(0.5 * (a + b));
+            if (accept(0.5 * (a + b))) return true;
         }
         t = tn;
         ft = fn;
@@ -817,8 +825,17 @@ bool TorusPatchShape::intersect(const Ray& ray, double tmin, double tmax, LocalH
     };
     const int N = 64;
     double tPrev = ta, fPrev = F(ta);
-    for (int i = 1; i <= N; ++i) {
-        const double tCur = ta + (tb - ta) * i / N;
+    int sample = 1;
+    double firstStep = ray.departedPrimitive == 0xFFFFFFFEu ? tb - ta :
+        std::min((tb - ta) / N, std::max(std::ldexp((tb - ta) / N, -60),
+            64 * std::numeric_limits<double>::epsilon() * (1 + std::abs(ta))));
+    for (int guard = 0; sample <= N && guard < N + 64; ++guard) {
+        const double uniform = ta + (tb - ta) * sample / N;
+        const double tCur = std::min(uniform, ta + firstStep);
+        // A departure's self-root and next grazing root can lie in the same
+        // uniform interval. Resolve its beginning without moving the ray anchor.
+        if (tCur == uniform) ++sample;
+        else firstStep = std::min(tb - ta, firstStep * 2);
         const double fCur = F(tCur);
         if ((fPrev <= 0) != (fCur <= 0) || fCur == 0) {
             double lo = tPrev, hi = tCur, flo = fPrev;
@@ -1014,6 +1031,36 @@ MeshShape::MeshShape(std::vector<Vec3> positions, std::vector<std::array<uint32_
     bvh_.build(boxes);
 }
 
+uint32_t MeshShape::sampledPrimitive(double u) const {
+    const auto& cdf = areaCdf();
+    if (cdf.empty()) return ~0u;
+    return uint32_t(std::min(size_t(std::lower_bound(cdf.begin(), cdf.end(), u * area()) - cdf.begin()),
+                             cdf.size() - 1));
+}
+
+bool MeshShape::sameFace(uint32_t first, uint32_t second) const {
+    if (first >= tris_.size() || second >= tris_.size()) return false;
+    if (first == second) return true;
+    const auto& a = tris_[first];
+    const auto& b = tris_[second];
+    auto sharedVertex = [&](uint32_t v) {
+        for (uint32_t u : a)
+            if (pos_[v].x == pos_[u].x && pos_[v].y == pos_[u].y && pos_[v].z == pos_[u].z) return true;
+        return false;
+    };
+    int shared = 0;
+    for (uint32_t v : b)
+        if (sharedVertex(v)) ++shared;
+    if (shared < 2) return false;
+    const Vec3 normal = cross(pos_[a[1]] - pos_[a[0]], pos_[a[2]] - pos_[a[0]]);
+    if (dot(normal, cross(pos_[b[1]] - pos_[b[0]], pos_[b[2]] - pos_[b[0]])) <= 0) return false;
+    // Adjacent exactly coplanar triangles form the same face. Do not use a
+    // distance tolerance: a distinct parallel layer can be closer than it.
+    for (uint32_t v : b)
+        if (!sharedVertex(v) && dot(normal, pos_[v] - pos_[a[0]]) != 0) return false;
+    return true;
+}
+
 bool MeshShape::intersect(const Ray& r, double tmin, double tmax, LocalHit& h) const {
     bool found = false;
     double best = tmax;
@@ -1033,6 +1080,10 @@ bool MeshShape::intersect(const Ray& r, double tmin, double tmax, LocalHit& h) c
         if (v < 0 || u + v > 1) return;
         double tt = dot(e2, qv) * inv;
         if (tt <= tmin || tt >= tm) return;
+        // Near a grazing departure, t can be large even for a tiny plane error.
+        // Primitive identity and normal displacement identify the actual self face.
+        if (sameFace(r.departedPrimitive, i) &&
+            std::abs(dot(tv, normalize(cross(e1, e2)))) <= r.departureError) return;
         tm = tt;
         found = true;
         h.t = tt;
@@ -1042,6 +1093,7 @@ bool MeshShape::intersect(const Ray& r, double tmin, double tmax, LocalHit& h) c
     const auto& t = tris_[h.prim];
     h.p = r.at(h.t);
     h.n = normalize(cross(pos_[t[1]] - pos_[t[0]], pos_[t[2]] - pos_[t[0]]));
+    h.error = std::abs(dot(h.p - pos_[t[0]], h.n));
     return true;
 }
 

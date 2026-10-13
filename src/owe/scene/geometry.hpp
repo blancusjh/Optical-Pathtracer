@@ -19,6 +19,7 @@ struct LocalHit {
     Vec3 p;
     Vec3 n;  // unit geometric normal, oriented to the shape's front side
     uint32_t prim = 0;
+    double error = 0;  // normal displacement left by a numerical surface solve
 };
 
 class Shape {
@@ -27,6 +28,10 @@ public:
     virtual bool intersect(const Ray& r, double tmin, double tmax, LocalHit& h) const = 0;
     virtual AABB bounds() const = 0;
     virtual std::string describe() const = 0;
+
+    // Analytic shapes use orientation to identify a face; meshes refine by topology.
+    virtual bool sameFace(uint32_t first, uint32_t second) const { return true; }
+    virtual uint32_t sampledPrimitive(double u) const { return 0; }
 
     // Emitter sampling support.
     virtual bool canSample() const { return false; }
@@ -310,6 +315,8 @@ public:
     const std::vector<std::array<uint32_t, 3>>& triangles() const { return tris_; }
     const Bvh& bvh() const { return bvh_; }
     const std::vector<double>& areaCdf() const { return cdf_; }
+    bool sameFace(uint32_t a, uint32_t b) const override;
+    uint32_t sampledPrimitive(double u) const override;
     const std::vector<Corners>& shadingNormals() const { return normals_; }  // empty: flat
     const std::vector<UvCorners>& uvs() const { return uvs_; }                // empty: none
 

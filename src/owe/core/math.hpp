@@ -48,6 +48,11 @@ inline Vec3 vmin(const Vec3& a, const Vec3& b) { return {std::min(a.x, b.x), std
 inline Vec3 vmax(const Vec3& a, const Vec3& b) { return {std::max(a.x, b.x), std::max(a.y, b.y), std::max(a.z, b.z)}; }
 inline double maxAbsComponent(const Vec3& a) { return std::max({std::abs(a.x), std::abs(a.y), std::abs(a.z)}); }
 
+// Conservative absolute bound for contact-anchor arithmetic, not a physical gap.
+inline double contactError(double scale) {
+    return 64 * std::numeric_limits<double>::epsilon() * std::max(1e-12, scale);
+}
+
 // Mirror reflection of an incident propagation direction d about normal n.
 inline Vec3 reflect(const Vec3& d, const Vec3& n) { return d - 2.0 * dot(d, n) * n; }
 
@@ -143,6 +148,14 @@ struct Transform {
 
 struct Ray {
     Vec3 o, d;
+    // Spawned rays retain their surface anchor. Only the departing boundary's numerical
+    // self root is excluded; a distinct contacting boundary must remain visible.
+    uint32_t departedBoundary = 0xFFFFFFFEu;
+    uint32_t regionHint = 0xFFFFFFFEu;
+    Vec3 departedNormal{};
+    uint32_t departedPrimitive = 0xFFFFFFFEu;
+    double departureError = 0;
+    bool forwardOnly = false;  // exact nonnegative interval for endpoint-local proofs
     Vec3 at(double t) const { return o + d * t; }
 };
 

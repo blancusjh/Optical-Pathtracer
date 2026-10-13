@@ -1,0 +1,33 @@
+# Cached-vertex visibility oracle: a finite lamp illuminates a diffuse patch
+# inside a sealed black enclosure. No light can escape to the near receiver.
+# The floor is 4 m before the distant patch, inside the legacy 10 m GPU
+# endpoint exclusion at 1e6 m, but beyond the local contact uncertainty.
+# Open control moves ONLY Floor.position to (200,0,999996).
+# The lamp emits upward only, so even the open receiver needs a diffuse bounce.
+units = m
+world { up = (0,1,0) sky = none }
+material white { type = diffuse reflectance = 0.8 }
+material black { type = absorber }
+body Receiver { type = sheet size = (0.4,0.4) position = (0,0,0)
+ axis = (0,0,1) up = (0,1,0) material = white }
+body FarPatch { type = sheet size = (40,40) position = (0,0,1000000)
+ axis = (0,0,-1) up = (0,1,0) material = white }
+body Lamp { type = sheet size = (4,4) position = (10,0,999998)
+ axis = (0,0,1) up = (0,1,0) material = black
+ emission = 1e12 emission_sides = front }
+body Floor { type = sheet size = (100,100) position = (0,0,999996)
+ axis = (0,0,1) up = (0,1,0) material = black }
+body Ceiling { type = sheet size = (100,100) position = (0,0,1000006)
+ axis = (0,0,-1) up = (0,1,0) material = black }
+body Left { type = sheet size = (100,10) position = (-50,0,1000001)
+ axis = (1,0,0) up = (0,0,1) material = black }
+body Right { type = sheet size = (100,10) position = (50,0,1000001)
+ axis = (-1,0,0) up = (0,0,1) material = black }
+body Front { type = sheet size = (100,10) position = (0,-50,1000001)
+ axis = (0,1,0) up = (0,0,1) material = black }
+body Back { type = sheet size = (100,10) position = (0,50,1000001)
+ axis = (0,-1,0) up = (0,0,1) material = black }
+observer Eye { position = (0,-0.1,0.3) look_at = (0,0,0) up = (0,1,0)
+ fov = 20deg pupil = 0 resolution = (16,16)
+ exposure = 0 white_balance = none }
+render { detector = Eye integrator = vcm spp = 32 max_depth = 1 seed = 11 }

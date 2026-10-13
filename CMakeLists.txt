@@ -149,6 +149,7 @@ add_executable(owe_tests
   tests/test_references.cpp
   tests/test_shading.cpp
   tests/test_vcm.cpp
+  tests/test_far_visibility.cpp
   tests/test_models.cpp
 )
 target_link_libraries(owe_tests PRIVATE owe)
