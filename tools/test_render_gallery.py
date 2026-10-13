@@ -24,6 +24,8 @@ class GalleryTests(unittest.TestCase):
         self.prefix.parent.mkdir()
         for ext in gallery.EXTENSIONS:
             Path(str(self.prefix) + ext).write_text('fixture' + ext)
+        Path(str(self.prefix) + '.json').write_text(json.dumps({
+            'statistics': {'region_inconsistencies': 0, 'leaks': 0}}))
         with mock.patch.object(benchmark, 'ROOT', self.root):
             assets = benchmark.asset_identity(self.root / 'scene.owe')
         self.data = {'schema': 1, 'name': 'fixture', 'identity': {'scene': 'scene.owe', 'assets': assets,
@@ -68,6 +70,34 @@ class GalleryTests(unittest.TestCase):
         self.assertTrue(Path(str(self.prefix) + '.pfm').exists())
         self.assertFalse((destination / 'fixture.pfm').exists())
         self.assertEqual((destination / 'fixture.png').read_bytes(), Path(str(self.prefix) + '.png').read_bytes())
+
+    def test_promotion_rejects_bad_or_missing_transport_diagnostics(self):
+        destination = self.root / 'public'
+        for stats in ({'region_inconsistencies': 1, 'leaks': 0},
+                      {'region_inconsistencies': 0, 'leaks': 1}, {},
+                      {'region_inconsistencies': False, 'leaks': 0}):
+            with self.subTest(stats=stats):
+                Path(str(self.prefix) + '.json').write_text(json.dumps({'statistics': stats}))
+                self.data['artifacts']['.json'] = benchmark.file_digest(str(self.prefix) + '.json')
+                Path(str(self.prefix) + '.gallery.json').write_text(json.dumps(self.data))
+                with self.assertRaisesRegex(ValueError, 'recorded zero'):
+                    gallery.promote_entry(self.prefix, self.entry, destination, 'reviewed')
+                self.assertFalse(destination.exists())
+
+    def test_batch_preflight_rejects_all_before_copying(self):
+        manifest = self.root / 'manifest.json'
+        second = {**self.entry, 'name': 'blocked', 'rights': 'unresolved'}
+        manifest.write_text(json.dumps({'entries': [self.entry, second]}))
+        destination = self.root / 'public'
+        with mock.patch.object(gallery, 'verified_archive', return_value=self.data), \
+                mock.patch.object(gallery, 'promote_entry') as promote, \
+                contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                gallery.main(['fixture', 'blocked', '--manifest', str(manifest),
+                              '--archive', str(self.prefix.parent), '--destination', str(destination),
+                              '--promote', '--review-note', 'reviewed'])
+            promote.assert_not_called()
+        self.assertFalse(destination.exists())
 
     def test_detector_change_rejects_old_archive_for_check_and_promotion(self):
         self.entry['arguments'] += ['--detector', 'Room']

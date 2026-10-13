@@ -129,12 +129,22 @@ def render_entry(prefix, entry, options, binary, reuse, asset_cache):
     print(f"{entry['name']}: staged; {record['render_seconds']:.3f}s transport, {wall:.3f}s wall", flush=True)
 
 
-def promote_entry(prefix, entry, destination, review_note):
+def promotion_data(prefix, entry, review_note):
     if not review_note.strip():
         raise ValueError('promotion requires --review-note describing image/physics review')
     if entry.get('rights') != 'cleared':
         raise ValueError('promotion requires cleared source rights; retain this image in its local archive')
     data = verified_archive(prefix, entry)
+    record = json.loads(Path(str(prefix) + '.json').read_text())
+    stats = record.get('statistics', {})
+    for field in ('region_inconsistencies', 'leaks'):
+        if type(stats.get(field)) is not int or stats[field] != 0:
+            raise ValueError('promotion requires recorded zero ' + field + '; retain this diagnostic capture locally')
+    return data
+
+
+def promote_entry(prefix, entry, destination, review_note):
+    data = promotion_data(prefix, entry, review_note)
     data['source_rights'] = entry['rights']
     data['review'] = {'note': review_note, 'utc': datetime.datetime.now(datetime.timezone.utc).isoformat()}
     destination.mkdir(parents=True, exist_ok=True)
@@ -175,9 +185,7 @@ def main(argv=None):
         binary = args.binary.resolve()
         if args.promote:
             for e in selected:
-                if not args.review_note.strip():
-                    raise ValueError('all promotions need an explicit --review-note')
-                verified_archive(archive / e['name'], e)
+                promotion_data(archive / e['name'], e, args.review_note)
         cache = {}
         for e in selected:
             prefix = archive / e['name']
