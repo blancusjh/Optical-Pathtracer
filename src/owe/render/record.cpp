@@ -28,12 +28,11 @@ std::string jsonEscape(const std::string& s) {
 }
 }  // namespace
 
-std::string renderMetadataJSON(const Scene& scene, const Renderer& r, const RenderSettings& s) {
+std::string renderMetadataJSON(const Scene& scene, const Renderer& r, const RenderSettings& s, const Image& img) {
     const World& w = scene.world;
     std::ostringstream os;
     char hash[32];
     std::snprintf(hash, sizeof hash, "%016llx", (unsigned long long)fnv1a(scene.sourceText));
-    Image img = r.resolve();
     os << "{\n";
     os << "  \"engine\": \"optical-world-engine " << OWE_VERSION << "\",\n";
     os << "  \"backend\": \"" << jsonEscape(r.backend()) << "\",\n";

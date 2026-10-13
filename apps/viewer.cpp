@@ -549,7 +549,7 @@ private:
                     settings.autoExposure = save->autoEv;
                     settings.whiteBalance = save->wb;
                     settings.tone = save->tone == Tone::AgX ? "agx" : "standard";
-                    std::ofstream(save->prefix + ".json") << renderMetadataJSON(*scene, *R, settings);
+                    std::ofstream(save->prefix + ".json") << renderMetadataJSON(*scene, *R, settings, img);
                     msg = "saved " + save->prefix + ".png, .pfm, .json";
                 } catch (const std::exception& e) {
                     msg = std::string("save failed: ") + e.what();

@@ -9,7 +9,8 @@
 
 namespace owe {
 
-std::string renderMetadataJSON(const Scene& scene, const Renderer& r, const RenderSettings& s);
+// Use the image actually written, without resolving (and reading back) the renderer again.
+std::string renderMetadataJSON(const Scene& scene, const Renderer& r, const RenderSettings& s, const Image& img);
 uint64_t fnv1a(const std::string& s);
 
 }  // namespace owe

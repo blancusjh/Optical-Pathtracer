@@ -282,7 +282,7 @@ int cmdRender(const Args& a) {
         Image img = R.resolve();
         writePNG(out + ".png", img, rs.exposure, rs.autoExposure, rs.whiteBalance, tone);
         writePFM(out + ".pfm", img);
-        std::ofstream(out + ".json") << renderMetadataJSON(scene, R, rs);
+        std::ofstream(out + ".json") << renderMetadataJSON(scene, R, rs, img);
         std::fprintf(stderr, "pass %d/%d: %lld spp, %.2f s, mean Y %.5g\n", p + 1, passes, R.samplesPerPixel(),
                      R.seconds(), img.meanY());
     }
@@ -903,7 +903,7 @@ int cmdStudio(const Args& a) {
                     Image img = R->resolve();
                     writePNG(out + ".png", img, exposure, autoExp, whiteBalance, tone);
                     writePFM(out + ".pfm", img);
-                    std::ofstream(out + ".json") << renderMetadataJSON(*scene, *R, R->settings());
+                    std::ofstream(out + ".json") << renderMetadataJSON(*scene, *R, R->settings(), img);
                     std::printf("  %lld spp  %.1f s  mean Y %.5g  -> %s.png\n", R->samplesPerPixel(), R->seconds(), img.meanY(),
                                 out.c_str());
                     std::fflush(stdout);
