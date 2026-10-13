@@ -1,0 +1,18 @@
+{
+  "canonical": [
+    {"name": "the_lens", "path": "scenes/the_lens.owe", "detector": "Eye"},
+    {"name": "prism_in_sunlight", "path": "scenes/prism_in_sunlight.owe", "detector": "Eye"},
+    {"name": "glass_of_water", "path": "scenes/glass/glass_of_water.owe", "detector": "Eye"},
+    {"name": "study_magnifier", "path": "scenes/the_study.owe", "detector": "Magnifier"},
+    {"name": "the_telescope", "path": "scenes/the_telescope.owe", "detector": "Eyepiece"},
+    {"name": "study_camera", "path": "scenes/the_study.owe", "detector": "Cam"},
+    {"name": "observatory_saturn", "path": "scenes/the_observatory.owe", "detector": "SaturnEyepiece"},
+    {"name": "camera_obscura", "path": "scenes/camera_obscura.owe", "detector": "Inside"}
+  ],
+  "scans": [
+    {"name": "the_kunstkammer", "path": "scenes/the_kunstkammer.owe", "detector": "Room", "integrator": "path", "max_depth": 12},
+    {"name": "the_gregorian", "path": "scenes/the_gregorian.owe", "detector": "Beside", "integrator": "path", "max_depth": 16},
+    {"name": "the_peacock_lamp", "path": "scenes/the_peacock_lamp.owe", "detector": "Room", "integrator": "vcm", "max_depth": 16},
+    {"name": "the_invisible_window", "path": "scenes/the_invisible_window.owe", "detector": "Wall", "integrator": "sppm", "max_depth": 10, "photons": 16}
+  ]
+}
