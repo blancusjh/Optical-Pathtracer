@@ -164,6 +164,19 @@ if(OWE_GPU)
   set_tests_properties(backends_software_traversal PROPERTIES ENVIRONMENT "OWE_GPU_RAY_QUERY=0")
 endif()
 add_test(NAME layering COMMAND ${CMAKE_COMMAND} -DROOT=${CMAKE_SOURCE_DIR} -P ${CMAKE_SOURCE_DIR}/cmake/CheckLayers.cmake)
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+add_test(NAME python_tools COMMAND ${Python3_EXECUTABLE} -m unittest discover -s tools -p test_*.py
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+add_test(NAME documentation_links COMMAND ${Python3_EXECUTABLE} tools/check_docs.py
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+add_test(NAME python_scene_assets COMMAND ${Python3_EXECUTABLE} -m unittest discover -s tools/scene_assets -p test_*.py
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+if(OWE_GPU)
+  add_test(NAME gpu_transport COMMAND owe_tests gpu_contact_ backends_surface_sensor_respects_exact_opaque_contact
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+  set_tests_properties(gpu_transport PROPERTIES TIMEOUT 1800
+    ENVIRONMENT "OWE_REQUIRE_GPU=1;OWE_GPU_RAY_QUERY=0")
+endif()
 if(OWE_VIEWER)
   if(ZLIB_FOUND)
     add_executable(owe_viewer_display_tests tests/viewer_display.cpp apps/viewer.cpp)
