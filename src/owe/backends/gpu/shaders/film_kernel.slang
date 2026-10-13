@@ -10,8 +10,8 @@ struct FilmPixel {
 groupshared uint4 groupStats[256];
 
 void accumulate(inout float4 sum, inout float4 compensation, float4 value) {
-    float4 y = value - compensation;
-    float4 t = sum + y;
+    precise float4 y = value - compensation;
+    precise float4 t = sum + y;
     compensation = (t - sum) - y;
     sum = t;
 }

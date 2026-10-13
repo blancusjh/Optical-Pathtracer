@@ -330,16 +330,14 @@ float4 sigmaT(uint medium, Wavelengths wl) {
 
 // Transmittance along a straight segment through null boundaries; 0 if blocked. finalRegion receives
 // the region the segment ends in.
+// Scalar parameters keep this non-inlined kernel boundary out of Function-storage
+// aggregates, which caused severe driver spilling in the particle kernel. Public
+// visibility callers use the single Endpoint adapter below.
 [noinline]
-float4 transmittanceSpawn(Endpoint start, float3 dir, float dist, Wavelengths wl,
-                          out uint finalRegion, Endpoint destination) {
-    float3 o = start.p, normal = start.normal;
-    uint region = start.region, departed = start.boundary, departedPrimitive = start.primitive;
-    float scale = start.scale;
-    uint endpointRegion = destination.region, endpointBoundary = destination.boundary;
-    uint endpointPrimitive = destination.primitive;
-    float3 endpointNormal = destination.normal, endpointPoint = destination.p;
-    float endpointError = destination.error;
+float4 walkTransmittance(float3 o, uint region, float3 dir, float dist, Wavelengths wl, float scale,
+                         out uint finalRegion, uint departed, float3 normal, uint endpointRegion,
+                         uint endpointBoundary, float3 endpointNormal, float endpointError,
+                         uint departedPrimitive, uint endpointPrimitive, float3 endpointPoint) {
     finalRegion = region;
     float4 Tr = 1;
     float remaining = dist;
@@ -440,6 +438,14 @@ float4 transmittanceSpawn(Endpoint start, float3 dir, float dist, Wavelengths wl
     finalRegion = region;
     return 0;  // guard exhaustion cannot certify the untraced remainder
 }
+float4 transmittanceSpawn(Endpoint start, float3 dir, float dist, Wavelengths wl,
+                          out uint finalRegion, Endpoint destination) {
+    return walkTransmittance(start.p, start.region, dir, dist, wl, start.scale, finalRegion,
+                             start.boundary, start.normal, destination.region, destination.boundary,
+                             destination.normal, destination.error, start.primitive,
+                             destination.primitive, destination.p);
+}
+
 float4 transmittance(float3 o, uint region, float3 dir, float dist, Wavelengths wl, float scale, out uint finalRegion) {
     return transmittanceSpawn(endpoint(o, region, scale, kGpuNone, float3(0), kGpuNone), dir, dist, wl, finalRegion, endpoint(float3(0), kGpuNone));
 }
@@ -457,6 +463,7 @@ float4 transmittance(float3 o, uint region, float3 dir, float dist, Wavelengths 
 
 // Finite connections preserve both exact endpoint anchors. There is no scalar exclusion
 // interval: only the actual destination face is excluded, after checking its neighbors.
+
 float4 connectionTransmittance(Endpoint source, Endpoint target, Wavelengths wl) {
     float3 delta = source.p - target.p;
     float distance = length(delta);
