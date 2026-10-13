@@ -1,0 +1,11 @@
+Model Information:
+* title:	The Jagiellonian Globe
+* source:	https://sketchfab.com/3d-models/the-jagiellonian-globe-55a10e6015af4447a66f34b272d4bf1a
+* author:	Virtual Museums of Małopolska (https://sketchfab.com/WirtualneMuzeaMalopolski)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "The Jagiellonian Globe" (https://sketchfab.com/3d-models/the-jagiellonian-globe-55a10e6015af4447a66f34b272d4bf1a) by Virtual Museums of Małopolska (https://sketchfab.com/WirtualneMuzeaMalopolski) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

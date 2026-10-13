@@ -1,0 +1,24 @@
+Independent replay of first captured photon, 2026-10-09
+
+Input: ../sppm_smooth_glass_debug_20261009/decoded_debug.json. No GPU work or shared source/build changes. A parent-authorized tiny isolated CPU helper links existing libraries to export flattenScene output; source, helper executable, and exact values/bits are preserved here.
+
+Flatten result: Ball owner record 1 and group record 2 toLocal/toWorld are bitwise identical. Both scale=1.7435349225997925. Global slots 923/958 are original triangles 40/69, owner 1; their vertices exactly match OBJ positions cast to float32.
+
+triangleNormal uses the production shorter-edge choice. Plain float32 replay reproduces every captured departedNativeTriangleNormal bit. pointOnTrianglePlane reproduces every captured projectedNativeAnchor bit: x changes from 0.1658676415681839 to 0.1658676713705063 (+29.8023224 nm); y/z unchanged.
+
+Captured hitLocalPoint equals projectedNativeAnchor + directionNative * captured t bitwise, for both plain float32 and representative fmaf arithmetic. Unprojected origin at captured t has x=0.16630689799785614, which is 29.8023224nm smaller than captured x=0.16630692780017853. Thus the recorded point is consistent with the corrected/projected ray, not the unprojected one. External replay cannot by itself identify the actual traversal branch; owner is adding branch instrumentation.
+
+Direction dot recorded departed normal: 6.97374344e-6 plain float32, 6.97951464e-6 fused, 6.98019049e-6 double arithmetic of captured operands. Direction dot hit normal ≈0.0638083. The departure is extremely grazing but faces outward; this explains the large numerical lag/spawn interval.
+
+Plane root and Moller membership on 69:
+- Original native ray: t=0.001517014112 plain float32; Moller v=+1.53723067e-6 (inside). Representative fused t=0.001517006662,v=+1.46827847e-6 (inside).
+- Corrected native ray: t=0.001516652410 plain float32; Moller v=-2.59219291e-6 (outside). Representative fused t=0.001516642864,v=-2.67119208e-6 (outside).
+- Captured t=0.001516646007 falls between the corrected roots.
+- Double geometry evaluated on exact captured float32 vertices/origin/direction gives original v=+1.40838017e-6 versus corrected v=-2.62693824e-6, agreeing on sign.
+- Replayed lagged world query also accepts 69; its rounded ray is distinct from the corrected native ray. Absolute lag differs with dot contraction because departure is almost tangent.
+
+Captured point projected barycentrics: 40 edge coefficient+2.73420666e-6, 69 edge coefficient-2.49072386e-6. A single final native point round-to-nearest perturbation has bound 1.84396018e-7 for 40's coefficient and 1.88975083e-7 for 69's (about 13x smaller than the 69 sign margin). These bounds are computed from the triangle barycentric gradients and half an ULP of each point coordinate; they exclude earlier world/native anchor uncertainty and do not certify all compiler contraction schedules. Plane residual is+14.0303nm on 40 and-1.53204nm on 69, so describe it as barycentrically inside40/outside69, not literally on 40. Captured positionalError 1.66276448 µm exceeds these local displacements.
+
+Conclusion: triangle membership proved for the original/lagged ray cannot certify the ray after native anchor projection. Robust correction must validate membership on the actual corrected ray while retaining genuine positive parallel/opposite faces and shared-edge contacts. No production correction is selected by this replay; no assertion was weakened.
+
+Artifacts: flatten_exact.json, replay_photon.py/replayed_photon.json, point_rounding_bounds.json, dump_flatten.cpp/dump_flatten_cpu. Plain and representative fused replays use the same production formulas; fmaf comes from libm for single-rounding operations.

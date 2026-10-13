@@ -1,0 +1,116 @@
+[ RUN  ] finite_detector_connection_preserves_reciprocal_region_attenuation
+[  OK  ] finite_detector_connection_preserves_reciprocal_region_attenuation (0.00 s)
+[ RUN  ] beer_lambert_attenuation_through_index_matched_slab
+[  OK  ] beer_lambert_attenuation_through_index_matched_slab (0.00 s)
+[ RUN  ] gpu_scene_layout_is_flat_and_aligned
+[  OK  ] gpu_scene_layout_is_flat_and_aligned (3.07 s)
+[ RUN  ] gpu_planetary_sphere_frame_preserves_height_and_observer_rebasing
+[  OK  ] gpu_planetary_sphere_frame_preserves_height_and_observer_rebasing (0.00 s)
+[ RUN  ] gpu_planetary_sphere_preserves_nearby_occlusion
+[  OK  ] gpu_planetary_sphere_preserves_nearby_occlusion (130.67 s)
+[ RUN  ] gpu_planetary_sphere_keeps_stable_distant_origin_roots
+    far-origin sphere surface meanY=0.30000067, expected=0.3
+    far-origin Earth/pinhole surface meanY=0.0027513322, expected=0.002970297
+[  OK  ] gpu_planetary_sphere_keeps_stable_distant_origin_roots (0.72 s)
+[ RUN  ] gpu_contact_glass_support_preserves_contact_and_resolved_gaps
+    [gpu contact 0.05] mean 0.24550863, inconsistencies 0, leaks 0
+    [gpu contact 0.0500001] mean 0.24550863, inconsistencies 0, leaks 0
+    [gpu contact 0.0501] mean 0.245923583, inconsistencies 0, leaks 0
+    [gpu contact 0.0499] mean 0.168389748, inconsistencies 23220, leaks 0
+[  OK  ] gpu_contact_glass_support_preserves_contact_and_resolved_gaps (1.46 s)
+[ RUN  ] gpu_contact_spawn_preserves_resolved_thin_same_boundary_exit
+    [gpu thin contact] mean 0.367669591 expected 0.367879441, inconsistencies 0, leaks 0
+[  OK  ] gpu_contact_spawn_preserves_resolved_thin_same_boundary_exit (0.35 s)
+[ RUN  ] gpu_contact_spawn_preserves_distinct_parallel_mesh_face
+    [parallel mesh open] mean 0.999723427, issues 0, leaks 0
+    [parallel mesh covered] mean 0, issues 0, leaks 0
+[  OK  ] gpu_contact_spawn_preserves_distinct_parallel_mesh_face (0.70 s)
+[ RUN  ] gpu_contact_spawn_preserves_nearest_distinct_face_in_one_mesh
+    [three films] mean 0.0497896136 expected 0.0497870684, issues 0, leaks 0
+[  OK  ] gpu_contact_spawn_preserves_nearest_distinct_face_in_one_mesh (0.36 s)
+[ RUN  ] shading_smooth_glass_mesh_refracts_like_the_glass_ball
+    against the glass ball (block L1): flat 0.0192, smooth 0.0057; smooth inconsistencies 0
+[  OK  ] shading_smooth_glass_mesh_refracts_like_the_glass_ball (175.59 s)
+[ RUN  ] vcm_cache_overflow_replays_the_pass_without_losing_vertices
+vcm: light vertex cache (4 vertices) overflowed; replaying pass with 628 vertices
+vcm: light vertex cache (628 vertices) overflowed; replaying pass with 1248 vertices
+vcm: light vertex cache (1248 vertices) overflowed; replaying pass with 1872 vertices
+    replay image max error 0 (tolerance 0)
+vcm: light vertex cache (4 vertices) overflowed; replaying pass with 628 vertices
+vcm: light vertex cache (628 vertices) overflowed; replaying pass with 1212 vertices
+vcm: light vertex cache (1212 vertices) overflowed; replaying pass with 1818 vertices
+    replay image max error 1.49012e-08 (tolerance 4.3616e-06)
+[  OK  ] vcm_cache_overflow_replays_the_pass_without_losing_vertices (244.67 s)
+[ RUN  ] vcm_cache_overflow_rejects_a_bounded_allocation_and_can_recover
+vcm: light vertex cache (4 vertices) overflowed; replaying pass with 628 vertices
+vcm: light vertex cache (4 vertices) overflowed; replaying pass with 628 vertices
+vcm: light vertex cache (628 vertices) overflowed; replaying pass with 1212 vertices
+    replay image max error 3.97364e-08 (tolerance 4.28827e-06)
+[  OK  ] vcm_cache_overflow_rejects_a_bounded_allocation_and_can_recover (0.41 s)
+[ RUN  ] vcm_cached_connections_cannot_escape_a_sealed_far_enclosure
+    bdpt cached enclosure sealed 0, open 1.88095138, cache disabled 0
+    vcm cached enclosure sealed 0, open 1.55249752, cache disabled 0
+[  OK  ] vcm_cached_connections_cannot_escape_a_sealed_far_enclosure (2.30 s)
+[ RUN  ] vcm_cached_diffuse_packets_match_coloured_textures_and_shading_normals
+    bdpt front coloured diffuse channel 0 ratio 0.99992
+    bdpt front coloured diffuse channel 1 ratio 1.00006
+    bdpt front coloured diffuse channel 2 ratio 0.99960
+    vcm front coloured diffuse channel 0 ratio 0.99991
+    vcm front coloured diffuse channel 1 ratio 1.00004
+    vcm front coloured diffuse channel 2 ratio 0.99965
+    bdpt back coloured diffuse channel 0 ratio 1.00003
+    bdpt back coloured diffuse channel 1 ratio 1.00014
+    bdpt back coloured diffuse channel 2 ratio 0.99867
+    vcm back coloured diffuse channel 0 ratio 0.99999
+    vcm back coloured diffuse channel 1 ratio 1.00010
+    vcm back coloured diffuse channel 2 ratio 0.99856
+[  OK  ] vcm_cached_diffuse_packets_match_coloured_textures_and_shading_normals (2.97 s)
+[ RUN  ] vcm_camera_cie_keeps_xyz_normalization_after_dispersion
+    bdpt dispersive sky channel 0 ratio 0.99962
+    bdpt dispersive sky channel 1 ratio 1.00013
+    bdpt dispersive sky channel 2 ratio 0.99940
+    vcm dispersive sky channel 0 ratio 0.99962
+    vcm dispersive sky channel 1 ratio 1.00013
+    vcm dispersive sky channel 2 ratio 0.99940
+[  OK  ] vcm_camera_cie_keeps_xyz_normalization_after_dispersion (4.22 s)
+[ RUN  ] vcm_bdpt_and_vcm_draw_the_path_tracers_image
+    against path: bdpt mean 1.0001 (worst block 0.0009), vcm mean 0.9994 (worst block 0.0017)
+[  OK  ] vcm_bdpt_and_vcm_draw_the_path_tracers_image (19.38 s)
+[ RUN  ] vcm_sees_a_lens_caustic_through_a_glass_plate
+    through the plate: 0.9165 of the direct view (Fresnel: 0.9187)
+[  OK  ] vcm_sees_a_lens_caustic_through_a_glass_plate (8.34 s)
+[ RUN  ] vcm_keeps_a_glossy_reflection_as_camera_paths_do
+    at 64 samples against path × 1024: vcm relMSE 0.01135, path 0.1085; vcm mean 0.9969
+[  OK  ] vcm_keeps_a_glossy_reflection_as_camera_paths_do (9.04 s)
+[ RUN  ] backends_far_light_vertices_respect_near_observer_occlusion
+    [cpu light diffuser] blocked camera 0, particles 0, open 0.00283121938
+    [gpu light diffuser] blocked camera 0, particles 0, open 0.00299391507
+    [gpu bdpt diffuser] blocked camera 0, particles 0, open 0.00287147971
+    [gpu vcm diffuser] blocked camera 0, particles 0, open 0.00288451969
+[  OK  ] backends_far_light_vertices_respect_near_observer_occlusion (115.48 s)
+[ RUN  ] backends_far_emitters_respect_near_observer_occlusion
+    [cpu light emitter] blocked camera 0, particles 0, open 0.041292265
+    [gpu light emitter] blocked camera 0, particles 0, open 0.0410420723
+[  OK  ] backends_far_emitters_respect_near_observer_occlusion (1.13 s)
+[ RUN  ] backends_far_emitters_respect_source_end_occlusion
+    [cpu light] source-end blocked 0, open 0.328223861, beyond 0.328223861
+    [gpu light] source-end blocked 0, open 0.328324827, beyond 0.328324827
+[  OK  ] backends_far_emitters_respect_source_end_occlusion (1.14 s)
+[ RUN  ] backends_camera_nee_respects_source_end_occlusion
+    [cpu path] NEE source-end blocked 0, open 0.00254644605, beyond 0.00254644605
+    [gpu path] NEE source-end blocked 0, open 0.00254644599, beyond 0.00254644599
+    [gpu bdpt] NEE source-end blocked 0, open 0.00254708389, beyond 0.00254708389
+    [gpu vcm] NEE source-end blocked 0, open 0.00254708389, beyond 0.00254708389
+[  OK  ] backends_camera_nee_respects_source_end_occlusion (3.74 s)
+[ RUN  ] backends_surface_sensor_respects_exact_opaque_contact
+    [cpu] sensor contact 0, gap 0.0000001 m 3.14135048, analytic 3.14159265
+    [cpu] sensor contact 0, gap 0.001 m 3.14135048, analytic 3.14159265
+    [gpu] sensor contact 0, gap 0.0000001 m 3.14135061, analytic 3.14159265
+    [gpu] sensor contact 0, gap 0.001 m 3.14135061, analytic 3.14159265
+[  OK  ] backends_surface_sensor_respects_exact_opaque_contact (1.11 s)
+[ RUN  ] backends_particles_respect_surface_sensor_opaque_contact
+    [cpu light] finite-source sensor contact 0, separated 0.0877553515, diagnostics 0
+    [gpu light] finite-source sensor contact 0, separated 0.0864763951, diagnostics 0
+[  OK  ] backends_particles_respect_surface_sensor_opaque_contact (0.38 s)
+
+25/25 tests passed

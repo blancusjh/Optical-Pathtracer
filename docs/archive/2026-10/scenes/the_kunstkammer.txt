@@ -1,0 +1,213 @@
+Historical record, retained for provenance. Current state: ../../../STATUS.md
+
+10 OCTOBER 2026 — PROMOTED ROOM GALLERY CAPTURE
+
+Current local gallery: docs/gallery/kunstkammer_room.png, with native metadata
+in docs/gallery/kunstkammer_room.json and reviewed provenance in
+docs/gallery/kunstkammer_room.gallery.json.
+Raw image and logs: out/gallery/final_review_20261010_v1/kunstkammer_room.*.
+GPU path tracing, 2048 samples per pixel, 960 x 600, depth 12, seed 1, one pass.
+Transport: 629.193 s; process wall time: 666.588 s; mean Y: 0.0429199.
+Diagnostics: 337 region inconsistencies, 0 leaks; first event at DoorWall.surface.
+These remain unresolved. Local visual acceptance is not clean transport
+certification or a claim that the image is a fully converged reference.
+
+Composition: the complete horse, rider and lance have clearance, with the cabinet,
+red-covered table and cast silhouette establishing depth and a clear focal point.
+Lighting: physical daylight reaches the armour and floor; the strong cast shadow
+remains coherent. Fine grain and occasional bright speckles persist on the ceiling,
+upper wall and darker floor without concealing the main forms.
+Materials: steel, carved wood, cloth and stone read distinctly. The adopted fitted
+window joinery retains the aperture and exposed sill while removing audited overlaps.
+No denoising, retouching, source-power change or artificial fill was used for this capture.
+
+Portable current records: benchmarks/results/20261010_gallery.json and
+benchmarks/results/20261009_gallery_engine.json.
+Asset installation: docs/GALLERY_WORKFLOW.md (Curated scene asset setup).
+Credits and source records: docs/ASSET_CREDITS.md and docs/assets/.
+
+--- HISTORICAL CURATION AND CAPTURES — 7–9 OCTOBER 2026 ---
+The dated reviews below preserve earlier construction decisions and captures.
+Their "final", pending-map and work-in-progress wording describes that earlier
+state; current promoted capture and limitations are recorded above.
+
+CURATION — 7 October 2026, work in progress
+References: Holbein, The Ambassadors; Vermeer, The Astronomer;
+Hammershoi, Interior with Sunlight on the Floor.
+
+Opened baseline_room.png (640x400, GPU path 64 spp, 1.73s):
+Composition: cropped lance/window outweigh the collection. Move camera back,
+expand room depth, give mounted armour its own clear silhouette.
+Light: visible armour receives almost no sun. Widen west aperture and aim
+16-degree afternoon sun across the armour's exposed flank.
+Materials: procedural wall/cloth and one conductor for cloth/steel are false.
+Replace environment with curated image materials; classify scan triangles.
+
+Opened review_01.png (640x400, GPU path 256 spp, 6.66s):
+Composition: foreground table clipped below, too detached from armour.
+Lower camera centre and slightly widen field, retaining level verticals.
+Light: sun reaches armour; cabinet and upper wall remain illegible.
+Increase real sky luminance threefold, preserving direct sunlight as key.
+Materials: fabric_pattern_07 reads as a checked kitchen cloth. Replace with
+Poly Haven quatrefoil_jacquard_fabric, burgundy brocade at .282m repeat.
+
+Owner update: all scan references restored to original-resolution images.
+No downscaled scan images retained. Poly Haven maximum-resolution colour,
+OpenGL normal and roughness sets downloaded for pending engine map support.
+Pigment/stain variants are calculated in linear reflectance at source size;
+no rendered image is modified. Armour's red textile triangles get diffuse
+response; steel retains conductor response. Source scan is untouched.
+
+Full-resolution review_02 in progress. Not visually accepted or final.
+
+Opened review_02.png (640x400, GPU VCM 128, 15.13s):
+Composition: excessive unreadable upper shadow. Keep complete lance, reduce
+window dominance with an oblique level view.
+Light: sun reads the flank but not the front. Turn sun from azimuth266 to250.
+Materials: baked dark photo suppresses steel reflectance; calibrate neutral
+steel tint in linear light to .18+.50*photo luminance, retaining etched variation.
+
+Opened review_03.png (640x400, GPU VCM512,28.80s):
+Composition: window still overdominant and upper background visually empty.
+Move Room from (0,-4.85) to (-1.3,-4.6), looking diagonally into the collection.
+Light: turning sun removed direct light from table. Extend window toward front
+from y=-1.6 to -3, retaining masonry and using no new light source.
+Materials: no normal/roughness maps yet, steel silhouette too flat. New engine
+arrived: connect original scan maps and maximum-resolution Poly Haven maps.
+VCM reports millions of dropped cache vertices. Next review uses path to
+isolate lighting/material appearance before deciding final integrator.
+
+Engine memory update: pre-budget review_04 attempt was killed at20.6GB
+(reported by owner). Rebuilt engine uses its DEFAULT2048MB texture budget;
+no environment override. Source files remain at original dimensions.
+Resumed review_04: GPU path512,640x400,15.23s transport,50.30s wall,
+4386.99MiB peak host RSS.
+Composition critique: table feet still intersect bottom frame; lower level Room
+camera to1.5m. Lighting critique: cloth's broad lit area rivals armour; lower
+cloth reflectance, retaining actual sources. Material critique: scan roughness
+makes steel chalky; calibrate perceptual roughness to.10+.35*source green,
+keeping original wear distribution. Oxblood pigment factors(.32,.23,.21)
+are applied to full-resolution jacquard in linear light. No PNG postprocess.
+New normal/roughness maps are now connected to scans and environment.
+
+Opened review_05.png:960x600,path1024,68.99s transport,102.25s wall,
+4363.36MiB peak RSS. Composition: front foot and lance end touch frame;
+widen level Room view to58deg at1.6m. Light: indirect wall still visibly
+noisy; final4096spp. Materials: furniture grain too broad; use.8m repeat
+for table joinery, retain1.8m for architectural oak. Rapier bracket now
+contacts wall atx3.5 rather than floating atx2.85.
+
+Opened first final_room.png:960x600,path4096,273.86s transport,307.21s
+wall,4367.27MiB peak RSS. Complete objects now fit. Contact audit found
+astrolabe needed a cradle, added a small real oak support; room will rerender.
+Remaining concerns assigned to detail reviews: instrument spacing (composition),
+light on lower shelf (light), weave and brass detail (materials).
+Opened review_table_01.png:640x400,path512,14.67s. Composition: partial
+horse at right distracts and cloth occupies too much frame; move eye to right
+and aim left across collection. Light: lower shelf is dark but receives sky,
+retain it for Book view. Material: brocade is physically fine and low-contrast,
+becomes almost plain at distance; inspect at960, do not enlarge its weave.
+
+Opened final_table first version,960x600,path2048,139.60s: composition
+removes partial horse, but bust is clipped at top and bright bare window
+still distracts. Raised camera and lowered target to exclude bust and lower
+shelf completely; Book retains the binding detail. Light: broad panes
+need period structure; added clear thin glass and physical diamond lead rods
+in six framed casements, plus intermediate stone mullion. Materials: weave
+resolves correctly in close view; retained physical scale.
+Opened review_armour_01 and02,640x400,path512: context intrudes at left,
+then full lance/feet hit framing. Room already shows whole collection; change
+Armour to intentional35deg level catalogue detail of breastplate/chamfron.
+Sun modelling and steel wear retained, more samples for shadow cleanliness.
+Opened review_book_01,640x400,path512: book is centred with excessive
+wood margin; tighten30 to28deg. Light: page edge almost white, lower
+exposure from1 to.5. Materials: preserve patina/page layers, weave now
+clearly visible; higher resolution for binding detail.
+
+Opened review_06 and review_armour_03,640x400,path512. Room: complete
+lance/feet, physical casement removes empty-window effect, real sun remains
+on steel. Detail: breastplate/chamfron have clear separation; red straps are
+diffuse, steel carries etched roughness. Remaining composition concern is
+intentional cropped lance/body in catalogue detail, while Room records the
+complete object. Light/material concern is Monte Carlo grain in shadows and
+mail; resolve with2048spp at960x600. No further geometry change needed.
+
+ASSETS AND RIGHTS
+CC BY: Jagiellonian Globe, Virtual Museums of Malopolska; Tellurium with
+Lunarium, ETH Library_Collections. URLs and attribution in scene header.
+CC0 museum scans: Cleveland armour; Malopolska helmet/astrolabe/sextant and
+Wawel chest; Morbase rapier; Varldskulturmuseerna Coptic book. Exact sources
+and original files are in assets/sketchfab/MANIFEST.json.
+CC0 Poly Haven: white_plaster_02, oak_veneer_01, marble_01,
+quatrefoil_jacquard_fabric, GothicCabinet_01, marble_bust_01. Full-resolution
+colour/OpenGL-normal/roughness sets and source URLs in assets/polyhaven/MANIFEST.json.
+Crafted: two-tier table and turned supports, cloth, masonry/wood joinery,
+casement and astrolabe cradle. No generated decorative filler.
+
+WISHLIST
+None pending for this composition. The Wawel chest was downloaded from the
+owner's logged-in Chromium (Download/glTF), CC0; it replaces the block support.
+
+ENGINE QUALITY PRIORITIES
+1. Coated diffuse / varnished wood and textile sheen would improve table,
+cabinet and brocade beyond their current diffuse surface closure.
+2. Calibrated diffuse/metal masks for mixed scans would improve their response;
+armour already has a conservative geometry partition for red textile.
+3. VCM cache growth and region/contact diagnostics need investigation.
+Normal/roughness maps are now present on appropriate assets, not deferred.
+
+ENGINE OBSERVATIONS (no engine edits)
+GPU region inconsistency counters and occasional leaks persist; first contacts
+are architecture/casements. This is not proof every counter is an engine bug.
+Repro: build/owe render scenes/the_kunstkammer.owe --backend gpu --device 1 --detector Room --integrator path --spp 512 --resolution 640x400 --out out/scenes/kunstkammer/repro_contacts
+VCM reports full light-vertex cache and dropped vertices, with much darker
+pre-map room estimates than path; mechanism not established. Final path views
+need reflection and direct/indirect daylight, not a focussed specular caustic.
+Repro: build/owe render scenes/the_kunstkammer.owe --backend gpu --device 1 --detector Room --integrator vcm --photons .25 --spp 128 --resolution 640x400 --out out/scenes/kunstkammer/repro_vcm
+Memory: historical20.6GB OOM is fixed by engine texture budget; no budget
+increase was made. Revised renders stay near4.3GB peak host RSS.
+
+Final Room opened and accepted at960x600,path2048: complete objects,
+intentional sun/steel emphasis, clear leaded window and sober material palette.
+Fine grain remains in deep shadow but does not conceal form or materials.
+Transport 244.13s; wall276.61s; peak4367.05MiB.
+
+Final Armour opened and accepted: intentional35deg catalogue crop,
+window-reflected steel and red diffuse straps remain distinct; etched plates
+and mail resolve without losing the single-source hierarchy. The photo still
+contains source capture shading, documented rather than presented as measured
+reflectance.960x600,path2048; transport247.59s,wall282.90s,peak4364.05MiB.
+
+FINAL IMAGE RECORDS (allGPU path,960x600,WB5200K,AgX)
+out/scenes/kunstkammer/final_room.png: 2048spp, transport 244.13s, wall 276.61s, peak 4367.05MiB; manual exposure 1.
+out/scenes/kunstkammer/final_table.png: 2048spp, transport 237.76s, wall 274.74s, peak 4368.43MiB; manual exposure 1.
+out/scenes/kunstkammer/final_armour.png: 2048spp, transport 247.59s, wall 282.90s, peak 4364.05MiB; manual exposure 1.
+out/scenes/kunstkammer/final_book.png: 1024spp, transport 109.80s, wall 147.72s, peak 4363.89MiB; manual exposure 0.5.
+
+DAYTIME EXTERIOR UPDATE — owner correction: DAY ONLY, solar alignment required.
+Replaced the generic gradient with a4096x2048 Hosek-Wilkie atmospheric radiance
+map generated for the unchanged16degree elevation/250degree azimuth sun.
+No solar disc in the map; no second sun. Turbidity2.4; explicit clear-day diffuse
+horizontal irradiance=10% of direct-normal irradiance. Lower hemisphere is
+Lambertian distant green terrain,not a uniform grey background.
+Model/parameters/source resolution recorded in assets/daylight/MANIFEST.json.
+Night scene files and NASA data were not edited.
+
+Daylight review01 opened,640x400 GPU path512,65.48s wall,4395.50MiB peak.
+Composition: the original arrangement and narrow exterior glimpse are retained.
+Light: sun still falls on the armour; sky has blue atmospheric colour and the
+lower window now sees green terrain. Pale horizon haze is physical sky radiance.
+Materials: leadwork and glass remain clear; sampling grain obscures dark wood
+at512spp. Fix: render the main view again at960x600/path2048; no fake fills,
+window tint or sky-only camera override. Prior close-up finals predate this sky.
+
+Daylight final Room opened,960x600/path2048: 315.73s wall,
+282.37s transport,4419.88MiB peak host RSS.
+Composition: original complete hero/table grouping retained; exterior glimpse is
+small but now has blue sky and green ground rather than a neutral empty field.
+Light: unchanged250degree/16degree sun still strikes the armour; angular sky
+brightness follows that same direction,with no duplicate solar disc.
+Materials: clear leaded glass retains neutral transmission; no blue material tint
+or camera-only background was used. Fine residual render grain remains.
+This supersedes final_room.png only; other archived final views predate this
+focused exterior update. Source textures and the default memory budget unchanged.

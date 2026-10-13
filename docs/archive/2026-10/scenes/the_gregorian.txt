@@ -1,0 +1,272 @@
+Historical record, retained for provenance. Current state: ../../../STATUS.md
+
+10 OCTOBER 2026 — NAKED SIGHTLINE CORRECTION AND CURRENT GALLERY CAPTURE
+
+The former Naked viewpoint at x = 0.0771708026707 m was physically blocked by
+RamsdenScan.surface: its exact central CPU ray struck the telescope scan about
+104 mm from the eye. The earlier black path renders do not establish an inability
+of path tracing to illuminate the astronomical Moon. Their historical estimator
+claim below is superseded by this direct sightline diagnosis.
+
+Only Naked observer x changes to 0.20 m (a 122.8291973293 mm lateral move).
+Its y/z, lunar target, 38° field, 3 mm pupil, 3.8 EV, white balance, lunar albedo,
+optical prescription, geometry, materials and lights remain unchanged. The selected
+central ray and 192 field/pupil-edge CPU samples first hit Moon.surface.
+Portable proof: benchmarks/results/20261010_gregorian_sightline.json.
+Before input: benchmarks/results/inputs/20261010_gregorian_before_sightline.owe.txt.
+Adopted scene SHA256: f73367c4ca38bb121f855c35fd061357cf6e5cefdb0380cc5107f41df0d403b2.
+
+Corrected Naked native image opened: a small centred phased Moon (~8 pixels) is
+clearly visible against the black field; this preserves its physical angular scale.
+GPU path 256, 960×600, seed 7, depth 16, one pass: 16.5836 s transport, mean Y 1.06401e-5,
+4 region inconsistencies, 0 leaks, finite raw image. This is a reviewed gallery candidate,
+not a claim of diagnostic-free transport or convergence.
+Archive: out/gallery/final_review_20261010_v2/gregorian_naked.*.
+Fresh Beside and Eyepiece v2 captures are complete and locally promoted alongside
+Naked. Beside GPU path 2048: 348.491 s transport, 227 inconsistencies, 0 leaks.
+Eyepiece GPU path 2048: 450.080 s transport, 316 inconsistencies, 0 leaks.
+Archives: out/gallery/final_review_20261010_v2/gregorian_beside.* and
+out/gallery/final_review_20261010_v2/gregorian_eyepiece.*.
+Their native PNG and raw PFM bytes are identical to the previously reviewed v1
+captures; fresh sidecars identify the adopted source containing the Naked-only edit.
+Eyepiece and Naked metadata share the same scene FNV identity, 38° field,
+960×600 resolution, 3 mm pupil and 3.8 EV with neutral white balance.
+
+Beside review: the complete instrument, stand and candle fit, with the true-scale
+Moon visible through the window. Warm brass and walnut read under the single
+physical candle; its large coherent shadow and dark barrel remain intentional.
+Fine wall grain and isolated bright speckles persist without concealing the forms.
+Eyepiece review: the full erect lunar outline fits inside black margins; phase,
+maria and crater patterns are legible, with no visible bright central ghost.
+Fine grain, soft optical detail and a thin coloured limb remain unretouched.
+These are reviewed local gallery images with retained transport diagnostics,
+not diagnostic-free or fully converged reference images.
+Promoted images and provenance: docs/gallery/gregorian_{beside,eyepiece,naked}.*.
+
+--- HISTORICAL CONTACT AND OPTICAL REVIEWS ---
+
+8 OCTOBER 2026 — CONTACT CANDIDATE CHECK
+
+CPU Eyepiece80x50,16spp,seed7,depth16:64000paths,350401segments,2ambiguities,
+0leaks,meanY.0053264. Both events expose real overlapping window-trim faces,
+not the previous GPU glass-region event. Side architraves reached z2.07 while
+the header began at2.02, duplicating their outside/end faces over50mm.
+An isolated two-box fixture produces512/512ambiguities and zero radiance;
+fitting the side trim below the header gives zero diagnostics andmeanY.29996.
+
+The side trim now has height1.15m/centre1.445m: its bottom remains.87m and its
+top meets the header underside2.02m. Original scene and isolated fixture remain
+in out/performance_20261008/asset_repairs/. Repeating the full CPU pilot gives
+350406segments,0inconsistencies,0leaks, unchanged displayedmeanY.0053264.
+Artifacts: gregorian_contact_cpu80_fitted.*. Optics and light sources unchanged.
+This is a small CPU correctness check, not final GPU/gallery acceptance; fresh
+benchmark comparisons must use the repaired scene on both sides.
+
+--- EARLIER OPTICAL DIAGNOSIS ---
+
+8 OCTOBER 2026 — OPTICAL DIAGNOSIS (current work, final review pending)
+
+The frozen integrated engine renders Eyepiece with GPU path tracing at960x600,
+256spp,seed7,max_depth16 in20.2474s transport. This is a diagnostic during other
+host work, not an isolated speedup measurement. Current scenehash8a3e0a49011fffeb.
+Rawimage/log/metadata: out/performance_20261008/gregorian_path256.*.
+Opened nativePNG: complete erect lunarphase and mare structure; no central bright
+spot; fine spectralgrain remains.485inconsistencies,0leaks; first reports a ray
+still in Gregorian.L2.glass0 reaching RamsdenScan.surface. The hit is at axial
+88.0854mm/radial15.9370mm in the primary frame, outside either ocular glass
+volume (F:67–70mm/radius13mm; E:121–123mm/radius6mm). This suggests a missed
+glass exit rather than proving a scan/lens overlap; corrected-engine check pending.
+
+At PNGpixel(477,302), oldVCM256 rawY=.12818 versus newpath256=.01461;5x5median
+.05689 versus.01291. PFMrows were flipped to top-left PNG coordinates. These
+images have different scenehashes, so the comparison diagnoses the visible spot
+but does not by itself isolate an engine change. Metrics and limitation recorded
+in out/performance_20261008/gregorian_ghost_path_probe.json.
+
+A CPU8192sample pixel probe follows the proper two-mirror/two-lens telescope;
+99.72% of itsY comes from the Moon lit by the Sun,0.28% from a real double Fresnel
+reflection in the ocular. CPUtexture/normal limitations mean this is a path-class
+check, not a full GPUradiometric reference. Design analysis gives53.8878x angular
+magnification and667.2553mm afocalseparation, preserving the original prescription.
+
+Independent far-light fixtures prove an enginevisibility error: oldlight/BDPT/VCM
+can connect through opaque matter near the observer because a distance-scaled
+endpoint margin excludes that part of the ray. BothCPU andGPUshow false positive
+energy with zero diagnosticcounts. The repair and source-end/contact tests are
+being validated before any final VCMcapture or gallery acceptance.
+
+--- EARLIER HANDOFF (retained verbatim below) ---
+
+HANDOFF STATUS — 7 October 2026
+PROVISIONAL: revised scene and three960x600 outputs exist, but the requested
+museum-catalogue quality bar is not met. Owner requested wrap-up; no further
+render iterations are being started. All rendering jobs have finished.
+
+Plan: Wright's Orrery, La Tour's Magdalen with the Smoking Flame, Hammershoi's
+Interior, Strandgade30. Hero: real Ramsden reflector; one approximately12.57lm
+candle at an open night window. Warm-grey plaster, umber coffer, aged gold/brass.
+Moon and optical prescription remain real geometry, not an emissive image.
+
+Latest full-size images (filenames say final, acceptance remains PROVISIONAL):
+out/scenes/gregorian/final_beside.png: GPU path, 2048 spp/iterations; transport 621.40s, wall 641.86s, peak 2492.75MiB.
+out/scenes/gregorian/final_eyepiece.png: GPU vcm, 256 spp/iterations; transport 944.57s, wall 961.50s, peak 2592.79MiB.
+out/scenes/gregorian/final_naked.png: GPU vcm, 64 spp/iterations; transport 292.59s, wall 313.57s, peak 2592.43MiB.
+All960x600,seed7,max_depth16,AgX. Room WB2400K/exposure14; optical views
+neutral WB/exposure3.8. Wall times include loading and shared-GPU contention.
+
+Assets/licences: CC0 Gregorian scan and Wawel chest (Virtual Museums Malopolska),
+CC0 Poly Haven plaster/oak/floor with full colour/normal/roughness images;
+NASA/GSFC lunar albedo. Source links, scale caveats and wishlist below.
+Wishlist: Luke Arkell's Antique Table,CC BY4.0; archive unavailable,not used.
+Highest-value engine work: astronomical-scale transport consistency; variance
+reduction for glossy/optical paths; coated wood and wax scattering.
+
+Final Beside opened: composition fits complete telescope/candlestick with plumb
+verticals; flame models the barrel but large shadows remain severe; wood and
+plaster maps read, yet bright sampling speckles persist at2048spp. Provisional.
+Final Eyepiece opened: complete erect lunar phase fits the38degree field; mare
+contrast is visible, but colour grain and a tiny central bright ghost remain;
+real mapped regolith retained, no substituted picture. Provisional.
+Final Naked opened: tiny central Moon at true angular scale and matching phase;
+black night and faint warm foreground specks; useful comparison,not an art hero.
+
+New unresolved observation: small central bright ghost in enlarged lunar view.
+Repro: build/owe render scenes/the_gregorian.owe --backend gpu --device 1
+ --detector Eyepiece --integrator vcm --spp 256 --resolution 960x600 --out /tmp/gregorian_eye
+Origin not diagnosed; do not claim a confirmed engine root cause.
+Final room log reports1 leak; optical finals report0. Local ground reduced
+large-sphere boundary failures but did not eliminate all contact diagnostics.
+
+No engine changes, rebuild or commits. Full source textures retained; engine's
+2048MB texture budget unchanged. Helpers live in assets/curation/gregorian/.
+
+--- CHRONOLOGICAL AUDIT ---
+
+THE GREGORIAN — curation/render audit,7 October2026
+
+Plan: Wright's Orrery, La Tour's Magdalen with the Smoking Flame, Hammershoi's
+Interior, Strandgade30. Brass instrument and one candle at an actual open night
+window; umber oak, warm-grey plaster, gold against cool black sky. Oblique
+instrument view, real erect lunar image through the original prescription.
+
+Baseline Beside/VCM128,640x400 opened:
+Composition: foreshortened instrument appears a small stub in a huge black opening.
+Light: broad uniformly bright mottled walls overwhelm the small hero.
+Materials: slab table/procedural timber and plaster read as synthetic blocks.
+Fix: curated period-form oak table; measured scan/optics move together to its
+true tabletop, textured plaster and timber joinery; nearer oblique camera and
+candle placement chosen to rake the barrel. No change to candle power or optics.
+
+Table reference: Luke Arkell, Antique Table,CC BY4.0,modelled after a17th-century
+style oak side table (a historical form, not a claim that this is a museum scan).
+https://sketchfab.com/3d-models/antique-table-39a58c86837b4baaa67e325e87a7387d
+https://www.shackladysantiques.co.uk/product/17th-century-style-oak-side-table/
+Reference29.5in high x31in wide x19in deep =.7493 x.7874 x.4826m.
+
+Archive finding: Luke Arkell's converted glTF/GLB archives are marked unavailable
+in the logged-in download modal; the original download did not start. Retain as
+wishlist rather than claim an installed asset. Public metadata remains in
+assets/sketchfab/antique_oak_table/metadata.json.
+
+Review01 build: Wawel Renaissance coffer,CC0, supplies a period support already
+available. Native dimensions1.571x.558x.529m assumed millimetres; the museum's
+independent dimensions remain unverified. Model is not rescaled to fit a layout.
+Tripod lowest feet sampled against real triangles of the slightly uneven lid;
+small leather seating pads bridge0.6mm and2.28mm gaps without tilting the optics.
+Scan/prescription/naked-eye observer all translate -272.95mm inZ; direction and
+all internal dimensions stay fixed. Candle foot contact independently measured
+at .526479m. Teardrop flame has .000473698m2 area and radiance .573927266,
+preserving the original approximately4*pi lumen output at14713lux/unit.
+Full source photo/normal/roughness images wired on plaster,oak,floor and brass.
+No artificial fill, source-power increase or geometry modification to telescope.
+
+Review01 opened,640x400 VCM256,120.96s,2488.97MiB.
+Composition: barrel clips left edge; centre framing on the instrument, raise
+level eye to1m so the lid recedes rather than bisects the tripod.
+Light: candle below barrel leaves the hero black; use a46cm taper whose real
+flame reaches barrel height; exposure14 instead of12.8.
+Materials: tungsten-lit wood too orange; deliberate2400K balance retains warmth
+while separating brass from timber. No source-power change.
+
+Review02 Beside opened,VCM128,197.03s with simultaneous optical preview.
+Composition: complete barrel now reads, but candle foot grazes bottom; step
+camera back15cm and lower1cm, preserving level verticals and50degree view.
+Light: candle now models brass, Moon is a cool accent; bright speckles still
+obscure the shadow. Room has no required caustic, so use path1024 for review.
+Materials: coffer grain and aged brass distinguish themselves; resolve remaining
+noise before accepting the materials at960x600. No further source changes.
+
+Eyepiece review01 opened,VCM128,222.49s (shared GPU),2486.54MiB.
+Composition: erect lunar disc fits the field; preserve the true38degree field
+rather than enlarge or recenter the physical optical image artificially.
+Light: upper lunar tones obscure small albedo differences; reduce exposure0.5EV.
+Materials: spectral grain masks mare detail; try direct path1024 at960x600,
+whose rays still traverse every mirror and lens. Optical prescription unchanged.
+
+First final Beside/path1024 opened,61.01s,2494.56MiB; not accepted.
+Composition: complete telescope and candlestick now fit, deliberate close coffer crop.
+Light: remaining bright speckles undermine the quiet shadow structure.
+Materials: grain and brass are readable, but speckles resemble spurious glitter.
+Log494544 region inconsistencies,2266 leaks,first boundary Earth.surface.
+Next: replace6371km sphere whose surface lies20cm below the room by a200m local
+tangent-ground box at the same surface height. Curvature difference under1.6mm;
+this preserves local below-horizon occlusion without large-coordinate surface
+arithmetic. Lunar object/source and optical geometry untouched. Suspected engine
+precision issue, not established until the controlled scene change is reviewed.
+
+Naked path1024 final candidate opened: BLACK, rejected (215.39s shared GPU).
+Composition: the expected central lunar disc is absent.
+Historical interpretation (superseded by the10October sightline proof): direct
+path failed to recover the Moon and VCM was recommended. The original Naked
+viewpoint was physically blocked; corrected path256 now shows the Moon.
+Materials: albedo cannot be assessed from this failed output. Preserve albedo.
+Stop the remaining path Eyepiece run; rerender both with VCM, no physical edits.
+Repro: build/owe render scenes/the_gregorian.owe --backend gpu --device 1
+ --detector Naked --integrator path --spp 128 --resolution 960x600 --out /tmp/naked_path
+A VCM counterpart shows the Moon. Engine issue reported, no source-code fix.
+
+Review03 local ground opened,960x600/path512,166.20s shared GPU.
+Composition: same balanced complete instrument and candle; keep camera.
+Light: ground replacement eliminates reported leaks (2266 -> 0) and greatly
+reduces inconsistencies, but does NOT eliminate the fine bright sampling grain.
+Materials: textured plaster/wood and brass remain legible; increase room to2048
+samples to reduce variance. Do not misattribute all speckles to Earth precision.
+Local tangent ground retained for numerical robustness. No engine changes.
+
+ASSETS / SCALE / LIMITS
+CC0: Virtual Museums of Malopolska Gregorian reflector,
+https://sketchfab.com/3d-models/gregorian_telescope-385fa9f09a064c8b8d81e5085e2d76f4
+Museum object2778 specifies113mm objective,740mm tube,470mm quoted height.
+Existing barrel-calibrated uniform scale retained; posed scan height712.4mm
+conflicts with that catalogue height. No nonuniform stretching to conceal this.
+CC0: Wawel chest,ZKWawel1558,Virtual Museums of Malopolska,
+https://sketchfab.com/3d-models/chest-c580f18e25b740e49ce8dd0f8cfd3247
+CC0: Poly Haven white_plaster_02,oak_veneer_01,wood_floor; full source colour,
+OpenGL normal and roughness maps. Walnut is the documented fumed-oak derivative.
+NASA/GSFC CGI Moon Kit,LROC imagery: https://svs.gsfc.nasa.gov/4720/
+Source credit Ernie Wright/Noah Petro; calibrated albedo map,never emission.
+Wishlist: Luke Arkell Antique Table,CC BY4.0,URL above; a narrower period-form
+support would allow a more conventional seated observation station. Archive
+unavailable in logged-in browser; not used or miscredited as an installed scan.
+
+Priorities: (1) robust astronomical-scale shadow/boundary calculations and lunar
+sampling across integrators; (2) coated diffuse/varnished wood and wax subsurface
+scattering; (3) separable metal/patina masks in the telescope scan. Image normal
+and roughness maps are already active. No engine-source changes or rebuild.
+
+Large-sphere repro: build/owe render scenes/the_gregorian.owe --backend gpu
+ --device 1 --detector Beside --integrator path --spp 512
+ --set Earth.type=sphere --set Earth.radius=6371000
+ --set 'Earth.position=(0,0,-6371000.2)' --out /tmp/gregorian_sphere
+For the black-Moon path repro above, use these same Earth overrides to recover
+the tested configuration; the final ground-box state has not been retested with
+path for optical views at that historical checkpoint. This predates the10October
+Naked sightline correction and current successful path captures.
+
+Final Naked/VCM64 opened at960x600,313.57s wall/292.59s transport,
+2592.43MiB peak (shared GPU). Composition: central true-size lunar disc,about
+8 pixels high, intentionally unchanged38degree field for the optical comparison.
+Light: lunar phase is visible at the same3.8EV as Eyepiece; black night surrounds.
+Materials: no false enlargement or substituted lunar photograph; faint warm
+foreground sampling specks remain. Accepted as the scale comparison, not the
+scene's principal art view. Zero reported leaks.

@@ -17,28 +17,35 @@ every pixel.
 
 | | |
 |---|---|
-| ![The observatory](docs/gallery/observatory_room.png) | ![The desk](docs/gallery/observatory_desk.png) |
-| **The Observatory** — the current brick-and-stone observatory at night: walnut panelling, a woven carpet, candles and two refractors aimed through the dome slit. | **The Astronomer's Desk** — tooled books, an orbital folio, an armillary and a compass under glass, in the observatory's detailed interior. |
-| ![Glass in sunlight](docs/gallery/glass_in_sunlight.png) | ![Tea glass](docs/gallery/tea_glass.png) |
-| **Glass in Sunlight** — a rounded tumbler of water on concrete: the sun forms a cusped caustic in its shadow and another inside the glass (VCM). | **Tea Glass** — low sunlight through black tea on textured paper: amber caustics from spectral absorption, with dispersion along their edge (VCM). |
-| ![The Lens](docs/gallery/the_lens.png) | ![Prism in sunlight](docs/gallery/prism_in_sunlight.png) |
-| **The Lens** — a loose magnifier over a page: magnified view, dispersion-tinted caustic in its shadow. | **Prism in Sunlight** — low sun through a slit onto an N-SF11 prism: the white beam, the spectrum and the beams its faces reflect, seen where they graze the floor (VCM). |
-| ![The study](docs/gallery/study_room.png) | |
-| **The Study** — one sunlit room to walk through: a glass of water and a prism in the sun, a magnifier, a mirror, a lamp, and a telescope aimed out of the window (VCM). | |
+| ![Kunstkammer Room](docs/gallery/kunstkammer_room.png) | ![Peacock Lamp Room](docs/gallery/peacock_lamp_room.png) |
+| **The Kunstkammer** — daylight reaches the mounted armour and casts its silhouette across plaster; steel, carved wood and red cloth remain distinct. | **The Peacock Lamp** — real carbon filaments illuminate opalescent glass, bronze and an antique binding. |
+| ![Gregorian Beside](docs/gallery/gregorian_beside.png) | ![Gregorian Eyepiece](docs/gallery/gregorian_eyepiece.png) |
+| **The Gregorian** — candlelit telescope, stand and the real Moon beyond its window. | **Through the eyepiece** — an erect lunar image emerges through the unchanged two-mirror, two-lens prescription. |
+| ![Gregorian Naked](docs/gallery/gregorian_naked.png) | |
+| **The unaided Moon** — true angular scale at the same 38° field and display settings as the eyepiece view. | |
 
-More in [`docs/gallery`](docs/gallery) (each PNG has a JSON record for reproduction).
+These historical captures are previews: all five have nonzero transport diagnostics,
+and Kunstkammer still shows isolated bright noise. They are not validated reference
+images; new gallery promotion requires clean diagnostics. Window Room and Wall are withheld from this
+featured gallery because transport diagnostics and target-photograph rights remain
+unresolved. Historical images and native diagnostics remain available for investigation.
+See [current status](docs/STATUS.md), [capture records](benchmarks/results/20261010_gallery.json)
+and [asset credits](docs/ASSET_CREDITS.md).
 
-Regenerate the observatory and glass images with the GPU backend:
+Install the external scene assets using [the setup instructions](docs/GALLERY_WORKFLOW.md#curated-scene-asset-setup),
+then stage all seven views with the validated GPU build:
 
 ```sh
-bash tools/render_gallery.sh observatory_room observatory_desk glass_in_sunlight tea_glass
+bash tools/render_gallery.sh kunstkammer_room gregorian_beside gregorian_eyepiece \
+  gregorian_naked peacock_lamp_room invisible_window_room invisible_window_wall \
+  --device 1 --binary build/owe --archive out/gallery/local_review
 ```
 
-The observatory and glass images above are rendered from the current scenes. Scene models include
-jointed paving, branching foliage, slope-grounded landscapes, and the observatory's detailed
-interior. See [`models/README.md`](models/README.md) for the assets,
-regeneration commands and the live Blender review (`bash tools/review_models.sh`). The models are
-ordinary meshes: they change no transport, and every backend renders them.
+The tracked manifest records each view's estimator, budget and camera. Rendering stages native
+images, raw data, logs and identities; review them before explicit local promotion using
+[the gallery workflow](docs/GALLERY_WORKFLOW.md). Asset recipes preserve the authoritative
+scenes; regenerated external assets are not promised to match historical bytes.
+Original procedural models have a separate [regeneration guide](models/README.md).
 
 ## The one idea
 
@@ -102,6 +109,11 @@ build/owe backends                             # the backends in this build, the
 time only a Vulkan driver is needed: any recent NVIDIA, AMD or Intel driver on Linux/Windows; on
 macOS, MoltenVK (`brew install molten-vk vulkan-loader`, or the LunarG Vulkan SDK). Without a
 driver the conformance suite skips the GPU backend and `--backend gpu` explains why.
+
+For reproducible raw-image error, memory and timing comparisons, see
+[`docs/BENCHMARKS.md`](docs/BENCHMARKS.md). The performance suite includes the canonical views
+and four scan scenes at 960×600. `OWE_GPU_PROFILE=1` prints diagnostic Vulkan kernel and
+submission timings; keep it off when measuring production throughput.
 
 ## Interactive viewer
 
@@ -485,11 +497,7 @@ Correctness is established against analytic limits, never by "looks plausible"
 
 ## Status
 
-What exists, what is partial and what is ahead is mapped section by section to the vision
-in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). In short: the reference engine, geometrical
-optics with spectral transport, the ontology, instruments inside the world, inspection and lens
-diagnostics are implemented, on two backends (CPU reference, portable GPU), with a command-line
-studio and an interactive window. On the GPU: photon mapping (SPPM) and bidirectional estimators
-(BDPT, VCM) for caustics, and glTF models with texture coordinates. GRIN media, thin-film
-coatings, polarisation and optimisation are not yet. The priorities ahead, starting with faster
-loading, are in [`docs/ROADMAP.md`](docs/ROADMAP.md).
+See [STATUS.md](docs/STATUS.md) for the current implementation, validation,
+performance target and open transport/gallery issues. [Architecture](docs/ARCHITECTURE.md)
+describes the engine; historical measurements and capture logs are retained in the
+[October archive](docs/archive/2026-10/ROADMAP.md).

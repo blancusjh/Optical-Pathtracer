@@ -1,0 +1,23 @@
+{
+  "reference": "bounded_baseline/the_peacock_lamp/reference.pfm",
+  "metrics": {
+    "rel_mse": 0.9258912749171615,
+    "rel_mse_no_glints": 0.8848178999278257,
+    "mean_ratio": 0.8988852066755227
+  },
+  "baseline_transport_seconds": 18.3959,
+  "candidate_transport_seconds": 16.1294,
+  "transport_speedup": 1.1405197961486477,
+  "same_work": true,
+  "candidate_statistics": {
+    "paths": 18432000,
+    "segments": 114051169,
+    "region_inconsistencies": 116278,
+    "leaks": 0,
+    "first_inconsistency": {
+      "boundary": "Lead3A.side",
+      "ray_region": "ambient[air]"
+    }
+  },
+  "profiled": false
+}

@@ -302,9 +302,19 @@ particle kernel (one thread per particle, its own PCG32 stream; the hybrid parti
 reference's). Particles splat onto pixels from many threads in no fixed order; float atomics
 would make the image depend on that order, so each splat's 24-bit significand is added as an
 integer into 64-bit fixed-point bins keyed by its exponent (32-bit atomics with carries, which
-every Vulkan device has) — exact, associative, and read back as double. Renders of every
-integrator are therefore bitwise reproducible on a given device and driver. Float, not double, because Apple GPUs have no double at all and consumer GPUs run it at
-1/32–1/64 rate; see XIV for how precision is kept.
+every Vulkan device has). These exact bins are converted on the GPU into compensated float
+film sums after each accepted pass. Camera contributions use the same persistent film;
+`resolve()` reads it once and normalizes on the host. The conversion changes rounding relative
+to the earlier host double accumulator; it does not change particle-bin arithmetic. Float is
+used because Apple GPUs have no double support; see XIV for spatial precision.
+
+Dispatch batches use a bounded three-slot command/fence queue after synchronous calibration.
+Film readback, diagnostic readback and VCM capacity decisions synchronize; profiling deliberately
+serializes submissions. Setup, pass execution and film resolution live in separate source files.
+Boundary, triangle, film and push-constant declarations share `.inc` field schemas between C++ and
+Slang, with host offsets checked at compile time. Visibility callers carry endpoint
+records; one internal scalar adapter avoids driver spilling across a non-inlined
+shader function boundary. Shader depfiles track actual includes for incremental builds.
 
 Performance. (1) Meshes that share a frame form one *mesh group* with a single hierarchy and a
 per-triangle owner: modelled scenes are many meshes spanning the same space (bricks, boards,
@@ -437,7 +447,7 @@ transport runs is one setting, never a different program.
 * The holed-disk aperture cannot be sampled by next-event estimation.
 * Pipelines compile from cold in the driver after every kernel change (the VCM kernels take about
   a minute on an RTX 4060); later runs start in under a second from the driver's cache. See
-  docs/ROADMAP.md.
+  [current status](STATUS.md).
 * Smooth mesh normals are GPU-only; like every shading-normal renderer, a coarse smooth mesh
   keeps its polygonal silhouette and loses a little light at grazing directions where the
   interpolated and the geometric surface disagree (the shadow-terminator band).

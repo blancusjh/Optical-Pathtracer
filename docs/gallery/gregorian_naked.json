@@ -1,0 +1,18 @@
+{
+  "engine": "optical-world-engine 0.1.0",
+  "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+  "scene": {"path": "scenes/the_gregorian.owe", "fnv1a64": "c6c90d86561d0e60", "edits": []},
+  "detector": {"name": "Naked", "description": "ideal observer 'Naked' 960x600, fovY=38 deg, pupil diameter=3 mm, focus=infinity, pixel filter gaussian(0.4)", "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ", "pixel_response": "square * gaussian(sigma 0.400000 px)"},
+  "observer_pose": {"position_m": [0.20000000000000001, -0.393556702822, 1.00497567392], "look_at_m": [-1695124.7319452681, 374928465.7111637, 84788750.147740096], "up": [0, 0, 1], "fov_deg": 38, "pupil_radius_m": 0.0015, "focus_distance_m": null, "width": 960, "height": 600},
+  "integrator": "path",
+  "sampling": {"wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm", "fresnel": "stochastic branch selection", "nee": true, "mis": "power heuristic", "russian_roulette_depth": 6, "fresnel_floor": 0},
+  "seed": 7,
+  "samples_per_pixel": 256,
+  "passes": 1,
+  "max_depth": 16,
+  "display": {"exposure_ev": 3.8, "auto_exposure": false, "auto_gain_ev": 0, "white_balance_kelvin": 0, "tone": "agx"},
+  "render_seconds": 16.5836,
+  "statistics": {"paths": 147456000, "segments": 364155921, "region_inconsistencies": 4, "leaks": 0, "first_inconsistency": {"boundary": "Gregorian.L1.S2", "ray_region": "Gregorian.L1.glass0[crown]"}},
+  "mean_Y": 1.06401e-05,
+  "world": {"media": [{"name": "air", "index": "ciddor-air", "n_d": 1.00028}, {"name": "opaque", "index": "constant(1)", "n_d": 1}, {"name": "crown", "index": "cauchy(A=1.5046, B=0.0042, C=0)", "n_d": 1.51677}], "regions": 33, "boundaries": 54, "bodies": 35, "assemblies": 1}
+}

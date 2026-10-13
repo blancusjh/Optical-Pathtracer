@@ -1,0 +1,4 @@
+[ RUN  ] gpu_film_resolve_is_idempotent_across_passes
+[  OK  ] gpu_film_resolve_is_idempotent_across_passes (5.45 s)
+
+1/1 tests passed

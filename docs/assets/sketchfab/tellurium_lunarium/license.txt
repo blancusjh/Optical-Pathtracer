@@ -1,0 +1,11 @@
+Model Information:
+* title:	ETH: Tellurium with Lunarium
+* source:	https://sketchfab.com/3d-models/eth-tellurium-with-lunarium-e4c9f36a40f3479885f27380f8286b2d
+* author:	ETH Library_Collections (https://sketchfab.com/ethlibrary)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "ETH: Tellurium with Lunarium" (https://sketchfab.com/3d-models/eth-tellurium-with-lunarium-e4c9f36a40f3479885f27380f8286b2d) by ETH Library_Collections (https://sketchfab.com/ethlibrary) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

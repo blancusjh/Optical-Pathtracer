@@ -1,0 +1,13 @@
+NASA/GSFC Scientific Visualization Studio, CGI Moon Kit (2019), Ernie Wright / Noah Petro.
+https://svs.gsfc.nasa.gov/4720/
+Original: https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/lroc_color_2k.jpg
+US federal government scientific imagery; retain NASA/LRO/LROC attribution.
+lroc_albedo_018.png is a material-albedo derivative, not a rendered-image edit.
+Decode sRGB; multiply every linear RGB channel by 0.18/0.48217439031845044;
+encode sRGB. Latitude-area-weighted mean diffuse reflectance = 0.18.
+A uniform Lambert sphere then has geometric albedo 2/3 * 0.18 = 0.12,
+approximately the Moon's geometric albedo; this is a Lambertian approximation,
+not a calibrated lunar BRDF (no opposition surge, libration or displacement).
+NASA Moon Fact Sheet: https://nssdc.gsfc.nasa.gov/planetary/factsheet/moonfact.html
+UV map faces longitude 0 toward the room, lunar north up. Moon radius 1737400 m,
+distance 384400000 m; actual surface reflects the scene's below-horizon Sun.

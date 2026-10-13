@@ -1,0 +1,65 @@
+{
+  "kunstkammer_room": {
+    "composition": "Complete armoured horse/rider and lance remain the focal point, with a legible cast silhouette, foreground table, red cloth and left cabinet establishing depth.",
+    "lighting": "Window sunlight reaches the armour and floor; upper walls and ceiling still show spectral grain at512spp. Final sampling should be increased after geometry review.",
+    "materials": "Metal, cloth, carved wood and stone read distinctly. First diagnostic exposes real window sill/rail overlap, so evaluate the separately fitted joinery before final capture.",
+    "next": "Test fitted window joinery; preserve main input until that candidate is reviewed; use a new archive for changed inputs.",
+    "image": "kunstkammer_room.png",
+    "status": "native preview opened; provisional, not promoted",
+    "statistics": {
+      "paths": 294912000,
+      "segments": 1930801972,
+      "region_inconsistencies": 411,
+      "leaks": 0,
+      "first_inconsistency": {
+        "boundary": "LeftSillWall.surface",
+        "ray_region": "ambient[air]"
+      }
+    },
+    "mean_Y": 0.0428939,
+    "render_seconds": 163.363,
+    "timing_limit": "Diagnostic during host compilation; not a performance comparison."
+  },
+  "gregorian_beside": {
+    "composition": "Instrument, tripod, candle and small real Moon all fit. The barrel forms a diagonal toward the Moon; the large wall shadow and dark window are deliberate consequences of the single candle.",
+    "lighting": "Warm grazing candle light identifies brass but the barrel remains dark on its upper side.512spp leaves visible wall grain and bright speckles; increase final sampling without artificial fill.",
+    "materials": "Brass, walnut and plaster are readable. First diagnostic is at the fitted WestWall/Ceiling junction; retain the44events rather than claiming a clean production scene.",
+    "next": "Higher-sample integrated capture and explicit remaining contact-stat review.",
+    "image": "gregorian_beside.png",
+    "status": "native preview opened; provisional, not promoted",
+    "statistics": {
+      "paths": 294912000,
+      "segments": 1320262530,
+      "region_inconsistencies": 44,
+      "leaks": 0,
+      "first_inconsistency": {
+        "boundary": "WestWall.surface",
+        "ray_region": "ambient[air]"
+      }
+    },
+    "mean_Y": 4.9711e-05,
+    "render_seconds": 84.0937,
+    "timing_limit": "Diagnostic during host compilation; not a performance comparison."
+  },
+  "gregorian_eyepiece": {
+    "composition": "Complete erect lunar image fits the38-degree field with black margins; terminator and lunar mare are legible.",
+    "lighting": "No bright central spot is visible in this path estimator. This is not a matched-scene isolation of the earlier VCM result.",
+    "materials": "The real albedo map and phase read through the unchanged optical prescription; residual spectral grain needs a longer capture.72region events remain, first carrying L2glass state into RamsdenScan.",
+    "next": "Higher-sample integrated optical capture; record remaining finite-precision diagnostics, with no geometry/power changes to hide them.",
+    "image": "gregorian_eyepiece.png",
+    "status": "native preview opened; provisional, not promoted",
+    "statistics": {
+      "paths": 294912000,
+      "segments": 1611284940,
+      "region_inconsistencies": 72,
+      "leaks": 0,
+      "first_inconsistency": {
+        "boundary": "RamsdenScan.surface",
+        "ray_region": "Gregorian.L2.glass0[crown]"
+      }
+    },
+    "mean_Y": 0.00376637,
+    "render_seconds": 118.548,
+    "timing_limit": "Diagnostic during host compilation; not a performance comparison."
+  }
+}

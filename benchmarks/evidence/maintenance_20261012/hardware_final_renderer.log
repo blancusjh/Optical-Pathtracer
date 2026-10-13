@@ -1,0 +1,27 @@
+[ RUN  ] backends_reset_observer_matches_fresh_render
+    [cpu]
+    [gpu]
+[  OK  ] backends_reset_observer_matches_fresh_render (0.94 s)
+[ RUN  ] shading_smooth_glass_mesh_refracts_like_the_glass_ball
+    against the glass ball (block L1): flat 0.0192, smooth 0.0057; smooth inconsistencies 0
+[  OK  ] shading_smooth_glass_mesh_refracts_like_the_glass_ball (34.83 s)
+[ RUN  ] vcm_cache_overflow_replays_the_pass_without_losing_vertices
+vcm: light vertex cache (4 vertices) overflowed; replaying pass with 628 vertices
+vcm: light vertex cache (628 vertices) overflowed; replaying pass with 1248 vertices
+vcm: light vertex cache (1248 vertices) overflowed; replaying pass with 1872 vertices
+    replay image max error 0 (tolerance 0)
+vcm: light vertex cache (4 vertices) overflowed; replaying pass with 628 vertices
+vcm: light vertex cache (628 vertices) overflowed; replaying pass with 1212 vertices
+vcm: light vertex cache (1212 vertices) overflowed; replaying pass with 1818 vertices
+    replay image max error 2.98023e-08 (tolerance 4.3616e-06)
+[  OK  ] vcm_cache_overflow_replays_the_pass_without_losing_vertices (2.02 s)
+[ RUN  ] vcm_cache_overflow_rejects_a_bounded_allocation_and_can_recover
+vcm: light vertex cache (4 vertices) overflowed; replaying pass with 628 vertices
+vcm: light vertex cache (4 vertices) overflowed; replaying pass with 628 vertices
+vcm: light vertex cache (628 vertices) overflowed; replaying pass with 1212 vertices
+    replay image max error 3.97364e-08 (tolerance 4.28827e-06)
+[  OK  ] vcm_cache_overflow_rejects_a_bounded_allocation_and_can_recover (0.82 s)
+[ RUN  ] gpu_film_resolve_is_idempotent_across_passes
+[  OK  ] gpu_film_resolve_is_idempotent_across_passes (4.86 s)
+
+5/5 tests passed

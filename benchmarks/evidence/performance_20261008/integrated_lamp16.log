@@ -1,0 +1,20 @@
+note: PeacockGlass: stained_glass roughness is not supported yet; its reflection stays specular
+textures: 6532 MB over the 2048 MB budget, now 1924 MB (OWE_TEXTURE_BUDGET_MB):
+  fumed.jpg → 4096×4096
+  oak_veneer_01_nor_gl_16k.jpg → 4096×4096
+  oak_veneer_01_rough_16k.jpg → 4096×4096
+  dark_walnut_8k.jpg → 4096×4096
+  round_wooden_table_01_arm_8k.jpg → 4096×4096
+  round_wooden_table_01_nor_gl_8k.jpg → 4096×4096
+  white_plaster_02_diff_8k.jpg → 4096×4096
+  white_plaster_02_nor_gl_8k.jpg → 4096×4096
+  white_plaster_02_rough_8k.jpg → 4096×4096
+  wood_floor_diff_8k.jpg → 4096×4096
+  wood_floor_nor_gl_8k.jpg → 4096×4096
+  wood_floor_rough_8k.jpg → 4096×4096
+gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)
+ideal observer 'Room' 960x600, fovY=40 deg, pupil diameter=3 mm, focus=1.350000 m, pixel filter gaussian(0.4)
+pass 1/1: 16 spp, 16.13 s, mean Y 1.1697e-05
+paths 18432000, segments 114051169, region inconsistencies 116278, leaks 0
+first inconsistency: ray in ambient[air], last at its origin, met Lead3A.side (whose side there is Lead3A.interior[opaque]) at (0.275319011, 0.515555053, 1.51132388)
+out/performance_20261008/integrated_lamp16.png out/performance_20261008/integrated_lamp16.pfm out/performance_20261008/integrated_lamp16.json

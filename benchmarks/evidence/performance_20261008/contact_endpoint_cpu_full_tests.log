@@ -1,0 +1,392 @@
+[ RUN  ] mirror_law_equal_angles_and_coplanar
+[  OK  ] mirror_law_equal_angles_and_coplanar (0.00 s)
+[ RUN  ] snell_law_holds_for_random_rays
+[  OK  ] snell_law_holds_for_random_rays (0.00 s)
+[ RUN  ] fresnel_normal_incidence_brewster_and_energy
+[  OK  ] fresnel_normal_incidence_brewster_and_energy (0.00 s)
+[ RUN  ] total_internal_reflection_at_critical_angle
+[  OK  ] total_internal_reflection_at_critical_angle (0.00 s)
+[ RUN  ] conductor_fresnel_limits
+[  OK  ] conductor_fresnel_limits (0.00 s)
+[ RUN  ] glass_catalog_matches_published_nd_vd
+[  OK  ] glass_catalog_matches_published_nd_vd (0.00 s)
+[ RUN  ] spectral_sampling_and_colorimetry
+[  OK  ] spectral_sampling_and_colorimetry (0.00 s)
+[ RUN  ] ggx_distribution_normalised
+[  OK  ] ggx_distribution_normalised (0.14 s)
+[ RUN  ] scatter_sampling_consistent_with_evaluation
+[  OK  ] scatter_sampling_consistent_with_evaluation (0.00 s)
+[ RUN  ] rough_reflection_is_reciprocal
+[  OK  ] rough_reflection_is_reciprocal (0.00 s)
+[ RUN  ] smooth_dielectric_branching_probabilities
+[  OK  ] smooth_dielectric_branching_probabilities (0.00 s)
+[ RUN  ] fresnel_floor_changes_variance_not_expectation
+[  OK  ] fresnel_floor_changes_variance_not_expectation (0.01 s)
+[ RUN  ] sphere_intersection_inside_and_outside
+[  OK  ] sphere_intersection_inside_and_outside (0.00 s)
+[ RUN  ] planetary_sphere_preserves_twenty_centimetre_surface_clearance
+[  OK  ] planetary_sphere_preserves_twenty_centimetre_surface_clearance (0.00 s)
+[ RUN  ] quadric_hits_stay_precise_for_distant_origins
+[  OK  ] quadric_hits_stay_precise_for_distant_origins (0.00 s)
+[ RUN  ] sag_surface_hits_lie_on_surface_with_correct_normal
+[  OK  ] sag_surface_hits_lie_on_surface_with_correct_normal (0.00 s)
+[ RUN  ] numeric_asphere_agrees_with_exact_quadric
+[  OK  ] numeric_asphere_agrees_with_exact_quadric (0.00 s)
+[ RUN  ] paraboloid_mirror_focuses_collimated_light_exactly
+[  OK  ] paraboloid_mirror_focuses_collimated_light_exactly (0.00 s)
+[ RUN  ] ellipsoidal_mirror_images_focus_to_focus
+[  OK  ] ellipsoidal_mirror_images_focus_to_focus (0.00 s)
+[ RUN  ] mesh_bvh_matches_brute_force
+[  OK  ] mesh_bvh_matches_brute_force (5.33 s)
+[ RUN  ] world_bvh_matches_brute_force_over_boundaries
+[  OK  ] world_bvh_matches_brute_force_over_boundaries (0.01 s)
+[ RUN  ] point_location_identifies_regions
+[  OK  ] point_location_identifies_regions (0.00 s)
+[ RUN  ] dome_and_round_wall_are_exact_and_open_where_cut
+[  OK  ] dome_and_round_wall_are_exact_and_open_where_cut (0.00 s)
+[ RUN  ] wave_surface_spline_follows_the_wave_sum_and_rays_find_it
+[  OK  ] wave_surface_spline_follows_the_wave_sum_and_rays_find_it (0.56 s)
+[ RUN  ] lathe_cone_and_torus_patches_are_hit_exactly
+[  OK  ] lathe_cone_and_torus_patches_are_hit_exactly (0.02 s)
+[ RUN  ] vessel_regions_are_consistent_through_glass_and_liquid
+[  OK  ] vessel_regions_are_consistent_through_glass_and_liquid (0.10 s)
+[ RUN  ] contact_spawn_orders_glass_support_and_reflected_return
+[  OK  ] contact_spawn_orders_glass_support_and_reflected_return (0.00 s)
+[ RUN  ] contact_spawn_keeps_resolved_overlap_and_interior_launch_diagnostic
+[  OK  ] contact_spawn_keeps_resolved_overlap_and_interior_launch_diagnostic (0.00 s)
+[ RUN  ] contact_spawn_preserves_nested_region_topology_and_thin_same_boundary
+[  OK  ] contact_spawn_preserves_nested_region_topology_and_thin_same_boundary (0.00 s)
+[ RUN  ] contact_spawn_reports_ambiguous_distinct_incident_interfaces
+[  OK  ] contact_spawn_reports_ambiguous_distinct_incident_interfaces (0.00 s)
+[ RUN  ] contact_null_shadow_walk_preserves_region_order_and_rejects_overlap
+[  OK  ] contact_null_shadow_walk_preserves_region_order_and_rejects_overlap (0.00 s)
+[ RUN  ] finite_detector_connection_preserves_reciprocal_region_attenuation
+[  OK  ] finite_detector_connection_preserves_reciprocal_region_attenuation (0.00 s)
+[ RUN  ] contact_mesh_departure_retains_distinct_same_normal_faces
+[  OK  ] contact_mesh_departure_retains_distinct_same_normal_faces (0.00 s)
+[ RUN  ] contact_mesh_departure_skips_only_connected_coplanar_face
+[  OK  ] contact_mesh_departure_skips_only_connected_coplanar_face (0.00 s)
+[ RUN  ] finite_detector_connection_checks_only_forward_source_neighborhood
+[  OK  ] finite_detector_connection_checks_only_forward_source_neighborhood (0.00 s)
+[ RUN  ] contact_spawn_preserves_grazing_distant_emitter_departure
+[  OK  ] contact_spawn_preserves_grazing_distant_emitter_departure (0.00 s)
+[ RUN  ] contact_wave_departure_keeps_sub_error_support_faces
+[  OK  ] contact_wave_departure_keeps_sub_error_support_faces (0.00 s)
+[ RUN  ] contact_torus_departure_keeps_next_grazing_root
+[  OK  ] contact_torus_departure_keeps_next_grazing_root (0.00 s)
+[ RUN  ] contact_mesh_carries_skinny_triangle_hit_residual
+[  OK  ] contact_mesh_carries_skinny_triangle_hit_residual (0.00 s)
+[ RUN  ] contact_null_film_does_not_revisit_past_entry
+[  OK  ] contact_null_film_does_not_revisit_past_entry (0.00 s)
+[ RUN  ] contact_authored_sensor_rejects_strictly_past_cover
+[  OK  ] contact_authored_sensor_rejects_strictly_past_cover (0.01 s)
+[ RUN  ] beer_lambert_attenuation_through_index_matched_slab
+[  OK  ] beer_lambert_attenuation_through_index_matched_slab (0.00 s)
+[ RUN  ] glass_plate_transmission_with_multiple_reflections
+[  OK  ] glass_plate_transmission_with_multiple_reflections (0.26 s)
+[ RUN  ] white_furnace_closed_diffuse_sphere
+[  OK  ] white_furnace_closed_diffuse_sphere (1.00 s)
+[ RUN  ] dielectric_sphere_preserves_uniform_radiance
+[  OK  ] dielectric_sphere_preserves_uniform_radiance (0.05 s)
+[ RUN  ] underwater_radiance_obeys_n_squared_law
+[  OK  ] underwater_radiance_obeys_n_squared_law (0.01 s)
+[ RUN  ] path_and_light_tracing_agree_through_a_pinhole_and_a_lens_pupil
+[  OK  ] path_and_light_tracing_agree_through_a_pinhole_and_a_lens_pupil (3.37 s)
+[ RUN  ] renders_are_bitwise_reproducible
+[  OK  ] renders_are_bitwise_reproducible (0.04 s)
+[ RUN  ] hybrid_partition_matches_path_tracing_on_a_caustic
+[  OK  ] hybrid_partition_matches_path_tracing_on_a_caustic (2.02 s)
+[ RUN  ] diffuse_screen_records_irradiance_and_reflects_toward_observers
+[  OK  ] diffuse_screen_records_irradiance_and_reflects_toward_observers (2.91 s)
+[ RUN  ] optical_bench_projection_is_visible_from_free_front_directions
+[  OK  ] optical_bench_projection_is_visible_from_free_front_directions (0.50 s)
+[ RUN  ] diffuse_screen_aim_sampling_retains_full_hemisphere_and_matching_pdf
+[  OK  ] diffuse_screen_aim_sampling_retains_full_hemisphere_and_matching_pdf (0.02 s)
+[ RUN  ] observatory_free_eye_planet_signal_dominates_room_reflection
+    free Saturn eye: planet 0.00020594354, other 1.1046536e-07
+    free Jupiter eye: planet 0.0017522501, other 4.9267409e-08
+    free Moon eye: planet 0.020805179, other 4.0842015e-08
+[  OK  ] observatory_free_eye_planet_signal_dominates_room_reflection (10.58 s)
+[ RUN  ] observatory_window_transmits_candlelight_to_exterior_ground
+    exterior candlelight: window open 1.24201481e-08, sealed 0
+[  OK  ] observatory_window_transmits_candlelight_to_exterior_ground (2.88 s)
+[ RUN  ] pinhole_has_finite_geometric_blur_without_a_lens_focus
+[  OK  ] pinhole_has_finite_geometric_blur_without_a_lens_focus (0.02 s)
+[ RUN  ] moon_eyepiece_saved_glass_view_separates_reflection_from_transmission
+[  OK  ] moon_eyepiece_saved_glass_view_separates_reflection_from_transmission (4.21 s)
+[ RUN  ] observatory_eyepiece_room_light_is_reflected_and_eyecup_reduces_it
+[  OK  ] observatory_eyepiece_room_light_is_reflected_and_eyecup_reduces_it (9.41 s)
+[ RUN  ] paraxial_efl_matches_thick_lens_formula
+[  OK  ] paraxial_efl_matches_thick_lens_formula (0.00 s)
+[ RUN  ] designed_simple_lenses_have_requested_focal_length
+[  OK  ] designed_simple_lenses_have_requested_focal_length (0.00 s)
+[ RUN  ] near_axis_real_ray_reaches_paraxial_focus
+[  OK  ] near_axis_real_ray_reaches_paraxial_focus (0.00 s)
+[ RUN  ] instruments_far_from_the_origin_keep_their_precision
+[  OK  ] instruments_far_from_the_origin_keep_their_precision (0.01 s)
+[ RUN  ] spherical_and_chromatic_aberration_trends
+[  OK  ] spherical_and_chromatic_aberration_trends (0.00 s)
+[ RUN  ] afocal_keplerian_telescope
+[  OK  ] afocal_keplerian_telescope (0.00 s)
+[ RUN  ] lens_rim_is_physical_matter
+[  OK  ] lens_rim_is_physical_matter (0.00 s)
+[ RUN  ] ghost_reflections_emerge_from_non_sequential_transport
+[  OK  ] ghost_reflections_emerge_from_non_sequential_transport (0.07 s)
+[ RUN  ] physical_camera_forms_an_upright_image
+[  OK  ] physical_camera_forms_an_upright_image (0.05 s)
+[ RUN  ] camera_f_number_and_pupil_aim
+[  OK  ] camera_f_number_and_pupil_aim (2.44 s)
+[ RUN  ] accommodation_follows_the_light_the_pupil_receives
+[  OK  ] accommodation_follows_the_light_the_pupil_receives (1.19 s)
+[ RUN  ] observatory_sources_use_consistent_relative_photometry
+[  OK  ] observatory_sources_use_consistent_relative_photometry (1.19 s)
+[ RUN  ] parser_handles_units_calls_tuples_and_blocks
+[  OK  ] parser_handles_units_calls_tuples_and_blocks (0.00 s)
+[ RUN  ] parser_reports_line_numbers
+[  OK  ] parser_reports_line_numbers (0.00 s)
+[ RUN  ] scene_builds_lens_with_physical_structure
+[  OK  ] scene_builds_lens_with_physical_structure (0.00 s)
+[ RUN  ] prescription_table_round_trip
+[  OK  ] prescription_table_round_trip (0.00 s)
+[ RUN  ] exit_pupil_placement_for_observers
+[  OK  ] exit_pupil_placement_for_observers (0.00 s)
+[ RUN  ] scene_edits_override_named_and_unnamed_blocks
+[  OK  ] scene_edits_override_named_and_unnamed_blocks (0.00 s)
+[ RUN  ] meter_brings_a_uniform_scene_to_middle_grey
+[  OK  ] meter_brings_a_uniform_scene_to_middle_grey (0.00 s)
+[ RUN  ] meter_ignores_compact_highlights_anywhere_in_the_frame
+[  OK  ] meter_ignores_compact_highlights_anywhere_in_the_frame (0.01 s)
+[ RUN  ] meter_changes_continuously_as_a_lamp_crosses_the_centre
+[  OK  ] meter_changes_continuously_as_a_lamp_crosses_the_centre (0.06 s)
+[ RUN  ] meter_lets_a_large_bright_area_pull_by_a_bounded_amount
+[  OK  ] meter_lets_a_large_bright_area_pull_by_a_bounded_amount (0.00 s)
+[ RUN  ] meter_is_robust_to_one_sample_noise
+[  OK  ] meter_is_robust_to_one_sample_noise (0.00 s)
+[ RUN  ] meter_is_scale_invariant_and_a_locked_meter_keeps_the_picture
+[  OK  ] meter_is_scale_invariant_and_a_locked_meter_keeps_the_picture (0.00 s)
+[ RUN  ] exposure_manual_and_locked_map_unchanged_raw_pixels_identically
+[  OK  ] exposure_manual_and_locked_map_unchanged_raw_pixels_identically (0.05 s)
+[ RUN  ] exposure_locks_only_on_a_sufficiently_sampled_image
+[  OK  ] exposure_locks_only_on_a_sufficiently_sampled_image (0.00 s)
+[ RUN  ] exposure_adaptive_follows_the_meter_within_its_rate_limits
+[  OK  ] exposure_adaptive_follows_the_meter_within_its_rate_limits (0.52 s)
+[ RUN  ] exposure_adaptive_holds_through_small_fluctuations
+[  OK  ] exposure_adaptive_holds_through_small_fluctuations (0.02 s)
+[ RUN  ] exposure_mode_switches_keep_the_displayed_brightness
+[  OK  ] exposure_mode_switches_keep_the_displayed_brightness (0.00 s)
+[ RUN  ] display_highlights_fade_to_white_instead_of_clipping_per_channel
+[  OK  ] display_highlights_fade_to_white_instead_of_clipping_per_channel (0.00 s)
+[ RUN  ] display_agx_keeps_grey_and_takes_bright_colours_to_white
+[  OK  ] display_agx_keeps_grey_and_takes_bright_colours_to_white (0.00 s)
+[ RUN  ] registry_lists_the_reference_first_and_names_backends
+[  OK  ] registry_lists_the_reference_first_and_names_backends (0.12 s)
+[ RUN  ] registry_adapts_integrators_a_backend_lacks
+[  OK  ] registry_adapts_integrators_a_backend_lacks (0.00 s)
+[ RUN  ] display_keeps_the_hue_of_spectral_colours
+[  OK  ] display_keeps_the_hue_of_spectral_colours (0.00 s)
+[ RUN  ] image_texture_reflects_its_texels_spectra_on_every_backend
+[  OK  ] image_texture_reflects_its_texels_spectra_on_every_backend (0.02 s)
+[ RUN  ] environment_map_lights_the_scene_as_its_radiance_says
+    [cpu] white map / uniform sky 0.9999; patchy map on the ball: path 0.1594, light 0.15774
+[  OK  ] environment_map_lights_the_scene_as_its_radiance_says (1.33 s)
+[ RUN  ] gpu_pipeline_cache_is_written_and_reused
+[  OK  ] gpu_pipeline_cache_is_written_and_reused (0.00 s)
+[ RUN  ] backends_white_furnace_closed_diffuse_sphere
+    [cpu]
+    [gpu] skipped: no Vulkan device found
+[  OK  ] backends_white_furnace_closed_diffuse_sphere (4.26 s)
+[ RUN  ] backends_dielectric_sphere_preserves_uniform_radiance
+    [cpu]
+    [gpu] skipped: no Vulkan device found
+[  OK  ] backends_dielectric_sphere_preserves_uniform_radiance (0.23 s)
+[ RUN  ] backends_uncoated_glass_reflected_energy_matches_fresnel
+    [cpu]
+    cpu glass at 0 deg: R=0.03985, Fresnel=0.04000
+    cpu glass at 60 deg: R=0.08884, Fresnel=0.08919
+    cpu glass at 80 deg: R=0.38805, Fresnel=0.38770
+    [gpu] skipped: no Vulkan device found
+[  OK  ] backends_uncoated_glass_reflected_energy_matches_fresnel (1.48 s)
+[ RUN  ] backends_pinhole_irradiance_depends_on_aperture_area
+    [cpu]
+    cpu pinhole 6 mm: E=1.7671469e-06, analytic=1.7671449e-06
+    cpu pinhole 12 mm: E=7.0685755e-06, analytic=7.0685676e-06
+    cpu pinhole 300 mm: E=0.0044116561, analytic=0.0044116608
+    cpu pinhole 6 mm / 3 m screen: E=1.4900287e-06, analytic=1.4899438e-06
+    [gpu] skipped: no Vulkan device found
+[  OK  ] backends_pinhole_irradiance_depends_on_aperture_area (0.37 s)
+[ RUN  ] backends_distant_stars_and_nearby_lamps_both_illuminate_surfaces
+    [cpu]
+    cpu starlight + lamp: 4.28789753e-07, analytic 4.28885438e-07
+    [gpu] skipped: no Vulkan device found
+[  OK  ] backends_distant_stars_and_nearby_lamps_both_illuminate_surfaces (0.19 s)
+[ RUN  ] backends_reflected_moonlight_illuminates_ground
+    [cpu]
+    cpu reflected moonlight: 4.32825982e-07, analytic 4.3268917e-07
+    [gpu] skipped: no Vulkan device found
+[  OK  ] backends_reflected_moonlight_illuminates_ground (0.63 s)
+[ RUN  ] backends_telescope_forms_image_for_freely_placed_eyes
+    [cpu]
+    [gpu] skipped: no Vulkan device found
+[  OK  ] backends_telescope_forms_image_for_freely_placed_eyes (3.00 s)
+[ RUN  ] backends_guided_eye_pupil_measures_the_same_with_less_noise
+    [cpu]
+      behind 0.000 m: guided 0.0036168 ± 0.0001, uniform 0.0033399 ± 0.00033
+      behind 0.004 m: guided 0.0036222 ± 0.00011, uniform 0.0032476 ± 0.00028
+    [gpu] skipped: no Vulkan device found
+[  OK  ] backends_guided_eye_pupil_measures_the_same_with_less_noise (2.04 s)
+[ RUN  ] backends_reset_observer_matches_fresh_render
+    [cpu]
+    [gpu] skipped: no Vulkan device found
+[  OK  ] backends_reset_observer_matches_fresh_render (0.01 s)
+[ RUN  ] backends_diffuse_screen_readout_and_observer
+    [cpu]
+    [gpu] skipped: no Vulkan device found
+[  OK  ] backends_diffuse_screen_readout_and_observer (2.38 s)
+[ RUN  ] backends_sliver_triangles_are_lit_like_their_neighbours
+    [cpu]
+    [gpu] skipped: no Vulkan device found
+[  OK  ] backends_sliver_triangles_are_lit_like_their_neighbours (0.06 s)
+[ RUN  ] backends_every_integrator_measures_lambertian_disk_irradiance
+    [cpu]
+    [gpu] skipped: no Vulkan device found
+[  OK  ] backends_every_integrator_measures_lambertian_disk_irradiance (0.39 s)
+[ RUN  ] backends_every_integrator_passes_the_white_furnace
+    [cpu]
+    [gpu] skipped: no Vulkan device found
+[  OK  ] backends_every_integrator_passes_the_white_furnace (2.36 s)
+[ RUN  ] backends_agree_with_reference_on_a_caustic
+    [gpu] skipped: no Vulkan device found
+[  OK  ] backends_agree_with_reference_on_a_caustic (0.00 s)
+[ RUN  ] backends_agree_with_reference_on_diffuse_screens
+    [gpu] skipped: no Vulkan device found
+[  OK  ] backends_agree_with_reference_on_diffuse_screens (0.00 s)
+[ RUN  ] backends_agree_with_reference_through_instruments_and_cameras
+    [gpu] skipped: no Vulkan device found
+[  OK  ] backends_agree_with_reference_through_instruments_and_cameras (0.00 s)
+[ RUN  ] gpu_scene_layout_is_flat_and_aligned
+[  OK  ] gpu_scene_layout_is_flat_and_aligned (3.34 s)
+[ RUN  ] gpu_planetary_sphere_frame_preserves_height_and_observer_rebasing
+[  OK  ] gpu_planetary_sphere_frame_preserves_height_and_observer_rebasing (0.00 s)
+[ RUN  ] gpu_planetary_sphere_preserves_nearby_occlusion
+    [gpu] skipped: no Vulkan device found
+[  OK  ] gpu_planetary_sphere_preserves_nearby_occlusion (0.00 s)
+[ RUN  ] gpu_planetary_sphere_keeps_stable_distant_origin_roots
+    [gpu] skipped: no Vulkan device found
+[  OK  ] gpu_planetary_sphere_keeps_stable_distant_origin_roots (0.00 s)
+[ RUN  ] gpu_contact_glass_support_preserves_contact_and_resolved_gaps
+    [gpu] skipped: no Vulkan device found
+[  OK  ] gpu_contact_glass_support_preserves_contact_and_resolved_gaps (0.00 s)
+[ RUN  ] gpu_contact_spawn_preserves_resolved_thin_same_boundary_exit
+[  OK  ] gpu_contact_spawn_preserves_resolved_thin_same_boundary_exit (0.00 s)
+[ RUN  ] gpu_contact_spawn_preserves_distinct_parallel_mesh_face
+[  OK  ] gpu_contact_spawn_preserves_distinct_parallel_mesh_face (0.00 s)
+[ RUN  ] gpu_contact_spawn_preserves_nearest_distinct_face_in_one_mesh
+[  OK  ] gpu_contact_spawn_preserves_nearest_distinct_face_in_one_mesh (0.00 s)
+[ RUN  ] navigation_precision_supports_millimetre_eye_alignment
+[  OK  ] navigation_precision_supports_millimetre_eye_alignment (0.00 s)
+[ RUN  ] navigation_orbit_pan_dolly_and_walk
+[  OK  ] navigation_orbit_pan_dolly_and_walk (0.00 s)
+[ RUN  ] navigation_preserves_optical_presets_and_finds_eye_medium
+[  OK  ] navigation_preserves_optical_presets_and_finds_eye_medium (2.11 s)
+[ RUN  ] free_eye_at_a_saved_observer_pose_is_that_observer
+[  OK  ] free_eye_at_a_saved_observer_pose_is_that_observer (0.44 s)
+[ RUN  ] free_eye_sees_a_loose_lens_form_an_inverted_image_from_either_side
+[  OK  ] free_eye_sees_a_loose_lens_form_an_inverted_image_from_either_side (0.07 s)
+[ RUN  ] free_eye_sees_a_magnified_upright_virtual_image_close_to_a_lens
+[  OK  ] free_eye_sees_a_magnified_upright_virtual_image_close_to_a_lens (0.11 s)
+[ RUN  ] free_eye_sees_the_real_image_a_concave_mirror_forms
+[  OK  ] free_eye_sees_the_real_image_a_concave_mirror_forms (0.05 s)
+[ RUN  ] walking_across_a_telescope_exit_pupil_vignettes_as_the_pupils_overlap
+    eye 0.30 mm off the exit pupil (radius 0.594 mm; eye 0.6 mm): 0.6928 of the centred image, disc overlap 0.6920
+    eye 0.60 mm off the exit pupil (radius 0.594 mm; eye 0.6 mm): 0.3862 of the centred image, disc overlap 0.3950
+    eye 0.90 mm off the exit pupil (radius 0.594 mm; eye 0.6 mm): 0.1391 of the centred image, disc overlap 0.1458
+    eye 1.19 mm off the exit pupil (radius 0.594 mm; eye 0.6 mm): 0.0001 of the centred image, disc overlap 0.0000
+    eye 1.49 mm off the exit pupil (radius 0.594 mm; eye 0.6 mm): 0.0000 of the centred image, disc overlap 0.0000
+[  OK  ] walking_across_a_telescope_exit_pupil_vignettes_as_the_pupils_overlap (2.42 s)
+[ RUN  ] reference_lens_focuses_sunlight_with_its_fresnel_losses
+    [cpu] lens: power 0.0787053, expected 0.078315 (T = 0.9169), ratio 1.0050, concentration 233×
+[  OK  ] reference_lens_focuses_sunlight_with_its_fresnel_losses (0.08 s)
+[ RUN  ] reference_water_surface_transmits_the_fresnel_share
+    [cpu] water: irradiance 4.05056e-05, expected 4.01925e-05, ratio 1.0078
+[  OK  ] reference_water_surface_transmits_the_fresnel_share (0.14 s)
+[ RUN  ] reference_concave_mirror_concentrates_sunlight
+    [cpu] mirror: power 0.474644, expected 0.474311, ratio 1.0007, concentration 2511×
+[  OK  ] reference_concave_mirror_concentrates_sunlight (0.06 s)
+[ RUN  ] sppm_sees_a_caustic_through_a_glass_plate_and_in_a_mirror
+[  OK  ] sppm_sees_a_caustic_through_a_glass_plate_and_in_a_mirror (0.00 s)
+[ RUN  ] reference_prism_deviates_each_wavelength_as_snell_predicts
+    404.7 nm: n = 1.84232, deviation 74.9037° (analytic 74.9037°)
+    486.1 nm: n = 1.80652, deviation 69.2493° (analytic 69.2493°)
+    546.1 nm: n = 1.79191, deviation 67.2691° (analytic 67.2691°)
+    587.6 nm: n = 1.78471, deviation 66.3419° (analytic 66.3419°)
+    656.3 nm: n = 1.77595, deviation 65.2502° (analytic 65.2502°)
+    706.5 nm: n = 1.77119, deviation 64.6727° (analytic 64.6727°)
+[  OK  ] reference_prism_deviates_each_wavelength_as_snell_predicts (0.00 s)
+[ RUN  ] reference_ripple_caustics_follow_the_ray_map_jacobian
+    [cpu] mean irradiance 6.4763e-05 (analytic 6.4567e-05), L1 difference 1.94%, peak 9.2 E₀ at bin 100 (analytic 9.1 E₀ at 100)
+[  OK  ] reference_ripple_caustics_follow_the_ray_map_jacobian (3.88 s)
+[ RUN  ] shading_smooth_normals_keep_creases_and_follow_curvature
+    UV sphere 32 × 16: largest corner-normal error 0.344°
+[  OK  ] shading_smooth_normals_keep_creases_and_follow_curvature (0.00 s)
+[ RUN  ] shading_obj_vertex_normals_are_read_and_face_their_triangle
+[  OK  ] shading_obj_vertex_normals_are_read_and_face_their_triangle (0.00 s)
+[ RUN  ] shading_smooth_sphere_mesh_shades_like_the_sphere
+[  OK  ] shading_smooth_sphere_mesh_shades_like_the_sphere (0.00 s)
+[ RUN  ] shading_estimators_agree_on_a_smooth_mesh
+[  OK  ] shading_estimators_agree_on_a_smooth_mesh (0.00 s)
+[ RUN  ] shading_normals_shape_a_sunbeam_as_their_cosine
+[  OK  ] shading_normals_shape_a_sunbeam_as_their_cosine (0.00 s)
+[ RUN  ] shading_smooth_glass_mesh_refracts_like_the_glass_ball
+[  OK  ] shading_smooth_glass_mesh_refracts_like_the_glass_ball (0.00 s)
+[ RUN  ] shading_material_map_gives_each_texture_component_its_roughness
+[  OK  ] shading_material_map_gives_each_texture_component_its_roughness (0.00 s)
+[ RUN  ] shading_relief_tilts_the_normal_by_its_slope
+[  OK  ] shading_relief_tilts_the_normal_by_its_slope (0.00 s)
+[ RUN  ] vcm_cache_overflow_replays_the_pass_without_losing_vertices
+[  OK  ] vcm_cache_overflow_replays_the_pass_without_losing_vertices (0.00 s)
+[ RUN  ] vcm_cache_overflow_rejects_a_bounded_allocation_and_can_recover
+[  OK  ] vcm_cache_overflow_rejects_a_bounded_allocation_and_can_recover (0.00 s)
+[ RUN  ] vcm_cached_connections_cannot_escape_a_sealed_far_enclosure
+[  OK  ] vcm_cached_connections_cannot_escape_a_sealed_far_enclosure (0.00 s)
+[ RUN  ] vcm_cached_diffuse_packets_match_coloured_textures_and_shading_normals
+[  OK  ] vcm_cached_diffuse_packets_match_coloured_textures_and_shading_normals (0.00 s)
+[ RUN  ] vcm_camera_cie_keeps_xyz_normalization_after_dispersion
+[  OK  ] vcm_camera_cie_keeps_xyz_normalization_after_dispersion (0.00 s)
+[ RUN  ] vcm_bdpt_and_vcm_draw_the_path_tracers_image
+[  OK  ] vcm_bdpt_and_vcm_draw_the_path_tracers_image (0.00 s)
+[ RUN  ] vcm_sees_a_lens_caustic_through_a_glass_plate
+[  OK  ] vcm_sees_a_lens_caustic_through_a_glass_plate (0.00 s)
+[ RUN  ] vcm_keeps_a_glossy_reflection_as_camera_paths_do
+[  OK  ] vcm_keeps_a_glossy_reflection_as_camera_paths_do (0.00 s)
+[ RUN  ] backends_far_light_vertices_respect_near_observer_occlusion
+    [cpu light diffuser] blocked camera 0, particles 0, open 0.00283121938
+    [gpu] skipped: no Vulkan device found
+[  OK  ] backends_far_light_vertices_respect_near_observer_occlusion (0.03 s)
+[ RUN  ] backends_far_emitters_respect_near_observer_occlusion
+    [cpu light emitter] blocked camera 0, particles 0, open 0.041292265
+[  OK  ] backends_far_emitters_respect_near_observer_occlusion (0.03 s)
+[ RUN  ] backends_far_emitters_respect_source_end_occlusion
+    [cpu light] source-end blocked 0, open 0.328223861, beyond 0.328223861
+    [gpu] skipped: no Vulkan device found
+[  OK  ] backends_far_emitters_respect_source_end_occlusion (0.06 s)
+[ RUN  ] backends_camera_nee_respects_source_end_occlusion
+    [cpu path] NEE source-end blocked 0, open 0.00254644605, beyond 0.00254644605
+    [gpu] skipped: no Vulkan device found
+[  OK  ] backends_camera_nee_respects_source_end_occlusion (0.13 s)
+[ RUN  ] backends_surface_sensor_respects_exact_opaque_contact
+    [cpu] sensor contact 0, gap 0.0000001 m 3.14135048, analytic 3.14159265
+    [cpu] sensor contact 0, gap 0.001 m 3.14135048, analytic 3.14159265
+    [gpu] skipped: no Vulkan device found
+[  OK  ] backends_surface_sensor_respects_exact_opaque_contact (0.00 s)
+[ RUN  ] backends_particles_respect_surface_sensor_opaque_contact
+    [cpu light] finite-source sensor contact 0, separated 0.0877553515, diagnostics 0
+    [gpu] skipped: no Vulkan device found
+[  OK  ] backends_particles_respect_surface_sensor_opaque_contact (0.00 s)
+[ RUN  ] models_gltf_is_placed_z_up_with_parts_and_uvs
+[  OK  ] models_gltf_is_placed_z_up_with_parts_and_uvs (0.00 s)
+[ RUN  ] models_gltf_texture_follows_its_uvs_on_the_gpu
+[  OK  ] models_gltf_texture_follows_its_uvs_on_the_gpu (0.00 s)
+[ RUN  ] models_normal_and_roughness_maps_on_the_gpu
+[  OK  ] models_normal_and_roughness_maps_on_the_gpu (0.00 s)
+
+157/157 tests passed

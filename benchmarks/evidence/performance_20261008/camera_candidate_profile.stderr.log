@@ -1,0 +1,33 @@
+note: PeacockGlass: stained_glass roughness is not supported yet; its reflection stays specular
+textures: 6532 MB over the 2048 MB budget, now 1924 MB (OWE_TEXTURE_BUDGET_MB):
+  fumed.jpg → 4096×4096
+  oak_veneer_01_nor_gl_16k.jpg → 4096×4096
+  oak_veneer_01_rough_16k.jpg → 4096×4096
+  dark_walnut_8k.jpg → 4096×4096
+  round_wooden_table_01_arm_8k.jpg → 4096×4096
+  round_wooden_table_01_nor_gl_8k.jpg → 4096×4096
+  white_plaster_02_diff_8k.jpg → 4096×4096
+  white_plaster_02_nor_gl_8k.jpg → 4096×4096
+  white_plaster_02_rough_8k.jpg → 4096×4096
+  wood_floor_diff_8k.jpg → 4096×4096
+  wood_floor_nor_gl_8k.jpg → 4096×4096
+  wood_floor_rough_8k.jpg → 4096×4096
+owe_gpu_profile enabled: diagnostic timestamps may affect performance
+gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)
+ideal observer 'Room' 960x600, fovY=40 deg, pupil diameter=3 mm, focus=1.350000 m, pixel filter gaussian(0.4)
+pass 1/1: 16 spp, 15.50 s, mean Y 1.1696e-05
+paths 18432000, segments 114051169, region inconsistencies 116278, leaks 0
+first inconsistency: ray in ambient[air], last at its origin, met Lead3A.side (whose side there is Lead3A.interior[opaque]) at (0.275319011, 0.515555053, 1.51132388)
+owe_gpu_profile kind=kernel name=sppm guide calls=16 gpu_ms=0.499584
+owe_gpu_profile kind=kernel name=vcm camera (ray queries) calls=16 gpu_ms=11591.910400
+owe_gpu_profile kind=kernel name=vcm grid calls=16 gpu_ms=16.194688
+owe_gpu_profile kind=kernel name=vcm light (ray queries) calls=83 gpu_ms=3793.790272
+owe_gpu_profile kind=submission name=submission calls=31 gpu_ms=6.287104 cpu_ms=9.697050
+owe_gpu_profile kind=submission name=upload calls=48 gpu_ms=158.412544 cpu_ms=171.630175
+owe_gpu_profile kind=submission name=vcm begin calls=16 gpu_ms=1.548224 cpu_ms=6.195121
+owe_gpu_profile kind=submission name=vcm film readback calls=1 gpu_ms=7.000064 cpu_ms=7.461406
+owe_gpu_profile kind=submission name=vcm grid/camera/counters calls=16 gpu_ms=11608.145600 cpu_ms=11614.051935
+owe_gpu_profile kind=submission name=vcm guide snapshot calls=1 gpu_ms=0.007680 cpu_ms=0.318312
+owe_gpu_profile kind=submission name=vcm light calls=50 gpu_ms=3793.800992 cpu_ms=3814.838512
+wall_seconds=35.130355
+peak_rss_kib=2688644

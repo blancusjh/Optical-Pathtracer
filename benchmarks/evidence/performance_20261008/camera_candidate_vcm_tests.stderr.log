@@ -1,0 +1,27 @@
+[ RUN  ] vcm_cache_overflow_replays_the_pass_without_losing_vertices
+vcm: light vertex cache (4 vertices) overflowed; replaying pass with 628 vertices
+vcm: light vertex cache (628 vertices) overflowed; replaying pass with 1248 vertices
+vcm: light vertex cache (1248 vertices) overflowed; replaying pass with 1872 vertices
+    replay image max error 0 (tolerance 0)
+vcm: light vertex cache (4 vertices) overflowed; replaying pass with 628 vertices
+vcm: light vertex cache (628 vertices) overflowed; replaying pass with 1212 vertices
+vcm: light vertex cache (1212 vertices) overflowed; replaying pass with 1818 vertices
+    replay image max error 1.49012e-08 (tolerance 4.36161e-06)
+[  OK  ] vcm_cache_overflow_replays_the_pass_without_losing_vertices (95.76 s)
+[ RUN  ] vcm_cache_overflow_rejects_a_bounded_allocation_and_can_recover
+vcm: light vertex cache (4 vertices) overflowed; replaying pass with 628 vertices
+vcm: light vertex cache (4 vertices) overflowed; replaying pass with 628 vertices
+vcm: light vertex cache (628 vertices) overflowed; replaying pass with 1212 vertices
+    replay image max error 3.97364e-08 (tolerance 4.28827e-06)
+[  OK  ] vcm_cache_overflow_rejects_a_bounded_allocation_and_can_recover (0.28 s)
+[ RUN  ] vcm_bdpt_and_vcm_draw_the_path_tracers_image
+    against path: bdpt mean 1.0001 (worst block 0.0005), vcm mean 0.9995 (worst block 0.0020)
+[  OK  ] vcm_bdpt_and_vcm_draw_the_path_tracers_image (7.29 s)
+[ RUN  ] vcm_sees_a_lens_caustic_through_a_glass_plate
+    through the plate: 0.9165 of the direct view (Fresnel: 0.9187)
+[  OK  ] vcm_sees_a_lens_caustic_through_a_glass_plate (4.01 s)
+[ RUN  ] vcm_keeps_a_glossy_reflection_as_camera_paths_do
+    at 64 samples against path × 1024: vcm relMSE 0.01129, path 0.1085; vcm mean 0.9969
+[  OK  ] vcm_keeps_a_glossy_reflection_as_camera_paths_do (4.36 s)
+
+5/5 tests passed

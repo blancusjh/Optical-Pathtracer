@@ -1,0 +1,6 @@
+Name: Astrolabe
+Author: Virtual Museums of Małopolska
+Licence: CC0 Public Domain
+URL: https://sketchfab.com/3d-models/astrolabe-530bd21edcdf4c4695cc4c8af856d6bf
+Downloaded: 2026-09-29
+Format: glTF (separate textures)

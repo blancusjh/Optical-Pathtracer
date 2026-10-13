@@ -1,0 +1,122 @@
+{
+  "schema": 1,
+  "name": "invisible_window_wall",
+  "identity": {
+    "schema": 1,
+    "scene": "scenes/the_invisible_window.owe",
+    "arguments": [
+      "--detector",
+      "Wall",
+      "--integrator",
+      "sppm",
+      "--spp",
+      "128",
+      "--max-depth",
+      "10",
+      "--seed",
+      "7",
+      "--resolution",
+      "960x600",
+      "--backend",
+      "gpu",
+      "--photons",
+      "16",
+      "--passes",
+      "1",
+      "--threads",
+      "0",
+      "--device",
+      "1"
+    ],
+    "assets": {
+      "scenes/the_invisible_window.owe": "2bf3896b83a529196fc1ffe1c74a40dda84656551b3ca6a0c3e8917ac8cd5722",
+      "models/caustic/sacred_heart_panel.obj": "1e16e59cc374d8323c649dbf9aae175990c2f0e912bb90e1358fa6673a2a4f32",
+      "assets/polyhaven/marble_01/marble_01_rough_8k.jpg": "13e2a2550edf3c364c09fb05ef5f821b5c7368268a8f290f2585095129ba017c",
+      "assets/polyhaven/marble_01/marble_01_nor_gl_8k.jpg": "0e07d850dee0b27134db50991fd68191b4dc59c5405bae885b84c648b4950622",
+      "assets/polyhaven/marble_01/marble_01_diff_8k.jpg": "ff9706698c3000d1d5e044f67cd950df1e3b6f57b46ce8b4a71c4630441d7ed2",
+      "assets/polyhaven/oak_veneer_01/oak_veneer_01_rough_16k.jpg": "b98f1f2f44bab05dee6dda4240846715073709e36ef414c5466ec918c8e5c5e2",
+      "assets/polyhaven/oak_veneer_01/oak_veneer_01_nor_gl_16k.jpg": "7223961d4f249d40618ff4b3d37b1104809965c16ddd34fb7df018a2ad7f956a",
+      "assets/polyhaven/oak_veneer_01/fumed.jpg": "249b0e8d1ede50f448356b94480e2301d3c0be8eb3f999ae59a7f5356d3882e4",
+      "assets/polyhaven/white_plaster_02/white_plaster_02_rough_8k.jpg": "abbb8792b0f81c079a9894ebbebb0325deebe788cd0413bd1162a54902202059",
+      "assets/polyhaven/white_plaster_02/white_plaster_02_nor_gl_8k.jpg": "14f716c0d836f54637b08f253ddeb84c01c08b1df8064aa886108caa2565748b",
+      "assets/polyhaven/white_plaster_02/white_plaster_02_diff_8k.jpg": "fb51b1a1fba44202468c40d89fab8f022a6b0f93e6800b0f1eb64e6a2c92cc25",
+      "assets/daylight/invisible_window_sun_aligned.hdr": "f55cf651df86f25913e6b07ffa6a49bf755fc8f335b2e69bbb0f984fd61869e0"
+    },
+    "code": {
+      "binary_sha256": "281347b390f6bfc1fa215f72fc94469fab184283780ec109721cf56f9e8ea243",
+      "source_scope": "capture_workspace",
+      "source_description": "source_sha256 hashes the current workspace sources, build definition, runner and suite manifest; it is not the executable's build provenance",
+      "source_sha256": "b10d3905930a5ad8b0b564d038d675a435ed41569bf45c29a3f505d254e4dff8",
+      "git_head": "07092cfbd50f2558a07be0bd783e2c3f4485eabe"
+    },
+    "host": {
+      "platform": "Linux-7.2.7-arch1-1-x86_64-with-glibc2.44",
+      "machine": "x86_64",
+      "cpu": "",
+      "logical_cpus": 16,
+      "backend_inventory": "cpu (reference) \u2014 the reference transport on host threads; IEEE-754 double, bitwise reproducible\n  integrators: path, light, hybrid\n  [0] 12th Gen Intel(R) Core(TM) i7-12650H \u2014 cpu, 16 hardware threads\ngpu \u2014 portable GPU: Vulkan compute with Slang kernels (NVIDIA, AMD, Intel; Apple silicon via MoltenVK); float32, camera-relative\n  integrators: path, light, hybrid, sppm, bdpt, vcm\n  [0] Intel(R) Graphics (ADL GT2) \u2014 integrated, Vulkan 1.4.354\n  [1] NVIDIA GeForce RTX 4060 Laptop GPU \u2014 discrete, Vulkan 1.4.351, ray queries\n",
+      "nvidia_driver_inventory": {
+        "status": "available",
+        "devices": [
+          {
+            "index": "0",
+            "uuid": "GPU-827caec2-6f67-a1f6-4a68-4da0180a00c3",
+            "name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+            "driver_version": "615.71.09",
+            "pci.bus_id": "00000000:01:00.0"
+          }
+        ]
+      },
+      "environment": {
+        "CUDA_PATH": "/opt/cuda",
+        "OWE_GPU_RAY_QUERY": "1"
+      }
+    },
+    "gallery_tool_sha256": "2c1f6b5f0084010883f5ad194ed83e034dd915dcaee96335fdb9c4d508d16fd2",
+    "entry_sha256": "cee8e8b54f65be5afd286530fee9b874b2f98b9934f692d94ac49277338636ef"
+  },
+  "command": [
+    "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/out/contact_performance_fix_20261009/owe_wrapper_candidate",
+    "render",
+    "scenes/the_invisible_window.owe",
+    "--detector",
+    "Wall",
+    "--integrator",
+    "sppm",
+    "--spp",
+    "128",
+    "--max-depth",
+    "10",
+    "--seed",
+    "7",
+    "--resolution",
+    "960x600",
+    "--backend",
+    "gpu",
+    "--photons",
+    "16",
+    "--passes",
+    "1",
+    "--threads",
+    "0",
+    "--device",
+    "1",
+    "--out",
+    "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/out/gallery/final_review_20261010_v2/invisible_window_wall"
+  ],
+  "validation_limitations": [],
+  "wall_seconds": 1799.3412386819982,
+  "render_seconds": 1782.62,
+  "review": {
+    "note": "Opened native 960x600 image and received an independent visual review. Entire oblique lancet fits with arch and bottom clearance; portrait, raised hand, drapery and banderole-shaped ribbon are readable. Lettering is not legible. Visible optical softness and sampling grain limit fine detail without concealing the main structure; sparse coloured points remain in the dark surround. EV -15 preserves projection contrast. SPPM128, 16 photons per pixel, depth10, seed7, one pass; finite raw RGB. Native diagnostics:243 region inconsistencies,34 leaks, retained as unresolved transport limitations. Accepted for the local gallery milestone without denoising, retouching or a convergence claim. Target-photo source rights remain unresolved as requested.",
+    "utc": "2026-10-10T07:13:47.839657+00:00"
+  },
+  "artifacts": {
+    ".png": "e836952f60a81c885e8d282913dd0b8f460e239e5a1c06d2082d64ce096f2333",
+    ".json": "ab68f01946997a47bb985c5614be6403ebfda7a0f008924b45e93e0d360b58a0",
+    ".pfm": "4c808818555e4dfeb0b4d62c5b18891734d28f1c9577dae81312dd9ec95a0a76",
+    ".stdout.log": "78ca403ad12820b053321d08e78b5a06bdca5bbd2b5b79a407720a7fac70a7ed",
+    ".stderr.log": "12dd09c76b249ed2ab802e4e604640da2e1889ca8403ed1de4019d216c687890"
+  },
+  "source_rights": "unresolved"
+}

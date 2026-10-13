@@ -1,0 +1,301 @@
+[
+  {
+    "id": "white_plaster_02",
+    "license": "CC0-1.0",
+    "url": "https://polyhaven.com/a/white_plaster_02",
+    "files": [
+      {
+        "path": "assets/polyhaven/white_plaster_02/white_plaster_02_diff_2k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/white_plaster_02/white_plaster_02_diff_2k.jpg"
+      },
+      {
+        "path": "assets/polyhaven/white_plaster_02/white_plaster_02_diff_8k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/white_plaster_02/white_plaster_02_diff_8k.jpg",
+        "resolution": "original maximum"
+      },
+      {
+        "path": "assets/polyhaven/white_plaster_02/white_plaster_02_nor_gl_8k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/white_plaster_02/white_plaster_02_nor_gl_8k.jpg",
+        "resolution": "original maximum"
+      },
+      {
+        "path": "assets/polyhaven/white_plaster_02/white_plaster_02_rough_8k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/white_plaster_02/white_plaster_02_rough_8k.jpg",
+        "resolution": "original maximum"
+      }
+    ],
+    "derivatives": [
+      {
+        "path": "assets/polyhaven/white_plaster_02/ochre.jpg",
+        "source": "white_plaster_02_diff_8k.jpg",
+        "operation": "linear reflectance multiplied by (0.64,0.56,0.44), original dimensions retained",
+        "license": "CC0-1.0"
+      }
+    ]
+  },
+  {
+    "id": "wood_floor",
+    "license": "CC0-1.0",
+    "url": "https://polyhaven.com/a/wood_floor",
+    "files": [
+      {
+        "path": "assets/polyhaven/wood_floor/wood_floor_diff_2k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/wood_floor/wood_floor_diff_2k.jpg"
+      },
+      {
+        "path": "assets/polyhaven/wood_floor/wood_floor_diff_8k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/wood_floor/wood_floor_diff_8k.jpg",
+        "resolution": "original maximum"
+      },
+      {
+        "path": "assets/polyhaven/wood_floor/wood_floor_nor_gl_8k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/wood_floor/wood_floor_nor_gl_8k.jpg",
+        "resolution": "original maximum"
+      },
+      {
+        "path": "assets/polyhaven/wood_floor/wood_floor_rough_8k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/wood_floor/wood_floor_rough_8k.jpg",
+        "resolution": "original maximum"
+      }
+    ]
+  },
+  {
+    "id": "oak_veneer_01",
+    "license": "CC0-1.0",
+    "url": "https://polyhaven.com/a/oak_veneer_01",
+    "files": [
+      {
+        "path": "assets/polyhaven/oak_veneer_01/oak_veneer_01_diff_2k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/oak_veneer_01/oak_veneer_01_diff_2k.jpg"
+      },
+      {
+        "path": "assets/polyhaven/oak_veneer_01/oak_veneer_01_diff_16k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/16k/oak_veneer_01/oak_veneer_01_diff_16k.jpg",
+        "resolution": "original maximum"
+      },
+      {
+        "path": "assets/polyhaven/oak_veneer_01/oak_veneer_01_nor_gl_16k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/16k/oak_veneer_01/oak_veneer_01_nor_gl_16k.jpg",
+        "resolution": "original maximum"
+      },
+      {
+        "path": "assets/polyhaven/oak_veneer_01/oak_veneer_01_rough_16k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/16k/oak_veneer_01/oak_veneer_01_rough_16k.jpg",
+        "resolution": "original maximum"
+      }
+    ],
+    "derivatives": [
+      {
+        "path": "assets/polyhaven/oak_veneer_01/fumed.jpg",
+        "source": "oak_veneer_01_diff_16k.jpg",
+        "operation": "linear reflectance multiplied by (0.24,0.18,0.13), original dimensions retained",
+        "license": "CC0-1.0"
+      }
+    ]
+  },
+  {
+    "id": "marble_01",
+    "license": "CC0-1.0",
+    "url": "https://polyhaven.com/a/marble_01",
+    "files": [
+      {
+        "path": "assets/polyhaven/marble_01/marble_01_diff_2k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/marble_01/marble_01_diff_2k.jpg"
+      },
+      {
+        "path": "assets/polyhaven/marble_01/marble_01_diff_8k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/marble_01/marble_01_diff_8k.jpg",
+        "resolution": "original maximum"
+      },
+      {
+        "path": "assets/polyhaven/marble_01/marble_01_nor_gl_8k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/marble_01/marble_01_nor_gl_8k.jpg",
+        "resolution": "original maximum"
+      },
+      {
+        "path": "assets/polyhaven/marble_01/marble_01_rough_8k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/marble_01/marble_01_rough_8k.jpg",
+        "resolution": "original maximum"
+      }
+    ]
+  },
+  {
+    "id": "round_wooden_table_01",
+    "license": "CC0-1.0",
+    "url": "https://polyhaven.com/a/round_wooden_table_01",
+    "files": [
+      {
+        "path": "assets/polyhaven/round_wooden_table_01/round_wooden_table_01_2k.gltf",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/2k/round_wooden_table_01/round_wooden_table_01_2k.gltf"
+      },
+      {
+        "path": "assets/polyhaven/round_wooden_table_01/textures/round_wooden_table_01_nor_gl_2k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/round_wooden_table_01/round_wooden_table_01_nor_gl_2k.jpg"
+      },
+      {
+        "path": "assets/polyhaven/round_wooden_table_01/textures/round_wooden_table_01_arm_2k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/round_wooden_table_01/round_wooden_table_01_arm_2k.jpg"
+      },
+      {
+        "path": "assets/polyhaven/round_wooden_table_01/textures/round_wooden_table_01_diff_2k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/round_wooden_table_01/round_wooden_table_01_diff_2k.jpg"
+      },
+      {
+        "path": "assets/polyhaven/round_wooden_table_01/round_wooden_table_01.bin",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/round_wooden_table_01/round_wooden_table_01.bin"
+      },
+      {
+        "path": "assets/polyhaven/round_wooden_table_01/round_wooden_table_01_8k.gltf",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/round_wooden_table_01/round_wooden_table_01_8k.gltf",
+        "resolution": "original maximum"
+      },
+      {
+        "path": "assets/polyhaven/round_wooden_table_01/textures/round_wooden_table_01_diff_8k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/8k/round_wooden_table_01/round_wooden_table_01_diff_8k.jpg",
+        "resolution": "original maximum"
+      },
+      {
+        "path": "assets/polyhaven/round_wooden_table_01/textures/round_wooden_table_01_nor_gl_8k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/8k/round_wooden_table_01/round_wooden_table_01_nor_gl_8k.jpg",
+        "resolution": "original maximum"
+      },
+      {
+        "path": "assets/polyhaven/round_wooden_table_01/textures/round_wooden_table_01_arm_8k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/8k/round_wooden_table_01/round_wooden_table_01_arm_8k.jpg",
+        "resolution": "original maximum"
+      }
+    ],
+    "derivatives": [
+      {
+        "path": "assets/polyhaven/round_wooden_table_01/textures/dark_walnut_8k.jpg",
+        "source": "round_wooden_table_01_diff_8k.jpg",
+        "operation": "linear RGB multiplied by (.40,.34,.29), original8192x8192 retained; dark wood stain",
+        "license": "CC0-1.0"
+      }
+    ]
+  },
+  {
+    "id": "marble_bust_01",
+    "license": "CC0-1.0",
+    "url": "https://polyhaven.com/a/marble_bust_01",
+    "files": [
+      {
+        "path": "assets/polyhaven/marble_bust_01/marble_bust_01_2k.gltf",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/2k/marble_bust_01/marble_bust_01_2k.gltf"
+      },
+      {
+        "path": "assets/polyhaven/marble_bust_01/marble_bust_01.bin",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/marble_bust_01/marble_bust_01.bin"
+      },
+      {
+        "path": "assets/polyhaven/marble_bust_01/textures/marble_bust_01_rough_2k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/marble_bust_01/marble_bust_01_rough_2k.jpg"
+      },
+      {
+        "path": "assets/polyhaven/marble_bust_01/textures/marble_bust_01_diff_2k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/marble_bust_01/marble_bust_01_diff_2k.jpg"
+      },
+      {
+        "path": "assets/polyhaven/marble_bust_01/textures/marble_bust_01_nor_gl_2k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/marble_bust_01/marble_bust_01_nor_gl_2k.jpg"
+      },
+      {
+        "path": "assets/polyhaven/marble_bust_01/marble_bust_01_8k.gltf",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/marble_bust_01/marble_bust_01_8k.gltf",
+        "resolution": "original maximum"
+      },
+      {
+        "path": "assets/polyhaven/marble_bust_01/textures/marble_bust_01_diff_8k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/8k/marble_bust_01/marble_bust_01_diff_8k.jpg",
+        "resolution": "original maximum"
+      },
+      {
+        "path": "assets/polyhaven/marble_bust_01/textures/marble_bust_01_nor_gl_8k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/8k/marble_bust_01/marble_bust_01_nor_gl_8k.jpg",
+        "resolution": "original maximum"
+      },
+      {
+        "path": "assets/polyhaven/marble_bust_01/textures/marble_bust_01_rough_8k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/8k/marble_bust_01/marble_bust_01_rough_8k.jpg",
+        "resolution": "original maximum"
+      }
+    ]
+  },
+  {
+    "id": "GothicCabinet_01",
+    "license": "CC0-1.0",
+    "url": "https://polyhaven.com/a/GothicCabinet_01",
+    "files": [
+      {
+        "path": "assets/polyhaven/GothicCabinet_01/GothicCabinet_01_2k.gltf",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/2k/GothicCabinet_01/GothicCabinet_01_2k.gltf"
+      },
+      {
+        "path": "assets/polyhaven/GothicCabinet_01/GothicCabinet_01.bin",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/4k/GothicCabinet_01/GothicCabinet_01.bin"
+      },
+      {
+        "path": "assets/polyhaven/GothicCabinet_01/textures/GothicCabinet_01_arm_2k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/GothicCabinet_01/GothicCabinet_01_arm_2k.jpg"
+      },
+      {
+        "path": "assets/polyhaven/GothicCabinet_01/textures/GothicCabinet_01_diff_2k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/GothicCabinet_01/GothicCabinet_01_diff_2k.jpg"
+      },
+      {
+        "path": "assets/polyhaven/GothicCabinet_01/textures/GothicCabinet_01_nor_gl_2k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/GothicCabinet_01/GothicCabinet_01_nor_gl_2k.jpg"
+      },
+      {
+        "path": "assets/polyhaven/GothicCabinet_01/GothicCabinet_01_4k.gltf",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/4k/GothicCabinet_01/GothicCabinet_01_4k.gltf",
+        "resolution": "original maximum"
+      },
+      {
+        "path": "assets/polyhaven/GothicCabinet_01/textures/GothicCabinet_01_arm_4k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/4k/GothicCabinet_01/GothicCabinet_01_arm_4k.jpg",
+        "resolution": "original maximum"
+      },
+      {
+        "path": "assets/polyhaven/GothicCabinet_01/textures/GothicCabinet_01_nor_gl_4k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/4k/GothicCabinet_01/GothicCabinet_01_nor_gl_4k.jpg",
+        "resolution": "original maximum"
+      },
+      {
+        "path": "assets/polyhaven/GothicCabinet_01/textures/GothicCabinet_01_diff_4k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/4k/GothicCabinet_01/GothicCabinet_01_diff_4k.jpg",
+        "resolution": "original maximum"
+      }
+    ]
+  },
+  {
+    "id": "quatrefoil_jacquard_fabric",
+    "license": "CC0-1.0",
+    "url": "https://polyhaven.com/a/quatrefoil_jacquard_fabric",
+    "files": [
+      {
+        "path": "assets/polyhaven/quatrefoil_jacquard_fabric/quatrefoil_jacquard_fabric_diff_8k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/quatrefoil_jacquard_fabric/quatrefoil_jacquard_fabric_diff_8k.jpg",
+        "resolution": "original maximum"
+      },
+      {
+        "path": "assets/polyhaven/quatrefoil_jacquard_fabric/quatrefoil_jacquard_fabric_nor_gl_8k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/quatrefoil_jacquard_fabric/quatrefoil_jacquard_fabric_nor_gl_8k.jpg",
+        "resolution": "original maximum"
+      },
+      {
+        "path": "assets/polyhaven/quatrefoil_jacquard_fabric/quatrefoil_jacquard_fabric_rough_8k.jpg",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/quatrefoil_jacquard_fabric/quatrefoil_jacquard_fabric_rough_8k.jpg",
+        "resolution": "original maximum"
+      }
+    ],
+    "derivatives": [
+      {
+        "path": "assets/polyhaven/quatrefoil_jacquard_fabric/oxblood_8k.jpg",
+        "source": "quatrefoil_jacquard_fabric_diff_8k.jpg",
+        "operation": "linear reflectance multiplied by (0.32,0.23,0.21), original dimensions retained",
+        "license": "CC0-1.0"
+      }
+    ]
+  }
+]

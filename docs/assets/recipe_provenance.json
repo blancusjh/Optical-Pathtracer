@@ -1,0 +1,14 @@
+{
+  "source": "Project curation helpers preserved on 2026-10-09; asset-only portions extracted, scene rewrites omitted.",
+  "classification_source": "assets/curation/kunstkammer/the_kunstkammer_materials.py lines1-21",
+  "pigment_source": "same helper lines26-30; the_kunstkammer_finish_materials.py lines1-12; peacock_lamp/stain_table.py",
+  "steel_source": "Saved Sketchfab MANIFEST curation formula; original generation helper unavailable. Regenerated encoded bytes are not claimed identical. The reconstructed helper interprets source luminance as linear Rec.709 (.2126,.7152,.0722); the old encoder/settings were not recorded.",
+  "lunar_source": "Saved lunar SOURCE.txt formula; original helper unavailable.",
+  "dependency_versions_available_at_packaging": {
+    "numpy": "2.5.3",
+    "Pillow": "12.3.0"
+  },
+  "byte_reproducibility": "JPEG encoder/library and Blender versions can change encoded bytes; compare capture asset hashes for exact identity. Blender curation version was not recorded.",
+  "dependency_versions_note": "These are the local environment versions at packaging, not verified versions of the historical curation process.",
+  "code_license": "Project-created curation helper code follows the repository licence; original provider source/licence texts are preserved separately."
+}

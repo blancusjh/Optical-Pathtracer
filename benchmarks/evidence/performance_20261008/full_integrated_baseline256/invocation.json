@@ -1,0 +1,177 @@
+{
+  "schema": 2,
+  "provenance": {
+    "code": {
+      "binary_sha256": "b08531232c341ba367a1b433fd4771851e944d399868b9a38455f28381abca7a",
+      "source_sha256": "b3598021659fde43189643626adf771700affcbdb508b5f3263091a3b5cff846",
+      "git_head": "07092cfbd50f2558a07be0bd783e2c3f4485eabe"
+    },
+    "host": {
+      "platform": "Linux-7.2.7-arch1-1-x86_64-with-glibc2.44",
+      "machine": "x86_64",
+      "cpu": "",
+      "logical_cpus": 16,
+      "backend_inventory": "cpu (reference) \u2014 the reference transport on host threads; IEEE-754 double, bitwise reproducible\n  integrators: path, light, hybrid\n  [0] 12th Gen Intel(R) Core(TM) i7-12650H \u2014 cpu, 16 hardware threads\ngpu \u2014 portable GPU: Vulkan compute with Slang kernels (NVIDIA, AMD, Intel; Apple silicon via MoltenVK); float32, camera-relative\n  integrators: path, light, hybrid, sppm, bdpt, vcm\n  [0] Intel(R) Graphics (ADL GT2) \u2014 integrated, Vulkan 1.4.354\n  [1] NVIDIA GeForce RTX 4060 Laptop GPU \u2014 discrete, Vulkan 1.4.351, ray queries\n",
+      "nvidia_driver_inventory": {
+        "status": "available",
+        "devices": [
+          {
+            "index": "0",
+            "uuid": "GPU-827caec2-6f67-a1f6-4a68-4da0180a00c3",
+            "name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+            "driver_version": "615.71.09",
+            "pci.bus_id": "00000000:01:00.0"
+          }
+        ]
+      },
+      "environment": {
+        "CUDA_PATH": "/opt/cuda"
+      }
+    }
+  },
+  "options": {
+    "only": null,
+    "suite": "performance",
+    "include_scans": false,
+    "backend": "gpu",
+    "device": 1,
+    "binary": "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/out/performance_20261008/owe_integrated_baseline",
+    "output": "out/performance_20261008/full_integrated_baseline256",
+    "reference_dir": null,
+    "reference_spp": 256,
+    "reference_integrator": null,
+    "integrators": null,
+    "budgets": [
+      16,
+      64
+    ],
+    "seed": 1,
+    "reference_seed": 1000,
+    "threads": 0,
+    "passes": 1,
+    "resolution": null,
+    "quick": false,
+    "rescore": false,
+    "baseline": null,
+    "target_error": null,
+    "time": "transport",
+    "goal_speedup": 4.0,
+    "list": false
+  },
+  "cases": [
+    {
+      "name": "the_lens",
+      "path": "scenes/the_lens.owe",
+      "detector": "Eye",
+      "suite": "canonical",
+      "integrator": "path",
+      "max_depth": 64,
+      "resolution": "256x192"
+    },
+    {
+      "name": "prism_in_sunlight",
+      "path": "scenes/prism_in_sunlight.owe",
+      "detector": "Eye",
+      "suite": "canonical",
+      "integrator": "path",
+      "max_depth": 64,
+      "resolution": "256x192"
+    },
+    {
+      "name": "glass_of_water",
+      "path": "scenes/glass/glass_of_water.owe",
+      "detector": "Eye",
+      "suite": "canonical",
+      "integrator": "path",
+      "max_depth": 64,
+      "resolution": "256x192"
+    },
+    {
+      "name": "study_magnifier",
+      "path": "scenes/the_study.owe",
+      "detector": "Magnifier",
+      "suite": "canonical",
+      "integrator": "path",
+      "max_depth": 64,
+      "resolution": "256x192"
+    },
+    {
+      "name": "the_telescope",
+      "path": "scenes/the_telescope.owe",
+      "detector": "Eyepiece",
+      "suite": "canonical",
+      "integrator": "path",
+      "max_depth": 64,
+      "resolution": "256x192"
+    },
+    {
+      "name": "study_camera",
+      "path": "scenes/the_study.owe",
+      "detector": "Cam",
+      "suite": "canonical",
+      "integrator": "path",
+      "max_depth": 64,
+      "resolution": "256x192"
+    },
+    {
+      "name": "observatory_saturn",
+      "path": "scenes/the_observatory.owe",
+      "detector": "SaturnEyepiece",
+      "suite": "canonical",
+      "integrator": "path",
+      "max_depth": 64,
+      "resolution": "256x192"
+    },
+    {
+      "name": "camera_obscura",
+      "path": "scenes/camera_obscura.owe",
+      "detector": "Inside",
+      "suite": "canonical",
+      "integrator": "path",
+      "max_depth": 64,
+      "resolution": "256x192"
+    },
+    {
+      "name": "the_kunstkammer",
+      "path": "scenes/the_kunstkammer.owe",
+      "detector": "Room",
+      "integrator": "path",
+      "max_depth": 12,
+      "suite": "scans",
+      "resolution": "960x600"
+    },
+    {
+      "name": "the_gregorian",
+      "path": "scenes/the_gregorian.owe",
+      "detector": "Beside",
+      "integrator": "path",
+      "max_depth": 16,
+      "suite": "scans",
+      "resolution": "960x600"
+    },
+    {
+      "name": "the_peacock_lamp",
+      "path": "scenes/the_peacock_lamp.owe",
+      "detector": "Room",
+      "integrator": "vcm",
+      "max_depth": 16,
+      "suite": "scans",
+      "resolution": "960x600"
+    },
+    {
+      "name": "the_invisible_window",
+      "path": "scenes/the_invisible_window.owe",
+      "detector": "Wall",
+      "integrator": "sppm",
+      "max_depth": 10,
+      "photons": 16,
+      "suite": "scans",
+      "resolution": "960x600"
+    }
+  ],
+  "budgets": [
+    16,
+    64
+  ],
+  "reference_spp": 256
+}

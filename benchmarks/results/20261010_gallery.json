@@ -1,0 +1,941 @@
+{
+  "status": "completed_reviewed_gallery_and_validated_engine_milestone",
+  "engine_results": "20261009_gallery_engine.json",
+  "window_estimator_review": {
+    "archive": "out/gallery/window_estimator_review_20261010_v3",
+    "cases": [
+      {
+        "name": "window_room_vcm16",
+        "command": [
+          "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/out/contact_performance_fix_20261009/owe_wrapper_candidate",
+          "render",
+          "scenes/the_invisible_window.owe",
+          "--detector",
+          "Room",
+          "--integrator",
+          "vcm",
+          "--spp",
+          "16",
+          "--max-depth",
+          "10",
+          "--seed",
+          "7",
+          "--resolution",
+          "960x600",
+          "--backend",
+          "gpu",
+          "--passes",
+          "1",
+          "--threads",
+          "0",
+          "--photons",
+          "1",
+          "--device",
+          "1",
+          "--out",
+          "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/out/gallery/window_estimator_review_20261010_v3/window_room_vcm16"
+        ],
+        "render_seconds": 21.1899,
+        "wall_seconds": 34.48724885401316,
+        "mean_Y": 486.554,
+        "statistics": {
+          "paths": 18432000,
+          "segments": 107796290,
+          "region_inconsistencies": 4,
+          "leaks": 1,
+          "first_inconsistency": {
+            "boundary": "Heliostat.face",
+            "ray_region": "Panel.interior[PMMA]"
+          }
+        },
+        "artifacts": {
+          ".png": "58ecb24c35aebc0d186b37b0dc6ab718c80f06ae4689a8823de9e969829b3d37",
+          ".json": "0e135b14a4065cafb26658a48f305273103a130ea1f2222059230ee5147922f1",
+          ".pfm": "be0a57d8a6fc341c766279049cabe7ebac058ba68b1b2e54d5184da79cce5bf6",
+          ".stdout.log": "9eb34d8025bb45116279bb340d087a8c87bf57feb57405594e1e5bb6aa643ada",
+          ".stderr.log": "672bea527ed3c630abf348fa5fdc7bf4690f52eca83ca16692ab99e3103fc799"
+        },
+        "finite_raw": true,
+        "validation_limitations": [
+          "Native bidirectional records omit the photon budget; the exact requested --photons value is retained in the command, not independently verified from native metadata."
+        ]
+      },
+      {
+        "name": "window_room_sppm16",
+        "command": [
+          "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/out/contact_performance_fix_20261009/owe_wrapper_candidate",
+          "render",
+          "scenes/the_invisible_window.owe",
+          "--detector",
+          "Room",
+          "--integrator",
+          "sppm",
+          "--spp",
+          "16",
+          "--max-depth",
+          "10",
+          "--seed",
+          "7",
+          "--resolution",
+          "960x600",
+          "--backend",
+          "gpu",
+          "--passes",
+          "1",
+          "--threads",
+          "0",
+          "--photons",
+          "16",
+          "--device",
+          "1",
+          "--out",
+          "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/out/gallery/window_estimator_review_20261010_v3/window_room_sppm16"
+        ],
+        "render_seconds": 234.484,
+        "wall_seconds": 250.06694468000205,
+        "mean_Y": 488.669,
+        "statistics": {
+          "paths": 156672000,
+          "segments": 791632263,
+          "region_inconsistencies": 39,
+          "leaks": 5,
+          "first_inconsistency": {
+            "boundary": "Heliostat.face",
+            "ray_region": "Panel.interior[PMMA]"
+          }
+        },
+        "artifacts": {
+          ".png": "c071130f670f50fbcbfa4a0de6eae6d314d25c298568564dcbb745bf01d65e28",
+          ".json": "199e56b1b86c6e45f7024d75f046a34dd35eba52450fb46f935a6cfbe92f2d86",
+          ".pfm": "6aab25e5fa9004fecc134d904dc2f6d25fa29546f8aa8904e9a6372e5c69d8b1",
+          ".stdout.log": "8ad700687aeea1dfb7cb9803f9c65e9fe87207c149a7b51d9be94d99c9260b8f",
+          ".stderr.log": "3ed1597a853de31678b57e4406fabcb7460d06cd7500dd3d30ed163654999e05"
+        },
+        "finite_raw": true,
+        "validation_limitations": []
+      },
+      {
+        "name": "window_room_vcm192",
+        "command": [
+          "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/out/contact_performance_fix_20261009/owe_wrapper_candidate",
+          "render",
+          "scenes/the_invisible_window.owe",
+          "--detector",
+          "Room",
+          "--integrator",
+          "vcm",
+          "--spp",
+          "192",
+          "--max-depth",
+          "10",
+          "--seed",
+          "7",
+          "--resolution",
+          "960x600",
+          "--backend",
+          "gpu",
+          "--passes",
+          "1",
+          "--threads",
+          "0",
+          "--photons",
+          "1",
+          "--device",
+          "1",
+          "--out",
+          "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/out/gallery/window_estimator_review_20261010_v3/window_room_vcm192"
+        ],
+        "render_seconds": 186.496,
+        "wall_seconds": 199.65649342400138,
+        "mean_Y": 494.203,
+        "statistics": {
+          "paths": 221184000,
+          "segments": 1320065094,
+          "region_inconsistencies": 59,
+          "leaks": 14,
+          "first_inconsistency": {
+            "boundary": "Heliostat.face",
+            "ray_region": "Panel.interior[PMMA]"
+          }
+        },
+        "artifacts": {
+          ".png": "8996d21093f919e568238867d7a2183d5d00b96bb10c7c9e366b26bfbe4fca04",
+          ".json": "a328b858545982655a6989bb253a148d9fdc188e21895fca0d2ad38bc3198cf0",
+          ".pfm": "b8aede22c50f2a930bbf3171ad328a282e965ca77653945ada13844bfe4ac2f6",
+          ".stdout.log": "bf62074f36f65375ff71eb77e70680c8ef9b5f54617db9a49bd2c41ef882ca56",
+          ".stderr.log": "b0fa11660799fc15a0d2664262bd6279a4f1f72ee8ae16ba3e0db4498e91ff3b"
+        },
+        "finite_raw": true,
+        "validation_limitations": [
+          "Native bidirectional records omit the photon budget; the exact requested --photons value is retained in the command, not independently verified from native metadata."
+        ]
+      }
+    ],
+    "decision": "SPPM Room64 and Wall128,16 photons/pixel,seed7,depth10; review before promotion. At comparable time SPPM16 showed clearer indirect plaster/ceiling/floor than VCM192. Increase only if final grain obscures structure. This is visual selection, not an equal-error or convergence claim.",
+    "rejected_attempts": [
+      {
+        "archive": "out/gallery/window_estimator_review_20261010_v1",
+        "reason": "VCM inherited16 photons/pixel and exceeded complete cache capacity; no final image."
+      },
+      {
+        "archive": "out/gallery/window_estimator_review_20261010_v2",
+        "reason": "VCM image rendered; archive checker rejected missing native photon metadata. Checker now explicitly records this limitation; rerendered in v3."
+      }
+    ]
+  },
+  "asset_validation": {
+    "command": "python3 tools/scene_assets/check_assets.py --integrity",
+    "date": "2026-10-10",
+    "exit_code": 0,
+    "dependencies": 133,
+    "missing": 0,
+    "provider_md5_files": 46,
+    "integrity_mismatches": 0,
+    "scope": "Original Poly Haven provider hashes only; scans and derivatives identified by gallery capture hashes."
+  },
+  "window_adoption": {
+    "scene_sha256": "2bf3896b83a529196fc1ffe1c74a40dda84656551b3ca6a0c3e8917ac8cd5722",
+    "unchanged_blocks": {
+      "sun": "9be19d1d62d209d2baa082294610de2f17f09a5dd4f6e47ace2eae576324bd19",
+      "body Panel": "579ccddc09af3ea62f0803b713df3153b013b59a8964c362d31e2ee83971f064",
+      "body Heliostat": "42dd474f375b99dbe9e0b5f46fe3fae09cfde5e07cb620a837efd768339acab8",
+      "body WallL": "01fd1ef33d69abc4188f7db0c5e7c05f325426d73803a72ea8c0b569f50abdfb",
+      "body WallR": "abdf39a0e3385a10dd6e4284e98c76953a02003ba5e4e903b41707eb107269c6",
+      "body WallBelow": "a81cf3276e8d5762836ea090061aee7e9e4760dece2f2d56bf9cba15f490c48b",
+      "body WallAbove": "64d8a0ec8104bbaffc730f423f7bd80dc2f545513f26a3795d7ace84ee882e7e",
+      "sensor Check": "39b1f36568f267e924922bb82e5c54145ca3aef1390e1f9b8038b780c8305138",
+      "body ShutterL": "c483324b9e06c41a57eba2ffe5520050ab38e99018a3ae43dc56727bd9783886",
+      "body ShutterR": "8701e8452c2b02905a7d9d691281c834584dd58eb8760de37a315b419a01750d",
+      "body ShutterBelow": "b31f9fdbd30000b1b4a4d561eb33b641dde60272eccd8e73fcc9b8c5f9bd8c22",
+      "body ShutterAbove": "8a03abfde05628dfd50da2fad56d1964025220ae3c4d2175ed2a2eb3ba041256",
+      "body FrameL": "fdc1ba5e6c95e186c7927922cc4f246db34e66eb9728903740a97cbc36e25683",
+      "body FrameR": "d256b252687b97e7953e2a51bd9af29535e66fa4cce87f0091d22074e100917b",
+      "body FrameBelow": "b89e9cc78ee8e68c727070c8f46faf731fd6f7c0289a65b0ef417ebe155a03b2",
+      "body FrameAbove": "7fb7ceedea2c3ccfb009fbc32b5513f13608ed1a88172a4b04136c35fd47fdf6",
+      "body DoorNearJamb": "19ef211def29429558edeb2f091c4744c0aea1ec3d491540650bbe561a3d18ec",
+      "body DoorFarJamb": "2607d66c48659424f90cee31fa2eb522089ec0a565d0f4196ef357187d90ac9f",
+      "body DoorLintel": "78f4c81110906e588859e0934d8af2139d2893cdb9dfe8d6b6e492f272d6ff35"
+    }
+  },
+  "frozen_optical_files": {
+    "lenses/gregorian_54x.lens": "140046517db817d2779362236f7ae413e97c64c2909abeac10ce1da80a1589e6",
+    "models/caustic/sacred_heart_panel.obj": "1e16e59cc374d8323c649dbf9aae175990c2f0e912bb90e1358fa6673a2a4f32",
+    "models/caustic/sacred_heart_panel.json": "8869de9068f4b81826b4648d1263729d881a64ee58d4cdf46e9b444ecb54f74d"
+  },
+  "gallery": [
+    {
+      "name": "kunstkammer_room",
+      "archive": "out/gallery/final_review_20261010_v1",
+      "scene": "scenes/the_kunstkammer.owe",
+      "scene_sha256": "54546f437edbd173e834f2b3f84b3148a2bf01d0913bb02670334bd38c27e424",
+      "binary_sha256": "281347b390f6bfc1fa215f72fc94469fab184283780ec109721cf56f9e8ea243",
+      "entry_sha256": "f53dc89c74e27da45d7fd593a1d281ae3f5a1c56b05a102c214e5249a0e149c6",
+      "command": [
+        "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/out/contact_performance_fix_20261009/owe_wrapper_candidate",
+        "render",
+        "scenes/the_kunstkammer.owe",
+        "--detector",
+        "Room",
+        "--integrator",
+        "path",
+        "--spp",
+        "2048",
+        "--max-depth",
+        "12",
+        "--seed",
+        "1",
+        "--resolution",
+        "960x600",
+        "--backend",
+        "gpu",
+        "--passes",
+        "1",
+        "--threads",
+        "0",
+        "--device",
+        "1",
+        "--out",
+        "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/out/gallery/final_review_20261010_v1/kunstkammer_room"
+      ],
+      "wall_seconds": 666.5881224240002,
+      "native": {
+        "integrator": "path",
+        "samples_per_pixel": 2048,
+        "passes": 1,
+        "max_depth": 12,
+        "seed": 1,
+        "mean_Y": 0.0429199,
+        "render_seconds": 629.193,
+        "observer_pose": {
+          "position_m": [
+            -1.3,
+            -4.7,
+            1.6
+          ],
+          "look_at_m": [
+            0.3,
+            0.5,
+            1.6
+          ],
+          "up": [
+            0,
+            0,
+            1
+          ],
+          "fov_deg": 58.00000000000001,
+          "pupil_radius_m": 0.0015,
+          "focus_distance_m": 5.35,
+          "width": 960,
+          "height": 600
+        },
+        "display": {
+          "exposure_ev": 1,
+          "auto_exposure": false,
+          "auto_gain_ev": 0,
+          "white_balance_kelvin": 5200,
+          "tone": "agx"
+        },
+        "statistics": {
+          "paths": 1179648000,
+          "segments": 7723275117,
+          "region_inconsistencies": 337,
+          "leaks": 0,
+          "first_inconsistency": {
+            "boundary": "DoorWall.surface",
+            "ray_region": "ambient[air]"
+          }
+        }
+      },
+      "artifacts": {
+        ".png": "62d5878207b3cd5be3d096a51f519af1893be823f62a00c88d49cefcd961ee2c",
+        ".json": "a2b212b143949b24cd1f50ded54487568b250fb0a1fc00b884b516b08f8afc5b",
+        ".pfm": "7355aba6eb27bfe0ef7c4f4efbc89ac7b8d0cc4ef4020230618bcc2109ba3f4a",
+        ".stdout.log": "04f8326d6903c526ae2389a9c65ad9121b6d039473e482b8733c6f375fff15f5",
+        ".stderr.log": "5dcb879529d6c60305c7beb16b2b735374a4208e0efc35b93edd6d57f67bf3c0"
+      },
+      "review": {
+        "note": "Opened native 960x600 image and received an independent visual review. Complete horse, rider and lance have clearance; daylight and cast silhouette are coherent, steel, wood, cloth and fitted window joinery read clearly. Fine grain and a few bright speckles remain on the ceiling, upper wall and dark floor without concealing the principal forms. Path 2048, depth12, seed1, one pass; raw RGB is finite. Native diagnostics:337 region inconsistencies,0 leaks; retained as unresolved, not a clean-transport or convergence claim. Accepted for the local gallery milestone; no denoising or retouching.",
+        "utc": "2026-10-10T05:41:57.106238+00:00"
+      },
+      "source_rights": "cleared",
+      "finite_raw": true
+    },
+    {
+      "name": "gregorian_beside",
+      "archive": "out/gallery/final_review_20261010_v2",
+      "scene": "scenes/the_gregorian.owe",
+      "scene_sha256": "f73367c4ca38bb121f855c35fd061357cf6e5cefdb0380cc5107f41df0d403b2",
+      "binary_sha256": "281347b390f6bfc1fa215f72fc94469fab184283780ec109721cf56f9e8ea243",
+      "entry_sha256": "b62d8aa46ee71878302aec10ed5190f657dc8088e9919c9c0dba1d85aed640f8",
+      "command": [
+        "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/out/contact_performance_fix_20261009/owe_wrapper_candidate",
+        "render",
+        "scenes/the_gregorian.owe",
+        "--detector",
+        "Beside",
+        "--integrator",
+        "path",
+        "--spp",
+        "2048",
+        "--max-depth",
+        "16",
+        "--seed",
+        "7",
+        "--resolution",
+        "960x600",
+        "--backend",
+        "gpu",
+        "--passes",
+        "1",
+        "--threads",
+        "0",
+        "--device",
+        "1",
+        "--out",
+        "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/out/gallery/final_review_20261010_v2/gregorian_beside"
+      ],
+      "wall_seconds": 367.2219493040029,
+      "native": {
+        "integrator": "path",
+        "samples_per_pixel": 2048,
+        "passes": 1,
+        "max_depth": 16,
+        "seed": 7,
+        "mean_Y": 4.96541e-05,
+        "render_seconds": 348.491,
+        "observer_pose": {
+          "position_m": [
+            0.88,
+            -1.25,
+            0.99
+          ],
+          "look_at_m": [
+            0.1,
+            0.13,
+            0.99
+          ],
+          "up": [
+            0,
+            0,
+            1
+          ],
+          "fov_deg": 50,
+          "pupil_radius_m": 0.002,
+          "focus_distance_m": 1.6,
+          "width": 960,
+          "height": 600
+        },
+        "display": {
+          "exposure_ev": 14,
+          "auto_exposure": false,
+          "auto_gain_ev": 0,
+          "white_balance_kelvin": 2400,
+          "tone": "agx"
+        },
+        "statistics": {
+          "paths": 1179648000,
+          "segments": 5281005589,
+          "region_inconsistencies": 227,
+          "leaks": 0,
+          "first_inconsistency": {
+            "boundary": "WestWall.surface",
+            "ray_region": "ambient[air]"
+          }
+        }
+      },
+      "artifacts": {
+        ".png": "3543a0715fc3fb3f67c4cf2f752cecea39c6dde73c958248754ab27d0e0fe01b",
+        ".json": "ab0782bafae88c2f2d9e80510588a6611bf77340df781ebcb8e222dbd5ae4828",
+        ".pfm": "981d4b69e4b0279c160fbf3d01ff3242e18d54f99dd80e5ed911a8fbc97232ea",
+        ".stdout.log": "9a189fe4056025e8254e045dc9ad4fbc51be9adea74ae1e17a3699bb244985b8",
+        ".stderr.log": "2f0fb372a88396f62f344f3c4b3162b23f9762f29227d494c0ff053e99fa1df9"
+      },
+      "review": {
+        "note": "Opened native 960x600 image and received an independent visual review. Telescope, stand and candle fit fully; the barrel points toward the true-scale Moon, candle shadows are coherent, brass mechanics and walnut grain remain legible. Dark barrel shading, fine plaster grain and isolated bright wall/frame speckles remain visible. Path2048, depth16, seed7, one pass; finite raw RGB. Native diagnostics:227 region inconsistencies,0 leaks, retained as unresolved. Accepted for the local gallery milestone; no denoising, retouching or claim of full convergence. Recaptured after the Naked-only observer move; opened the new native image and verified PNG/PFM bytes are identical to the previously reviewed capture. This sidecar records the corrected shared scene.",
+        "utc": "2026-10-10T06:18:18.604857+00:00"
+      },
+      "source_rights": "cleared",
+      "finite_raw": true
+    },
+    {
+      "name": "gregorian_eyepiece",
+      "archive": "out/gallery/final_review_20261010_v2",
+      "scene": "scenes/the_gregorian.owe",
+      "scene_sha256": "f73367c4ca38bb121f855c35fd061357cf6e5cefdb0380cc5107f41df0d403b2",
+      "binary_sha256": "281347b390f6bfc1fa215f72fc94469fab184283780ec109721cf56f9e8ea243",
+      "entry_sha256": "e1030e1f028fcb062c5047caba2d5a3dd8dcdd6ab309368b21c797c809d38e06",
+      "command": [
+        "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/out/contact_performance_fix_20261009/owe_wrapper_candidate",
+        "render",
+        "scenes/the_gregorian.owe",
+        "--detector",
+        "Eyepiece",
+        "--integrator",
+        "path",
+        "--spp",
+        "2048",
+        "--max-depth",
+        "16",
+        "--seed",
+        "7",
+        "--resolution",
+        "960x600",
+        "--backend",
+        "gpu",
+        "--passes",
+        "1",
+        "--threads",
+        "0",
+        "--device",
+        "1",
+        "--out",
+        "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/out/gallery/final_review_20261010_v2/gregorian_eyepiece"
+      ],
+      "wall_seconds": 469.7814312940027,
+      "native": {
+        "integrator": "path",
+        "samples_per_pixel": 2048,
+        "passes": 1,
+        "max_depth": 16,
+        "seed": 7,
+        "mean_Y": 0.00376792,
+        "render_seconds": 450.08,
+        "observer_pose": {
+          "position_m": [
+            0.007170802898131779,
+            -0.3935567529035077,
+            1.004975662986673
+          ],
+          "look_at_m": [
+            -1695124.731945268,
+            374928465.7111637,
+            84788750.1477401
+          ],
+          "up": [
+            0,
+            0,
+            1
+          ],
+          "fov_deg": 38,
+          "pupil_radius_m": 0.0015,
+          "focus_distance_m": null,
+          "width": 960,
+          "height": 600
+        },
+        "display": {
+          "exposure_ev": 3.8,
+          "auto_exposure": false,
+          "auto_gain_ev": 0,
+          "white_balance_kelvin": 0,
+          "tone": "agx"
+        },
+        "statistics": {
+          "paths": 1179648000,
+          "segments": 6445192062,
+          "region_inconsistencies": 316,
+          "leaks": 0,
+          "first_inconsistency": {
+            "boundary": "Gregorian.L1.rim1",
+            "ray_region": "ambient[air]"
+          }
+        }
+      },
+      "artifacts": {
+        ".png": "ffa5651f309bf09a9f364ea30e00c125b1923e283f4d64f7fb7ff73452904b65",
+        ".json": "fb60e28da59bfbd5b996aef4de82744ce2d1d652aa0e1369a668cc788e1ddd6a",
+        ".pfm": "a5bb9cb58da4b3331ce82decf143cbfdfd48b9d418e48db4b594c02764bdf5e9",
+        ".stdout.log": "f8f79a897f7346f830e47587afc42d86e02249426e8db17ec9ef8330d787dba2",
+        ".stderr.log": "2150691deb6c9cc283328fc462091d25881aea34b8a17ae432d3ba6099594771"
+      },
+      "review": {
+        "note": "Opened native 960x600 image and received an independent visual review. Complete magnified Moon fits with black margin; phase, maria and crater patterns are visible, without a visible central ghost or detached secondary disk. Fine grain, soft optical contrast and a thin coloured limb remain; no sharpening, denoising or retouching. Path2048, depth16, seed7, one pass; finite raw RGB. Field38deg and exposure3.8EV are preserved for the unaided comparison. Native diagnostics:316 region inconsistencies,0 leaks; retained as unresolved. Accepted for the local gallery milestone, not a claim of fully converged or clean transport. Recaptured after the Naked-only observer move; opened the new image and verified PNG/PFM bytes are identical to the previous reviewed capture. Confirmed current Eyepiece and Naked records share the same scene, field, resolution, pupil and display settings.",
+        "utc": "2026-10-10T06:26:28.864239+00:00"
+      },
+      "source_rights": "cleared",
+      "finite_raw": true
+    },
+    {
+      "name": "gregorian_naked",
+      "archive": "out/gallery/final_review_20261010_v2",
+      "scene": "scenes/the_gregorian.owe",
+      "scene_sha256": "f73367c4ca38bb121f855c35fd061357cf6e5cefdb0380cc5107f41df0d403b2",
+      "binary_sha256": "281347b390f6bfc1fa215f72fc94469fab184283780ec109721cf56f9e8ea243",
+      "entry_sha256": "968a792946ef995436e3259364bdaf80d394c34f0e8674a4427c07907a38f926",
+      "command": [
+        "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/out/contact_performance_fix_20261009/owe_wrapper_candidate",
+        "render",
+        "scenes/the_gregorian.owe",
+        "--detector",
+        "Naked",
+        "--integrator",
+        "path",
+        "--spp",
+        "256",
+        "--max-depth",
+        "16",
+        "--seed",
+        "7",
+        "--resolution",
+        "960x600",
+        "--backend",
+        "gpu",
+        "--passes",
+        "1",
+        "--threads",
+        "0",
+        "--device",
+        "1",
+        "--out",
+        "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/out/gallery/final_review_20261010_v2/gregorian_naked"
+      ],
+      "wall_seconds": 32.81651004799642,
+      "native": {
+        "integrator": "path",
+        "samples_per_pixel": 256,
+        "passes": 1,
+        "max_depth": 16,
+        "seed": 7,
+        "mean_Y": 1.06401e-05,
+        "render_seconds": 16.5836,
+        "observer_pose": {
+          "position_m": [
+            0.2,
+            -0.393556702822,
+            1.00497567392
+          ],
+          "look_at_m": [
+            -1695124.731945268,
+            374928465.7111637,
+            84788750.1477401
+          ],
+          "up": [
+            0,
+            0,
+            1
+          ],
+          "fov_deg": 38,
+          "pupil_radius_m": 0.0015,
+          "focus_distance_m": null,
+          "width": 960,
+          "height": 600
+        },
+        "display": {
+          "exposure_ev": 3.8,
+          "auto_exposure": false,
+          "auto_gain_ev": 0,
+          "white_balance_kelvin": 0,
+          "tone": "agx"
+        },
+        "statistics": {
+          "paths": 147456000,
+          "segments": 364155921,
+          "region_inconsistencies": 4,
+          "leaks": 0,
+          "first_inconsistency": {
+            "boundary": "Gregorian.L1.S2",
+            "ray_region": "Gregorian.L1.glass0[crown]"
+          }
+        }
+      },
+      "artifacts": {
+        ".png": "ec3b5a21a4bc1d4d72fab2e5745ad4c53d26d028e8290a7f3e95364cb132f884",
+        ".json": "5b5f3e593248a249340deb058992e0ca65e8454ac7de0278233c4711ecab836e",
+        ".pfm": "b2486d7301690f1a8058cb27ec8b0f6c6f16965a23b798a1ae9c8a072094bb40",
+        ".stdout.log": "a662af4ce7bdbc6a133b7db77cd39ba33aebb022392053382a9ffe0a6c849ab4",
+        ".stderr.log": "3db1a685e5d313a6bc6746d1e2cb40a49bb0217a6dc2df81fe00899cfecba066"
+      },
+      "review": {
+        "note": "Opened native 960x600 image. Small centered phased Moon is visible at true angular scale, on a black night field; intended as the unaided comparison, not an art hero. CPU center and192 field/pupil-edge rays verified that moving only the Naked eye to x0.20m clears the scanned housing; unchanged38deg field,3mm pupil,3.8EV and neutral white balance match Eyepiece. Path256, depth16, seed7, one pass; finite raw RGB. Native diagnostics:4 region inconsistencies,0 leaks, retained as unresolved. No geometric enlargement, replacement image, denoising or retouching.",
+        "utc": "2026-10-10T06:12:08.405640+00:00"
+      },
+      "source_rights": "cleared",
+      "finite_raw": true
+    },
+    {
+      "name": "peacock_lamp_room",
+      "archive": "out/gallery/final_review_20261010_v1",
+      "scene": "scenes/the_peacock_lamp.owe",
+      "scene_sha256": "0ad28c7fd945415d64d85afcf2a1fc5e9e4237a2dc4b16c26482a7213293b0c5",
+      "binary_sha256": "281347b390f6bfc1fa215f72fc94469fab184283780ec109721cf56f9e8ea243",
+      "entry_sha256": "5ff60457686ff06cc960bb59a646d03754ae369b0cde4e38a9831cfeaca0b651",
+      "command": [
+        "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/out/contact_performance_fix_20261009/owe_wrapper_candidate",
+        "render",
+        "scenes/the_peacock_lamp.owe",
+        "--detector",
+        "Room",
+        "--integrator",
+        "vcm",
+        "--spp",
+        "512",
+        "--max-depth",
+        "16",
+        "--seed",
+        "17",
+        "--resolution",
+        "960x600",
+        "--backend",
+        "gpu",
+        "--passes",
+        "1",
+        "--threads",
+        "0",
+        "--device",
+        "1",
+        "--out",
+        "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/out/gallery/final_review_20261010_v1/peacock_lamp_room"
+      ],
+      "wall_seconds": 928.9261313339957,
+      "native": {
+        "integrator": "vcm",
+        "samples_per_pixel": 512,
+        "passes": 1,
+        "max_depth": 16,
+        "seed": 17,
+        "mean_Y": 1.29353e-05,
+        "render_seconds": 905.054,
+        "observer_pose": {
+          "position_m": [
+            -0.28,
+            -0.72,
+            1.36
+          ],
+          "look_at_m": [
+            0.05,
+            0.44,
+            1.36
+          ],
+          "up": [
+            0,
+            0,
+            1
+          ],
+          "fov_deg": 40,
+          "pupil_radius_m": 0.0015,
+          "focus_distance_m": 1.35,
+          "width": 960,
+          "height": 600
+        },
+        "display": {
+          "exposure_ev": 12.115,
+          "auto_exposure": false,
+          "auto_gain_ev": 0,
+          "white_balance_kelvin": 3000,
+          "tone": "agx"
+        },
+        "statistics": {
+          "paths": 589824000,
+          "segments": 3649587388,
+          "region_inconsistencies": 3643940,
+          "leaks": 0,
+          "first_inconsistency": {
+            "boundary": "Lead2B.side",
+            "ray_region": "ambient[air]"
+          }
+        }
+      },
+      "artifacts": {
+        ".png": "0d3bd03b7c986d35addec410e564c481ff4bfbfab74fd37a345c6f1bcae22183",
+        ".json": "2895b10908e42351c5075c88c8890350b107bcc8385cb67ef0fd4103ba4e3ae1",
+        ".pfm": "4cd67567a95469f6c8dd707c27513bd12c75fabb36c9a12ef421d80ca299ba19",
+        ".stdout.log": "e668f4e23c0b7221977a98391bc2e3af21a8cff05eb500285ce1c271b52ab801",
+        ".stderr.log": "d1a307159dcebbd40fde4ae709ef54fd59a88248409ee088f3d670c9b1725bb6"
+      },
+      "review": {
+        "note": "Opened native 960x600 image and received an independent visual review. Complete shade, finial, base and book fit; amber/teal glass pattern, bronze highlights, tabletop and wall illumination read clearly. Dark body detail and fine wall grain remain visible limitations. VCM512, depth16, seed17, one pass; finite raw RGB. Native diagnostics:3643940 region inconsistencies,0 leaks, retained prominently as unresolved; this is visual gallery acceptance, not clean production conformance. No denoising or retouching.",
+        "utc": "2026-10-10T06:11:41.346622+00:00"
+      },
+      "source_rights": "cleared",
+      "finite_raw": true
+    },
+    {
+      "name": "invisible_window_room",
+      "archive": "out/gallery/final_review_20261010_v2",
+      "scene": "scenes/the_invisible_window.owe",
+      "scene_sha256": "2bf3896b83a529196fc1ffe1c74a40dda84656551b3ca6a0c3e8917ac8cd5722",
+      "binary_sha256": "281347b390f6bfc1fa215f72fc94469fab184283780ec109721cf56f9e8ea243",
+      "entry_sha256": "84d16362e06bc7bfdd6be93d4536c18d88dbd295621ad460fdc3a0a15e2f93c9",
+      "command": [
+        "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/out/contact_performance_fix_20261009/owe_wrapper_candidate",
+        "render",
+        "scenes/the_invisible_window.owe",
+        "--detector",
+        "Room",
+        "--integrator",
+        "sppm",
+        "--spp",
+        "64",
+        "--max-depth",
+        "10",
+        "--seed",
+        "7",
+        "--resolution",
+        "960x600",
+        "--backend",
+        "gpu",
+        "--photons",
+        "16",
+        "--passes",
+        "1",
+        "--threads",
+        "0",
+        "--device",
+        "1",
+        "--out",
+        "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/out/gallery/final_review_20261010_v2/invisible_window_room"
+      ],
+      "wall_seconds": 961.5772209120041,
+      "native": {
+        "integrator": "sppm",
+        "samples_per_pixel": 64,
+        "passes": 1,
+        "max_depth": 10,
+        "seed": 7,
+        "mean_Y": 488.341,
+        "render_seconds": 943.538,
+        "observer_pose": {
+          "position_m": [
+            0.625,
+            -1.12,
+            1.1
+          ],
+          "look_at_m": [
+            0.6,
+            0,
+            1.1
+          ],
+          "up": [
+            0,
+            0,
+            1
+          ],
+          "fov_deg": 62,
+          "pupil_radius_m": 0.0015,
+          "focus_distance_m": 1.45,
+          "width": 960,
+          "height": 600
+        },
+        "display": {
+          "exposure_ev": -12,
+          "auto_exposure": false,
+          "auto_gain_ev": 0,
+          "white_balance_kelvin": 5800,
+          "tone": "agx"
+        },
+        "statistics": {
+          "paths": 626688000,
+          "segments": 3284531893,
+          "region_inconsistencies": 168,
+          "leaks": 21,
+          "first_inconsistency": {
+            "boundary": "Heliostat.face",
+            "ray_region": "Panel.interior[PMMA]"
+          }
+        }
+      },
+      "artifacts": {
+        ".png": "60e6cdbd4f18cde0e4e74478dff97241f4f72e881ef334e7236683c96a0745ad",
+        ".json": "777a3865ed8319d393b22e44d8e1590ee119137be4885ef846ed6ff18fdfa207",
+        ".pfm": "6c15a773d9370ee1378ffe9b7800c7ccc5977d84a47de055d57471de4a1d3a2f",
+        ".stdout.log": "acf21fb6f4825afb2b634e4eb70d5061ad6129c54eeaacd305af4f923edb7f66",
+        ".stderr.log": "e8090375e615456e3e3fbcd8edbcffa4f2c45348b37056ca853dfaf86edbd754"
+      },
+      "review": {
+        "note": "Opened native 960x600 image and received an independent visual review. Complete transparent panel and projected lancet fit with clear separation; plaster, timber, ceiling junction and floor tile joints are legible. Fine wall grain and coloured points around the pane/dark receiver remain without concealing the apparatus. The near-white projection retains face, hands and banderole linework; Room EV-12 is contextual, with Wall EV-15 providing detail. SPPM64,16 photons per pixel, depth10, seed7, one pass; finite raw RGB. Native diagnostics:168 region inconsistencies,21 leaks, retained as unresolved transport limitations. Accepted locally without denoising/retouching or a convergence claim. Target-photo source rights remain unresolved as requested.",
+        "utc": "2026-10-10T06:43:05.047947+00:00"
+      },
+      "source_rights": "unresolved",
+      "finite_raw": true
+    },
+    {
+      "name": "invisible_window_wall",
+      "archive": "out/gallery/final_review_20261010_v2",
+      "scene": "scenes/the_invisible_window.owe",
+      "scene_sha256": "2bf3896b83a529196fc1ffe1c74a40dda84656551b3ca6a0c3e8917ac8cd5722",
+      "binary_sha256": "281347b390f6bfc1fa215f72fc94469fab184283780ec109721cf56f9e8ea243",
+      "entry_sha256": "cee8e8b54f65be5afd286530fee9b874b2f98b9934f692d94ac49277338636ef",
+      "command": [
+        "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/out/contact_performance_fix_20261009/owe_wrapper_candidate",
+        "render",
+        "scenes/the_invisible_window.owe",
+        "--detector",
+        "Wall",
+        "--integrator",
+        "sppm",
+        "--spp",
+        "128",
+        "--max-depth",
+        "10",
+        "--seed",
+        "7",
+        "--resolution",
+        "960x600",
+        "--backend",
+        "gpu",
+        "--photons",
+        "16",
+        "--passes",
+        "1",
+        "--threads",
+        "0",
+        "--device",
+        "1",
+        "--out",
+        "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/out/gallery/final_review_20261010_v2/invisible_window_wall"
+      ],
+      "wall_seconds": 1799.3412386819982,
+      "native": {
+        "integrator": "sppm",
+        "samples_per_pixel": 128,
+        "passes": 1,
+        "max_depth": 10,
+        "seed": 7,
+        "mean_Y": 1372.24,
+        "render_seconds": 1782.62,
+        "observer_pose": {
+          "position_m": [
+            0.45,
+            -0.38,
+            1.1
+          ],
+          "look_at_m": [
+            1.2256164802,
+            0,
+            1.1
+          ],
+          "up": [
+            0,
+            0,
+            1
+          ],
+          "fov_deg": 59.99999999999999,
+          "pupil_radius_m": 0.001,
+          "focus_distance_m": 0.864,
+          "width": 960,
+          "height": 600
+        },
+        "display": {
+          "exposure_ev": -15,
+          "auto_exposure": false,
+          "auto_gain_ev": 0,
+          "white_balance_kelvin": 5800,
+          "tone": "agx"
+        },
+        "statistics": {
+          "paths": 1253376000,
+          "segments": 6646668483,
+          "region_inconsistencies": 243,
+          "leaks": 34,
+          "first_inconsistency": {
+            "boundary": "Heliostat.face",
+            "ray_region": "Panel.interior[PMMA]"
+          }
+        }
+      },
+      "artifacts": {
+        ".png": "e836952f60a81c885e8d282913dd0b8f460e239e5a1c06d2082d64ce096f2333",
+        ".json": "ab68f01946997a47bb985c5614be6403ebfda7a0f008924b45e93e0d360b58a0",
+        ".pfm": "4c808818555e4dfeb0b4d62c5b18891734d28f1c9577dae81312dd9ec95a0a76",
+        ".stdout.log": "78ca403ad12820b053321d08e78b5a06bdca5bbd2b5b79a407720a7fac70a7ed",
+        ".stderr.log": "12dd09c76b249ed2ab802e4e604640da2e1889ca8403ed1de4019d216c687890"
+      },
+      "review": {
+        "note": "Opened native 960x600 image and received an independent visual review. Entire oblique lancet fits with arch and bottom clearance; portrait, raised hand, drapery and banderole-shaped ribbon are readable. Lettering is not legible. Visible optical softness and sampling grain limit fine detail without concealing the main structure; sparse coloured points remain in the dark surround. EV -15 preserves projection contrast. SPPM128, 16 photons per pixel, depth10, seed7, one pass; finite raw RGB. Native diagnostics:243 region inconsistencies,34 leaks, retained as unresolved transport limitations. Accepted for the local gallery milestone without denoising, retouching or a convergence claim. Target-photo source rights remain unresolved as requested.",
+        "utc": "2026-10-10T07:13:47.839657+00:00"
+      },
+      "source_rights": "unresolved",
+      "finite_raw": true
+    }
+  ],
+  "rejected_gallery_candidates": [
+    {
+      "name": "gregorian_naked",
+      "archive": "out/gallery/final_review_20261010_v1",
+      "integrator": "path",
+      "samples": 256,
+      "reason": "Native image contains no legible Moon. CPU zero-cone central ray confirms RamsdenScan.surface blocks the observer about0.104m away. Old VCM appearance is not accepted as evidence of a clear sightline. Move only Naked observer to a verified clear position; preserve field/exposure/pupil/optics and recapture all Gregorian views against updated scene.",
+      "resolution": "Moved only Naked eye x from0.0771708026707 to0.20m after192 CPU field/pupil rays first hit Moon. Fresh path256 at identical field/display visibly restores the centered true-scale phased Moon; no estimator workaround. Beside and Eyepiece were recaptured for the current scene identity; their PNG and PFM bytes are identical to the earlier accepted views."
+    }
+  ],
+  "timing_scope": "Gallery times describe these captures, not isolated performance measurements. CPU archive verification and tiny Gregorian ray probes overlapped some gallery GPU work; paired engine measurements were completed separately without such overlap.",
+  "gregorian_sightline": "20261010_gregorian_sightline.json",
+  "completed_utc": "2026-10-10T07:13:47.839657+00:00",
+  "closure": {
+    "reviewed_promoted_views": 7,
+    "resolution": [
+      960,
+      600
+    ],
+    "raw_images_finite": true,
+    "promoted_artifact_hashes_verified": true,
+    "current_scene_hashes_verified": true,
+    "gallery_tool_tests_passed": 7,
+    "benchmark_tool_tests_passed": 29,
+    "asset_helper_tests_passed": 3,
+    "postprocessing": "Native renderer PNGs; no denoising or retouching.",
+    "acceptance_scope": "Local native-image review by root and independent agent; retained sampling grain, optical softness and production transport diagnostics. Not converged references or user aesthetic approval.",
+    "follow_up": "Full 4x equal-quality target and unresolved production transport diagnostics remain follow-up work. Target-photo source rights remain unresolved at user direction.",
+    "current_archive_checks_passed": 7,
+    "frozen_optical_files_verified": true
+  }
+}

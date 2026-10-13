@@ -1,0 +1,131 @@
+{
+  "schema": 1,
+  "name": "gregorian_beside",
+  "identity": {
+    "schema": 1,
+    "scene": "scenes/the_gregorian.owe",
+    "arguments": [
+      "--detector",
+      "Beside",
+      "--integrator",
+      "path",
+      "--spp",
+      "2048",
+      "--max-depth",
+      "16",
+      "--seed",
+      "7",
+      "--resolution",
+      "960x600",
+      "--backend",
+      "gpu",
+      "--passes",
+      "1",
+      "--threads",
+      "0",
+      "--device",
+      "1"
+    ],
+    "assets": {
+      "scenes/the_gregorian.owe": "f73367c4ca38bb121f855c35fd061357cf6e5cefdb0380cc5107f41df0d403b2",
+      "lenses/gregorian_54x.lens": "140046517db817d2779362236f7ae413e97c64c2909abeac10ce1da80a1589e6",
+      "models/crafted/the_gregorian_open.gltf": "3a3813403a5dba0de0e6b5cd6edde2e55f69f044545978d5a611ad78b98a1220",
+      "assets/sketchfab/gregorian_telescope/textures/4044_42_V_Teleskop_05_FIN_normal.png": "952e293470f1785ae8c4393ee014358afbc4e1209e0be34e76e5442b4d9a017a",
+      "assets/sketchfab/gregorian_telescope/textures/4044_42_V_Teleskop_05_FIN_metallicRoughness.png": "99133a977fdad03c41ee203508d7fc8f1963ef638b5258f508038798bfedf5fe",
+      "assets/sketchfab/gregorian_telescope/textures/4044_42_V_Teleskop_05_FIN_baseColor.png": "6caa97fe93c74fd438cfc2e0c0d28f157b9311fa5df0249e9a66857326e1e09a",
+      "models/crafted/the_gregorian_open.bin": "7095df96110800b85c288199a2f585e5cf2ff7d4fb770f1e20e629535dc8be33",
+      "assets/sketchfab/wawel_chest/scene.gltf": "33578d93669f4a630839768683679dbf42f0d61d4a8f7e44f91d5c943df0ae3d",
+      "assets/sketchfab/wawel_chest/textures/material_normal.png": "1402e0e1335bb1a80feed5ce31a2096ef854eed80e5a10e2087e4c15c5795288",
+      "assets/sketchfab/wawel_chest/textures/material_emissive.jpeg": "3993fa20d7793083eb133d0459e25ecf3a3eaaaaa07581bb9e57b0485d4900bd",
+      "assets/sketchfab/wawel_chest/textures/material_specularGlossiness.png": "a466006bd2971db3dc7d6bb4f2c060dd304916e1df7d248431368de0dd956571",
+      "assets/sketchfab/wawel_chest/textures/material_diffuse.png": "882c8fa9552201262520b4539e72f8b65561f7ab2e2f09edaf7e3eaca8399c37",
+      "assets/sketchfab/wawel_chest/scene.bin": "594c2cbad0c4129305397fdec0a1a9e0658dcd7a487f1fc5fd050c149dd4315c",
+      "models/crafted/the_gregorian_moon.gltf": "9294fad03ec9b718c97d69ceb877715e1ef19e2d005ad8869db83c40f635fe8b",
+      "models/crafted/the_gregorian_moon.bin": "bd61a97a2de485bb7f13ca021558b7ac442b34ea155c3398e230b942f8ebd4a7",
+      "assets/lunar/lroc_albedo_018.png": "543e59f7d14ca44c3dc81aa73bd2acdccaf4880bbf2316bc4ea5ad04909cd8a0",
+      "assets/polyhaven/wood_floor/wood_floor_rough_8k.jpg": "e2902cb3d7ec28ee2a78bdd16532397d926e587df12ec72c55524d55b8c99fac",
+      "assets/polyhaven/wood_floor/wood_floor_nor_gl_8k.jpg": "7393c0f884e9d0200dab1a24e50bc9f61484956a59f436144c5930e05fe833a8",
+      "assets/polyhaven/wood_floor/wood_floor_diff_8k.jpg": "aa5af08dcb7c0a7ebf737ced8ecde01a1dedfba86a231ea154e0ef15ca9123b0",
+      "assets/polyhaven/oak_veneer_01/oak_veneer_01_rough_16k.jpg": "b98f1f2f44bab05dee6dda4240846715073709e36ef414c5466ec918c8e5c5e2",
+      "assets/polyhaven/oak_veneer_01/oak_veneer_01_nor_gl_16k.jpg": "7223961d4f249d40618ff4b3d37b1104809965c16ddd34fb7df018a2ad7f956a",
+      "assets/polyhaven/oak_veneer_01/fumed.jpg": "249b0e8d1ede50f448356b94480e2301d3c0be8eb3f999ae59a7f5356d3882e4",
+      "assets/polyhaven/white_plaster_02/white_plaster_02_rough_8k.jpg": "abbb8792b0f81c079a9894ebbebb0325deebe788cd0413bd1162a54902202059",
+      "assets/polyhaven/white_plaster_02/white_plaster_02_nor_gl_8k.jpg": "14f716c0d836f54637b08f253ddeb84c01c08b1df8064aa886108caa2565748b",
+      "assets/polyhaven/white_plaster_02/white_plaster_02_diff_8k.jpg": "fb51b1a1fba44202468c40d89fab8f022a6b0f93e6800b0f1eb64e6a2c92cc25"
+    },
+    "code": {
+      "binary_sha256": "281347b390f6bfc1fa215f72fc94469fab184283780ec109721cf56f9e8ea243",
+      "source_scope": "capture_workspace",
+      "source_description": "source_sha256 hashes the current workspace sources, build definition, runner and suite manifest; it is not the executable's build provenance",
+      "source_sha256": "b10d3905930a5ad8b0b564d038d675a435ed41569bf45c29a3f505d254e4dff8",
+      "git_head": "07092cfbd50f2558a07be0bd783e2c3f4485eabe"
+    },
+    "host": {
+      "platform": "Linux-7.2.7-arch1-1-x86_64-with-glibc2.44",
+      "machine": "x86_64",
+      "cpu": "",
+      "logical_cpus": 16,
+      "backend_inventory": "cpu (reference) \u2014 the reference transport on host threads; IEEE-754 double, bitwise reproducible\n  integrators: path, light, hybrid\n  [0] 12th Gen Intel(R) Core(TM) i7-12650H \u2014 cpu, 16 hardware threads\ngpu \u2014 portable GPU: Vulkan compute with Slang kernels (NVIDIA, AMD, Intel; Apple silicon via MoltenVK); float32, camera-relative\n  integrators: path, light, hybrid, sppm, bdpt, vcm\n  [0] Intel(R) Graphics (ADL GT2) \u2014 integrated, Vulkan 1.4.354\n  [1] NVIDIA GeForce RTX 4060 Laptop GPU \u2014 discrete, Vulkan 1.4.351, ray queries\n",
+      "nvidia_driver_inventory": {
+        "status": "available",
+        "devices": [
+          {
+            "index": "0",
+            "uuid": "GPU-827caec2-6f67-a1f6-4a68-4da0180a00c3",
+            "name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+            "driver_version": "615.71.09",
+            "pci.bus_id": "00000000:01:00.0"
+          }
+        ]
+      },
+      "environment": {
+        "CUDA_PATH": "/opt/cuda",
+        "OWE_GPU_RAY_QUERY": "1"
+      }
+    },
+    "gallery_tool_sha256": "2c1f6b5f0084010883f5ad194ed83e034dd915dcaee96335fdb9c4d508d16fd2",
+    "entry_sha256": "b62d8aa46ee71878302aec10ed5190f657dc8088e9919c9c0dba1d85aed640f8"
+  },
+  "command": [
+    "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/out/contact_performance_fix_20261009/owe_wrapper_candidate",
+    "render",
+    "scenes/the_gregorian.owe",
+    "--detector",
+    "Beside",
+    "--integrator",
+    "path",
+    "--spp",
+    "2048",
+    "--max-depth",
+    "16",
+    "--seed",
+    "7",
+    "--resolution",
+    "960x600",
+    "--backend",
+    "gpu",
+    "--passes",
+    "1",
+    "--threads",
+    "0",
+    "--device",
+    "1",
+    "--out",
+    "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/out/gallery/final_review_20261010_v2/gregorian_beside"
+  ],
+  "validation_limitations": [],
+  "wall_seconds": 367.2219493040029,
+  "render_seconds": 348.491,
+  "review": {
+    "note": "Opened native 960x600 image and received an independent visual review. Telescope, stand and candle fit fully; the barrel points toward the true-scale Moon, candle shadows are coherent, brass mechanics and walnut grain remain legible. Dark barrel shading, fine plaster grain and isolated bright wall/frame speckles remain visible. Path2048, depth16, seed7, one pass; finite raw RGB. Native diagnostics:227 region inconsistencies,0 leaks, retained as unresolved. Accepted for the local gallery milestone; no denoising, retouching or claim of full convergence. Recaptured after the Naked-only observer move; opened the new native image and verified PNG/PFM bytes are identical to the previously reviewed capture. This sidecar records the corrected shared scene.",
+    "utc": "2026-10-10T06:18:18.604857+00:00"
+  },
+  "artifacts": {
+    ".png": "3543a0715fc3fb3f67c4cf2f752cecea39c6dde73c958248754ab27d0e0fe01b",
+    ".json": "ab0782bafae88c2f2d9e80510588a6611bf77340df781ebcb8e222dbd5ae4828",
+    ".pfm": "981d4b69e4b0279c160fbf3d01ff3242e18d54f99dd80e5ed911a8fbc97232ea",
+    ".stdout.log": "9a189fe4056025e8254e045dc9ad4fbc51be9adea74ae1e17a3699bb244985b8",
+    ".stderr.log": "2f0fb372a88396f62f344f3c4b3162b23f9762f29227d494c0ff053e99fa1df9"
+  },
+  "source_rights": "cleared"
+}

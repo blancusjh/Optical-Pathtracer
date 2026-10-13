@@ -1,0 +1,6 @@
+Name: 1964.88 Armor for Man and Horse
+Author: Cleveland Museum of Art
+Licence: CC0 Public Domain
+URL: https://sketchfab.com/3d-models/armor_man_and_horse-faca2ad557f64809b598c3a646a8804f
+Downloaded: 2026-09-29
+Format: glTF (separate textures)

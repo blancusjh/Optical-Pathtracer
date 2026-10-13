@@ -1,0 +1,38 @@
+{
+  "12": {
+    "max_abs_error": 0.0,
+    "mean_absolute_error": 0.0,
+    "relative_mean_error": 0.0,
+    "same_stats": true,
+    "baseline_stats": {
+      "paths": 131072,
+      "segments": 329269,
+      "region_inconsistencies": 0,
+      "leaks": 0
+    },
+    "candidate_stats": {
+      "paths": 131072,
+      "segments": 329269,
+      "region_inconsistencies": 0,
+      "leaks": 0
+    }
+  },
+  "4": {
+    "max_abs_error": 1.043081283569336e-07,
+    "mean_absolute_error": 1.0829050249109666e-09,
+    "relative_mean_error": 7.32369168994167e-09,
+    "same_stats": true,
+    "baseline_stats": {
+      "paths": 131072,
+      "segments": 326755,
+      "region_inconsistencies": 0,
+      "leaks": 0
+    },
+    "candidate_stats": {
+      "paths": 131072,
+      "segments": 326755,
+      "region_inconsistencies": 0,
+      "leaks": 0
+    }
+  }
+}

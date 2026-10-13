@@ -1,0 +1,15 @@
+Test project /tmp/owe-maintenance-cpu
+    Start 1: owe_tests
+1/5 Test #1: owe_tests ........................   Passed   89.25 sec
+    Start 2: layering
+2/5 Test #2: layering .........................   Passed    0.02 sec
+    Start 3: python_tools
+3/5 Test #3: python_tools .....................   Passed    0.51 sec
+    Start 4: documentation_links
+4/5 Test #4: documentation_links ..............   Passed    0.03 sec
+    Start 5: python_scene_assets
+5/5 Test #5: python_scene_assets ..............   Passed    0.36 sec
+
+100% tests passed out of 5
+
+Total Test time (real) =  90.18 sec
