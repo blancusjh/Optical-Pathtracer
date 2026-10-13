@@ -42,7 +42,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
             if (s.misc.x == 0) {
                 // The pixel's first visible point sets its initial radius: a few pixel footprints at
                 // the distance the path travelled (unfolded through its specular events).
-                s.misc.x = max(initialRadiusPerMetre() * path.pathLength, asfloat(pc.pad0));
+                s.misc.x = max(initialRadiusPerMetre() * path.pathLength, pc.initialRadiusFloor);
                 g_sppm[pixel] = s;
             }
             vp.p = float4(path.vpP.xyz, s.misc.x);

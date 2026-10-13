@@ -126,7 +126,6 @@ void connectVertex(SurfaceHit hit, bool surface, HitInterface base, float3 d, fl
     float3 wc = wv / dist;
     float4 f = 0;
     float cosX = 1;
-    float3 origin = hit.p;
     uint startRegion = region;
     if (!surface) {
         f = hgPhase(dot(-d, wc), g);
@@ -139,17 +138,16 @@ void connectVertex(SurfaceHit hit, bool surface, HitInterface base, float3 d, fl
         if (isZero(f)) return;
         cosX = scatterCosine(base.it, -d, wc, kModeImportance);
         startRegion = dot(wc, hit.n) > 0 ? base.front : base.back;
-        origin = offsetOrigin(hit.p, hit.n, wc, hit.scale);
     }
-    uint endRegion;
-    float4 Tr = transmittance(origin, startRegion, wc, dist - dot(origin - hit.p, wc), wl, hit.scale, endRegion);
-    if (isZero(Tr) || endRegion != globals().det.x) return;
+    float4 Tr = connectionTransmittance(endpoint(hit.p, startRegion, hit.scale, surface ? hit.boundary : kGpuNone, surface ? hit.n : float3(0), surface ? hit.prim : kGpuNone), endpoint(q, globals().det.x, maxAbsComponent(q), kGpuNone, float3(0), kGpuNone), wl);
+    if (isZero(Tr)) return;
     deposit(px, py, beta * f * Tr * (cosX * factor), wl);
 }
 
 // A particle leaving an emitter: its first ray, region and throughput (flux per particle).
 struct Emitted {
-    float3 o, d;
+    float3 o, d, normal;
+    uint departed, departedPrimitive;
     uint region;
     float4 beta;
     float scale;
@@ -201,6 +199,8 @@ bool emitParticle(Wavelengths wl, inout Rng rng, bool connectToObserver, out Emi
     const uint ambient = G.counts.z;
     const float pSky = G.emit.x;
     e = (Emitted)0;
+    e.departed = kGpuNone;
+    e.departedPrimitive = kGpuNone;
     e.guideCell = kGpuNone;
     bool fromSky = rng.uniform() < pSky;
     uint li = 0;
@@ -285,15 +285,16 @@ bool emitParticle(Wavelengths wl, inout Rng rng, bool connectToObserver, out Emi
     } else {
         float sel = (1 - pSky) * L.pdf;
         GBoundary b = g_boundaries[L.boundary];
-        GEmission em = g_emissions[b.links.w];
+        GEmission em = g_emissions[b.emission];
         float4 Le = wl.eval(em.radiance);
         float u3 = rng.uniform();  // Draw3 order: last argument first
         float u2 = rng.uniform();
         float u1 = rng.uniform();
         float3 pL, nL;
-        if (!sampleArea(b, u1, u2, u3, pL, nL)) return false;
+        uint sampledPrimitive;
+        if (!sampleArea(b, u1, u2, u3, pL, nL, sampledPrimitive)) return false;
         float3 p = xfPoint(b.toWorld, pL), n = normalize(xfVector(b.toWorld, nL));
-        float pdfA = 1 / b.misc.y;
+        float pdfA = 1 / b.area;
         // Emitter seen directly by a virtual observer (path tracing owns this under the partition).
         if (connectToObserver) {
             float3 q;
@@ -305,10 +306,9 @@ bool emitParticle(Wavelengths wl, inout Rng rng, bool connectToObserver, out Emi
                 float3 wc = wv / dist;
                 float cosL = dot(n, wc);
                 if ((cosL > 0 && em.front != 0) || (cosL < 0 && em.back != 0)) {
-                    uint startRegion = cosL > 0 ? b.links.x : b.links.y, endRegion;
-                    float3 from = offsetOrigin(p, n, wc, b.misc.x);
-                    float4 Tr = transmittance(from, startRegion, wc, dist - dot(from - p, wc), wl, b.misc.x, endRegion);
-                    if (!isZero(Tr) && endRegion == G.det.x)
+                    uint startRegion = cosL > 0 ? b.front : b.back;
+                    float4 Tr = connectionTransmittance(endpoint(p, startRegion, b.scale, L.boundary, n, sampledPrimitive), endpoint(q, G.det.x, maxAbsComponent(q), kGpuNone, float3(0), kGpuNone), wl);
+                    if (!isZero(Tr))
                         deposit(px, py, Le * Tr * (abs(cosL) * factor / (sel * pdfA)), wl);
                 }
             }
@@ -326,10 +326,13 @@ bool emitParticle(Wavelengths wl, inout Rng rng, bool connectToObserver, out Emi
         float3 dir = f.toWorld(sampleCosineHemisphere(c1, c2));
         // β = Le·cos / (sel · pdfA · sidePdf · cos/π)
         e.beta = Le * (kPi / (sel * pdfA * sidePdf));
-        e.o = offsetOrigin(p, n, dir, b.misc.x);
-        e.scale = b.misc.x;
+        e.o = p;
+        e.normal = n;
+        e.departed = L.boundary;
+        e.departedPrimitive = sampledPrimitive;
+        e.scale = b.scale;
         e.d = dir;
-        e.region = front ? b.links.x : b.links.y;
+        e.region = front ? b.front : b.back;
     }
     e.beta = maskTerminated(wl, e.beta);
     return !isZero(e.beta);
@@ -348,6 +351,9 @@ void traceParticle(inout Wavelengths wl, inout Rng rng, inout uint4 stats) {
     Emitted em;
     if (!emitParticle(wl, rng, observer && !partition, em)) return;
     float3 o = em.o, d = em.d;
+    float3 normal = em.normal;
+    uint departed = em.departed;
+    uint departedPrimitive = em.departedPrimitive;
     uint region = em.region;
     float4 beta = em.beta;
     float scale = em.scale;
@@ -358,7 +364,7 @@ void traceParticle(inout Wavelengths wl, inout Rng rng, inout uint4 stats) {
 
     for (int depth = 0;; ++depth) {
         SurfaceHit hit;
-        bool found = intersectWorld(o, d, infinity(), hit);
+        bool found = intersectSpawnWorld(o, d, infinity(), departed, region, normal, scale, departedPrimitive, hit);
         if (found && depth == 0 && em.distant) refineDistantHit(d, hit);
         stats.y++;
         uint med = mediumOf(region);
@@ -386,6 +392,8 @@ void traceParticle(inout Wavelengths wl, inout Rng rng, inout uint4 stats) {
                 float3 wi;
                 sampleHg(-d, g, u1, u2, wi);
                 o = p;
+                departed = kGpuNone;
+                departedPrimitive = kGpuNone;
                 d = wi;
                 if (depth >= rrDepth) {
                     const float q = 0.95;  // any survival probability in (0,1] is unbiased
@@ -407,24 +415,31 @@ void traceParticle(inout Wavelengths wl, inout Rng rng, inout uint4 stats) {
         }
         GBoundary b = g_boundaries[hit.boundary];
         bool fromFront = dot(d, hit.n) < 0;
-        uint inc = fromFront ? b.links.x : b.links.y;
-        uint other = fromFront ? b.links.y : b.links.x;
-        if (inc != region) {
+        uint inc = fromFront ? b.front : b.back;
+        uint other = fromFront ? b.back : b.front;
+        if (inc != region || hit.ambiguousContact) {
             stats.z++;
             noteInconsistency(hit.boundary, region, inc, lastBoundary, hit.p);
             region = inc;
         }
         lastBoundary = hit.boundary;
-        uint surfType = g_optics[b.links.z].a.x;
+        if (hit.ambiguousContact) break;
+        uint surfType = g_optics[b.optics].a.x;
         if (surfType == kSurfNull) {
             region = other;
-            o = offsetOrigin(hit.p, hit.n, d, hit.scale);
+            o = hit.p;
+            departed = hit.boundary;
+            departedPrimitive = hit.prim;
+            normal = hit.n;
             scale = hit.scale;
             if (depth >= 4 * maxDepth) break;
             continue;
         }
         if (surfType == kSurfStainedGlass && passStainedGlass(hit, d, wl, beta, rng)) {
-            o = offsetOrigin(hit.p, hit.n, d, hit.scale);
+            o = hit.p;
+            departed = hit.boundary;
+            departedPrimitive = hit.prim;
+            normal = hit.n;
             scale = hit.scale;
             if (depth >= 4 * maxDepth) break;
             continue;
@@ -464,7 +479,10 @@ void traceParticle(inout Wavelengths wl, inout Rng rng, inout uint4 stats) {
             if (wl.pdf[i] != 0) beta[i] *= secondaryScatterWeight(atWavelength(hi, wl.lambda[i]), d, s, kModeImportance);
         if (s.delta) ++deltaEvents;
         if (s.transmitted) region = other;
-        o = offsetOrigin(hit.p, hit.n, s.wi, hit.scale);
+        o = hit.p;
+        departed = hit.boundary;
+        departedPrimitive = hit.prim;
+        normal = hit.n;
         scale = hit.scale;
         d = s.wi;
         if (depth >= rrDepth) {

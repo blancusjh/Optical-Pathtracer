@@ -13,6 +13,8 @@
 namespace owe {
 
 struct RenderSettings {
+    // Internal conformance controls; never read from the process environment or scene language.
+    uint32_t diagnosticVcmMask = 0;
     std::string detector;           // empty = first detector
     std::string integrator = "path";  // "path", "light" (particle tracing), "hybrid", "sppm", "bdpt", "vcm"
     int spp = 16;                   // samples per pixel (path) or particles per pixel (light)

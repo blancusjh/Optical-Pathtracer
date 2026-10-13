@@ -56,6 +56,17 @@ void exportRows(const Mat3& R, const Vec3& t, float out[12]) {
 void exportBvh(const Bvh& bvh, const Vec3& origin, uint32_t slotBase, std::vector<GNode>& out) {
     const uint32_t base = uint32_t(out.size());
     const auto& nodes = bvh.nodes();
+    // Preorder subtrees are contiguous. Keep their relative node counts in the unused
+    // inner-node bits so contact traversal can skip a subtree without a private stack.
+    // Relative counts remain valid when the group hierarchy is rebased into the scene.
+    std::vector<uint32_t> subtreeNodes(nodes.size(), 1);
+    for (size_t i = nodes.size(); i-- > 0;) {
+        if (nodes[i].count > 0) continue;
+        const uint64_t span = uint64_t(1) + subtreeNodes[i + 1] + subtreeNodes[nodes[i].start];
+        if (span > ((kNodeInner - 1u) >> 2))
+            throw std::overflow_error("GPU BVH subtree exceeds threaded traversal encoding");
+        subtreeNodes[i] = uint32_t(span);
+    }
     out.resize(base + nodes.size());
     parallelFor(nodes.size(), 1 << 15, [&](size_t begin, size_t end) {
         for (size_t i = begin; i < end; ++i) {
@@ -67,7 +78,7 @@ void exportBvh(const Bvh& bvh, const Vec3& origin, uint32_t slotBase, std::vecto
                 g.b = n.count;
             } else {
                 g.a = base + n.start;
-                g.b = kNodeInner | n.axis;
+                g.b = kNodeInner | n.axis | (subtreeNodes[i] << 2);
             }
             out[base + i] = g;
         }
@@ -77,7 +88,7 @@ void exportBvh(const Bvh& bvh, const Vec3& origin, uint32_t slotBase, std::vecto
 void set3(float out[4], const Vec3& v, float w);
 
 // Vertices (not edges) are rounded, so triangles sharing a vertex share its float value exactly.
-// v0.w: the triangle's index in its mesh; v1.w: the boundary it belongs to (both as bits).
+// Primitive identity and boundary ownership have named integer fields in the shared ABI.
 GTriangle exportTriangle(const Vec3& a, const Vec3& b, const Vec3& c, uint32_t prim, uint32_t owner) {
     GTriangle t{};
     const Vec3* v[3] = {&a, &b, &c};
@@ -87,9 +98,9 @@ GTriangle exportTriangle(const Vec3& a, const Vec3& b, const Vec3& c, uint32_t p
         out[k][1] = float(v[k]->y);
         out[k][2] = float(v[k]->z);
     }
-    t.v0[3] = bitsAsFloat(prim);
-    t.v1[3] = bitsAsFloat(owner);
-    t.v2[3] = bitsAsFloat(kGpuNone);
+    t.primitive = prim;
+    t.owner = owner;
+    t.corners = kGpuNone;
     return t;
 }
 
@@ -116,6 +127,33 @@ void exportFrame(const Boundary& b, const Vec3& origin, GBoundary& r) {
     AABB lb = b.shape->bounds();
     double ext = std::max(maxAbsComponent(lb.lo), maxAbsComponent(lb.hi));
     r.scale = float(length(origin - b.toWorld.t) + (std::isfinite(ext) ? ext : 0.0));
+}
+
+// Intersection-only coordinates for a sphere viewed close to its surface. Its native frame stays
+// unchanged for textures and light sampling. In the auxiliary frame the north pole is at z=0 and
+// the SAME full sphere is x²+y²+z²+2Rz=0; nearby heights never subtract two planetary-size floats.
+// Every sphere reserves these records so a moving observer can enter/leave the near-surface case.
+bool exportSphereFrame(const Boundary& b, const Vec3& origin, GBoundary& r, std::vector<float>& data) {
+    const auto* sphere = dynamic_cast<const SphereShape*>(b.shape.get());
+    if (!sphere) return false;
+    const double radius = sphere->radius();
+    const Vec3 delta = origin - b.toWorld.t;
+    const double distance = length(delta);
+    const bool enabled = radius > 4096 * std::max(1e-9, std::abs(distance - radius));
+    const size_t at = size_t(r.data) * 4;
+    const bool wasEnabled = data[at + 1] != 0;
+    data[at + 1] = enabled ? 1.0f : 0.0f;
+    if (!enabled) return wasEnabled;
+    const Transform pole = Transform::alignZ(delta / distance);
+    // Form this camera-relative translation in double before rounding. The lost fraction of the
+    // planet's native centre is retained in a small pole displacement, e.g. -0.6 m rather than R.
+    const Vec3 anchor = b.toWorld.t - origin + (delta / distance) * radius;
+    float rows[24];
+    exportRows(pole.R.transposed(), -(pole.R.transposed() * anchor), rows);
+    exportRows(pole.R, anchor, rows + 12);
+    const bool changed = !wasEnabled || !std::equal(rows, rows + 24, data.data() + at + 4);
+    std::copy(rows, rows + 24, data.data() + at + 4);
+    return changed;
 }
 
 float groupScale(const World& w, const MeshGroup& g, const Vec3& origin) {
@@ -218,7 +256,7 @@ std::shared_ptr<const MeshGroups> buildMeshGroups(const World& w) {
                         out->normals[at++] = floatBits(uv[0]);
                         out->normals[at++] = floatBits(uv[1]);
                     }
-                out3.v2[3] = bitsAsFloat(cw);
+                out3.corners = cw;
             }
         });
     }
@@ -437,6 +475,7 @@ public:
         } else if (auto* sp = dynamic_cast<const SphereShape*>(&sh)) {
             r.shape = kShapeSphere;
             push4(sp->radius());
+            for (int k = 0; k < 6; ++k) push4(0);  // auxiliary world↔pole transforms
         } else if (auto* c = dynamic_cast<const CylinderShape*>(&sh)) {
             r.shape = kShapeCylinder;
             push4(c->radius(), c->z0(), c->z1());
@@ -510,6 +549,7 @@ public:
             exportFrame(b, origin, r);
             std::vector<const MeshShape*> unused;
             shape(*b.shape, r, unused);
+            exportSphereFrame(b, origin, r, g_.shapeData);
             if (!unused.empty()) meshes[i] = unused.front();
             r.front = b.front;
             r.back = b.back;
@@ -564,8 +604,15 @@ public:
             if (n.b & kNodeInner) n.a += base;
             g_.nodes.push_back(n);
         }
-        for (size_t k = 0; k < groups_->groups.size(); ++k)
-            g_.boundaries[nb + k].meshNodes = base + groups_->groups[k].nodeBase;
+        for (size_t k = 0; k < groups_->groups.size(); ++k) {
+            const MeshGroup& group = groups_->groups[k];
+            const uint32_t root = base + group.nodeBase;
+            g_.boundaries[nb + k].meshNodes = root;
+            // An owner may need a native re-query after projecting its departure anchor.
+            // Group members have exactly the same frame; the shared hierarchy retains
+            // each triangle's owner and the query filters all other members.
+            for (uint32_t owner : group.members) g_.boundaries[owner].meshNodes = root;
+        }
     }
 
     std::shared_ptr<const MeshGroups> groups_;
@@ -767,7 +814,11 @@ void updateObserver(GpuScene& g, const World& w, const IdealObserver& o) {
             set3(g.optics[i].sampleAimCenter, optics.sampleAimCenter - g.origin, float(optics.sampleAimRadius));
     }
     const size_t nb = w.boundaries().size();
-    for (size_t i = 0; i < nb; ++i) exportFrame(w.boundaries()[i], g.origin, g.boundaries[i]);
+    g.sphereFramesChanged = false;
+    for (size_t i = 0; i < nb; ++i) {
+        exportFrame(w.boundaries()[i], g.origin, g.boundaries[i]);
+        g.sphereFramesChanged |= exportSphereFrame(w.boundaries()[i], g.origin, g.boundaries[i], g.shapeData);
+    }
     for (size_t k = 0; k < g.groups->groups.size(); ++k) {
         const MeshGroup& grp = g.groups->groups[k];
         GBoundary& r = g.boundaries[nb + k];

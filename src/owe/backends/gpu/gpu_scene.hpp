@@ -11,6 +11,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <vector>
@@ -39,37 +40,37 @@ constexpr uint32_t kGpuNone = 0xFFFFFFFFu;
 inline bool passable(SurfaceType t) { return t == SurfaceType::Null || t == SurfaceType::StainedGlass; }
 constexpr uint32_t kNodeInner = 0x80000000u;
 
-struct alignas(16) GNode {  // BVH node; inner: a = right child (left is next), b = kNodeInner | axis
+struct alignas(16) GNode {  // Inner: a = right child (left is next), b = kNodeInner | axis | (subtree node count << 2)
     float lo[3];            //           leaf:  a = first slot, b = count
     uint32_t a;
     float hi[3];
     uint32_t b;
 };
 
+// Shared declarations: float3 + uint occupy one 16-byte lane on both compilers.
+#define OWE_GPU_M(name) float name[12];
+#define OWE_GPU_V(name) float name[3];
+#define OWE_GPU_U(name) uint32_t name;
+#define OWE_GPU_F(name) float name;
+#define OWE_GPU_FIELD(kind, name, offset) OWE_GPU_##kind(name)
 struct alignas(16) GBoundary {
-    float toLocal[12];  // rows [Rᵀ | t'] mapping camera-relative world → shape-local
-    float toWorld[12];  // rows [R | t − camera] mapping shape-local → camera-relative world
-    float boxLo[3];     // world box (camera-relative), rounded outward
-    uint32_t shape;     // ShapeKind
-    float boxHi[3];
-    uint32_t data;      // first float4 of the shape's parameters in `shapeData`
-    uint32_t front, back, optics, emission;  // emission: kGpuNone if none
-    uint32_t light;     // index into lights, or kGpuNone
-    uint32_t meshNodes, meshTris, meshCount;  // mesh: BLAS root in `nodes`, first triangle, triangle count
-    float scale;        // size of the local coordinates reached from the camera (float error scale)
-    float area;         // surface area (emitter sampling)
-    uint32_t sampleable;
-    uint32_t pad;
+#include "boundary_fields.inc"
 };
-
-// Leaf order. Vertices (not edges) are rounded, so triangles sharing a vertex share its float
-// value exactly. w of v0 carries the original triangle index (as bits); w of v2, a smooth or
-// textured triangle's first word in GpuScene::normals with flags for what is there (kGpuNone:
-// flat, untextured).
-constexpr uint32_t kCornerNormals = 0x80000000u, kCornerUvs = 0x40000000u, kCornerIndex = 0x3FFFFFFFu;
 struct alignas(16) GTriangle {
-    float v0[4], v1[4], v2[4];
+#include "triangle_fields.inc"
 };
+#undef OWE_GPU_FIELD
+#define OWE_GPU_FIELD(kind, name, offset) static_assert(offsetof(GBoundary, name) == offset);
+#include "boundary_fields.inc"
+#undef OWE_GPU_FIELD
+#define OWE_GPU_FIELD(kind, name, offset) static_assert(offsetof(GTriangle, name) == offset);
+#include "triangle_fields.inc"
+#undef OWE_GPU_FIELD
+#undef OWE_GPU_M
+#undef OWE_GPU_V
+#undef OWE_GPU_U
+#undef OWE_GPU_F
+constexpr uint32_t kCornerNormals = 0x80000000u, kCornerUvs = 0x40000000u, kCornerIndex = 0x3FFFFFFFu;
 
 enum IndexKind : uint32_t { kIndexConstant = 0, kIndexCauchy = 1, kIndexSellmeier = 2, kIndexTabulated = 3, kIndexCiddor = 4 };
 
@@ -170,6 +171,7 @@ struct GpuScene {
     std::shared_ptr<Bvh> top;          // the top-level hierarchy in double (rebased on camera moves)
     std::shared_ptr<const MeshGroups> groups;
     std::vector<float> shapeData;      // float4 records
+    bool sphereFramesChanged = false; // observer rebasing changed auxiliary sphere intersection frames
     std::vector<GTriangle> triangles;
     std::vector<uint32_t> regions;     // region → medium
     std::vector<GMedium> media;

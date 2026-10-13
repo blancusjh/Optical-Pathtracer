@@ -114,7 +114,7 @@ bool stainedIsStone(Optics o, SurfaceHit hit) {
 // that a path takes it (both 0 where the mask says stone).
 float4 stainedStraight(SurfaceHit hit, float3 d, Wavelengths wl, out float pS) {
     pS = 0;
-    Optics o = loadOptics(g_boundaries[hit.boundary].links.z);
+    Optics o = loadOptics(g_boundaries[hit.boundary].optics);
     if (stainedIsStone(o, hit)) return 0;
     float3 tex = o.texKind != kTexNone ? textureWeights(o.texKind, o.texScale, o.texParam, hit.pLocal, hit.nLocal, hit.uv, hit.hasUv)
                                        : float3(1, 0, 0);
@@ -188,9 +188,9 @@ HitInterface makeInterface(SurfaceHit hit, float lambda) {
     GBoundary b = g_boundaries[hit.boundary];
     HitInterface h;
     h.it.p = hit.p;
-    h.front = b.links.x;
-    h.back = b.links.y;
-    h.it.optics = loadOptics(b.links.z);
+    h.front = b.front;
+    h.back = b.back;
+    h.it.optics = loadOptics(b.optics);
     if (h.it.optics.type == kSurfStainedGlass && stainedIsStone(h.it.optics, hit))
         h.it.optics = loadOptics(asuint(h.it.optics.sampleAimNormal.y));  // the mask says stone here
     h.it.n = hit.n;
@@ -236,11 +236,15 @@ Interface atWavelength(HitInterface base, float lambda) {
 
 // ---------------------------------------------------------------- lights
 
+// Finite light endpoints retain the sampled face, including mesh sampling-copy triangle slots.
+// Infinite lights use the directional shadow path and do not read this metadata.
+
 struct LightSample {
     float3 wi;
     float dist;
     float4 Le;
     float pdf;  // solid angle, including light selection
+    Endpoint endpoint;
 };
 
 uint pickLight(float u) {
@@ -283,15 +287,22 @@ bool sampleLightFrom(float3 p, Wavelengths wl, inout Rng rng, out LightSample ls
     GBoundary b = g_boundaries[L.boundary];
     float3 pL, nL;
     float pdfW;
-    if (!sampleFrom(b, xfPoint(b.toLocal, p), u1, u2, u3, pL, nL, pdfW)) return false;
+    uint sampledPrimitive;
+    if (!sampleFrom(b, xfPoint(b.toLocal, p), u1, u2, u3, pL, nL, pdfW, sampledPrimitive)) return false;
     float3 pW = xfPoint(b.toWorld, pL);
     float3 nW = normalize(xfVector(b.toWorld, nL));
     float3 d = pW - p;
     ls.dist = length(d);
     if (!(ls.dist > 0)) return false;
     ls.wi = d / ls.dist;
-    GEmission e = g_emissions[b.links.w];
+    GEmission e = g_emissions[b.emission];
     float cosL = dot(nW, -ls.wi);
+    ls.endpoint.p = pW;
+    ls.endpoint.normal = nW;
+    ls.endpoint.scale = b.scale;
+    ls.endpoint.region = cosL > 0 ? b.front : b.back;
+    ls.endpoint.boundary = L.boundary;
+    ls.endpoint.primitive = sampledPrimitive;
     ls.Le = ((cosL > 0 && e.front != 0) || (cosL < 0 && e.back != 0)) ? wl.eval(e.radiance) : float4(0);
     ls.pdf = sel * pdfW;
     return true;
@@ -299,7 +310,7 @@ bool sampleLightFrom(float3 p, Wavelengths wl, inout Rng rng, out LightSample ls
 
 float lightPdf(float3 ref, SurfaceHit hit) {
     GBoundary b = g_boundaries[hit.boundary];
-    uint li = b.mesh.x;
+    uint li = b.light;
     if (li == kGpuNone) return 0;
     return g_lights[li].pdf * pdfFrom(b, xfPoint(b.toLocal, ref), hit.pLocal, hit.nLocal);
 }
@@ -319,20 +330,49 @@ float4 sigmaT(uint medium, Wavelengths wl) {
 
 // Transmittance along a straight segment through null boundaries; 0 if blocked. finalRegion receives
 // the region the segment ends in.
-float4 transmittance(float3 o, uint region, float3 dir, float dist, Wavelengths wl, float scale, out uint finalRegion) {
+[noinline]
+float4 transmittanceSpawn(Endpoint start, float3 dir, float dist, Wavelengths wl,
+                          out uint finalRegion, Endpoint destination) {
+    float3 o = start.p, normal = start.normal;
+    uint region = start.region, departed = start.boundary, departedPrimitive = start.primitive;
+    float scale = start.scale;
+    uint endpointRegion = destination.region, endpointBoundary = destination.boundary;
+    uint endpointPrimitive = destination.primitive;
+    float3 endpointNormal = destination.normal, endpointPoint = destination.p;
+    float endpointError = destination.error;
     finalRegion = region;
     float4 Tr = 1;
     float remaining = dist;
+    bool explicitEndpoint = endpointRegion != kGpuNone;
     // The segment stops short of its end point (on the light), by more than the float error of the
     // light point and of the ray's hit on the light. `dist` is measured from `o` itself.
-    float margin = isinf(dist) ? 0 : 1e-5 * dist + surfaceEpsilon(o, scale);
-    // Any matter on the segment blocks it: find that without ordering. Only when the segment crosses
-    // a null boundary do regions (and media) change along it, which needs the ordered walk below.
-    {
-        float tmax = isinf(dist) ? infinity() : dist - margin;
+    float margin = isinf(dist) ? 0 : (explicitEndpoint ? 0 : 1e-5 * dist + surfaceEpsilon(o, scale));
+    // Prove the spawn neighborhood clear before using the normal fast shadow query.
+    // A local passable interface requires the ordered walk; opaque contact blocks immediately.
+    float3 fastOrigin = o;
+    float certifiedAdvance = -1;
+    SurfaceHit contact;
+    bool pendingContact = false;
+    float initialMax = isinf(dist) ? infinity() : dist - margin;
+    if (initialMax <= 0) return Tr;
+    if (departed != kGpuNone) {
+        float window = spawnAdvance(o, normal, dir, scale, initialMax);
+        fastOrigin = o + dir * window;
+        pendingContact = intersectContactNeighborhood(o, dir, window, departed, region, scale, normal, departedPrimitive, false, contact);
+        if (!pendingContact) certifiedAdvance = window;
+        if (pendingContact) {
+            GBoundary boundary = g_boundaries[contact.boundary];
+            uint incident = dot(dir, contact.n) < 0 ? boundary.front : boundary.back;
+            if (incident != region || contact.ambiguousContact ||
+                !isPassableType(g_optics[boundary.optics].a.x)) return 0;
+        }
+    }
+    if (!pendingContact && !explicitEndpoint) {
+        float advance = max(0, dot(fastOrigin - o, dir));
+        float tmax = isinf(dist) ? infinity() : initialMax - advance;
         if (tmax <= 0) return Tr;
         bool sawNull;
-        if (occluded(o, dir, tmax, sawNull)) return 0;
+        if (occluded(fastOrigin, dir, tmax, sawNull)) return 0;
         if (!sawNull) {
             uint m = mediumOf(region);
             if (mediumAbsorbs(m) || mediumScatters(m)) {
@@ -345,10 +385,13 @@ float4 transmittance(float3 o, uint region, float3 dir, float dist, Wavelengths 
     }
     for (int guard = 0; guard < 256; ++guard) {
         SurfaceHit h;
-        float tmax = isinf(remaining) ? infinity() : remaining - margin;
-        if (tmax <= 0) break;
-        bool found = intersectWorld(o, dir, tmax, h);
-        float seg = found ? h.t : remaining;
+        float tmax = isinf(remaining) ? infinity() : (explicitEndpoint ? remaining + endpointError : remaining - margin);
+        if (tmax <= 0) { finalRegion = region; return Tr; }
+        bool found;
+        if (guard == 0 && pendingContact) { h = contact; found = true; }
+        else found = intersectSpawnWorld(o, dir, tmax, departed, region, normal, scale, departedPrimitive, h,
+                                         false, guard == 0 ? certifiedAdvance : -1);
+        float seg = found ? min(h.t, remaining) : remaining;
         uint m = mediumOf(region);
         if (mediumAbsorbs(m) || mediumScatters(m)) {
             if (isinf(seg)) return 0;
@@ -360,28 +403,74 @@ float4 transmittance(float3 o, uint region, float3 dir, float dist, Wavelengths 
             finalRegion = region;
             return Tr;
         }
+        if (explicitEndpoint && h.boundary == endpointBoundary && !h.ambiguousContact &&
+            abs(h.t - remaining) <= endpointError && dot(h.n, endpointNormal) > 0 && region == endpointRegion &&
+            (g_boundaries[h.boundary].shape != kShapeMesh || sameMeshFace(h.prim, endpointPrimitive))) {
+            finalRegion = region;
+            return Tr;
+        }
+        if (explicitEndpoint && dot(h.p - endpointPoint, dir) > 0) {
+            finalRegion = region;
+            return Tr;
+        }
         GBoundary b = g_boundaries[h.boundary];
-        if (g_optics[b.links.z].a.x == kSurfStainedGlass) {
+        uint incident = dot(dir, h.n) < 0 ? b.front : b.back;
+        if (incident != region || h.ambiguousContact) return 0;
+        if (g_optics[b.optics].a.x == kSurfStainedGlass) {
             float pS;
             Tr *= stainedStraight(h, dir, wl, pS);
             if (isZero(Tr)) return 0;
-            o = offsetOrigin(h.p, h.n, dir, h.scale);
+            o = h.p;
+            departed = h.boundary;
+            departedPrimitive = h.prim;
+            normal = h.n;
             scale = h.scale;
             if (!isinf(remaining)) remaining -= h.t;
             continue;
         }
-        if (g_optics[b.links.z].a.x != kSurfNull) return 0;
-        region = dot(dir, h.n) < 0 ? b.links.y : b.links.x;
-        o = offsetOrigin(h.p, h.n, dir, h.scale);
+        if (g_optics[b.optics].a.x != kSurfNull) return 0;
+        region = dot(dir, h.n) < 0 ? b.back : b.front;
+        o = h.p;
+        departed = h.boundary;
+        departedPrimitive = h.prim;
+        normal = h.n;
         scale = h.scale;
         if (!isinf(remaining)) remaining -= h.t;
     }
     finalRegion = region;
-    return Tr;
+    return 0;  // guard exhaustion cannot certify the untraced remainder
+}
+float4 transmittance(float3 o, uint region, float3 dir, float dist, Wavelengths wl, float scale, out uint finalRegion) {
+    return transmittanceSpawn(endpoint(o, region, scale, kGpuNone, float3(0), kGpuNone), dir, dist, wl, finalRegion, endpoint(float3(0), kGpuNone));
+}
+float4 transmittanceSurface(SurfaceHit hit, uint region, float3 dir, float dist, Wavelengths wl, out uint finalRegion) {
+    return transmittanceSpawn(endpoint(hit.p, region, hit.scale, hit.boundary, hit.n, hit.prim), dir, dist, wl, finalRegion, endpoint(float3(0), kGpuNone));
+}
+float4 transmittanceSurface(SurfaceHit hit, uint region, float3 dir, float dist, Wavelengths wl) {
+    uint finalRegion;
+    return transmittanceSurface(hit, region, dir, dist, wl, finalRegion);
 }
 float4 transmittance(float3 o, uint region, float3 dir, float dist, Wavelengths wl, float scale) {
     uint finalRegion;
     return transmittance(o, region, dir, dist, wl, scale, finalRegion);
+}
+
+// Finite connections preserve both exact endpoint anchors. There is no scalar exclusion
+// interval: only the actual destination face is excluded, after checking its neighbors.
+float4 connectionTransmittance(Endpoint source, Endpoint target, Wavelengths wl) {
+    float3 delta = source.p - target.p;
+    float distance = length(delta);
+    if (!(distance > 0)) return 0;
+    float3 direction = delta / distance;
+    source.error = contactError(source.p, max(distance, source.scale));
+    SurfaceHit neighbor;
+    if (intersectContactNeighborhood(source.p, -direction, source.error, source.boundary, source.region,
+                                     source.scale, source.normal, source.primitive, true, neighbor)) {
+        if (neighbor.ambiguousContact || !isPassableType(g_optics[g_boundaries[neighbor.boundary].optics].a.x)) return 0;
+    }
+    uint arrival;
+    float4 tr = transmittanceSpawn(target, direction, distance, wl, arrival, source);
+    return arrival == source.region ? tr : float4(0);
 }
 
 // A next-event estimate waiting for its shadow ray: value (the path throughput already applied) is
@@ -391,7 +480,9 @@ float4 transmittance(float3 o, uint region, float3 dir, float dist, Wavelengths 
 struct ShadowRay {
     float3 o, d;
     float dist, scale;
-    uint region;
+    uint region, departed, departedPrimitive;
+    float3 normal;
+    Endpoint endpoint;
     float4 value;
 };
 
@@ -411,12 +502,14 @@ ShadowRay prepareDirect(SurfaceHit hit, HitInterface base, float3 d, Wavelengths
     }
     if (isZero(f)) return sr;
     sr.region = dot(ls.wi, hit.n) > 0 ? base.front : base.back;
-    sr.o = offsetOrigin(hit.p, hit.n, ls.wi, hit.scale);
+    sr.o = hit.p;
+    sr.departed = hit.boundary;
+    sr.departedPrimitive = hit.prim;
+    sr.normal = hit.n;
     sr.d = ls.wi;
     sr.scale = hit.scale;
-    // The origin moved along the ray (up to 20 surface epsilons at grazing angles): measure the
-    // distance to the light from there, or the margin in transmittance() may not cover it.
-    sr.dist = isinf(ls.dist) ? ls.dist : ls.dist - dot(sr.o - hit.p, ls.wi);
+    sr.dist = ls.dist;
+    sr.endpoint = ls.endpoint;
     float w = powerHeuristic(ls.pdf, pdfScatter);
     sr.value = beta * f * ls.Le * (scatterCosine(base.it, -d, ls.wi, kModeRadiance) * w / ls.pdf);
     return sr;
@@ -424,7 +517,12 @@ ShadowRay prepareDirect(SurfaceHit hit, HitInterface base, float3 d, Wavelengths
 
 float4 traceShadow(ShadowRay sr, Wavelengths wl) {
     if (isZero(sr.value)) return 0;
-    return sr.value * transmittance(sr.o, sr.region, sr.d, sr.dist, wl, sr.scale);
+    if (!isinf(sr.dist)) {
+        Endpoint e = sr.endpoint;
+        return sr.value * connectionTransmittance(endpoint(e.p, e.region, e.scale, e.boundary, e.normal, e.primitive), endpoint(sr.o, sr.region, maxAbsComponent(sr.o), sr.departed, sr.normal, sr.departedPrimitive), wl);
+    }
+    uint finalRegion;
+    return sr.value * transmittanceSpawn(endpoint(sr.o, sr.region, sr.scale, sr.departed, sr.normal, sr.departedPrimitive), sr.d, sr.dist, wl, finalRegion, endpoint(float3(0), kGpuNone));
 }
 
 // Zero the throughput of wavelengths whose pdf was cleared.
@@ -439,7 +537,8 @@ float4 maskTerminated(Wavelengths wl, float4 beta) {
 struct PathState {
     float3 o, d;
     float scale;       // error scale of the frame o was computed in (ray offsets)
-    uint region;
+    uint region, departed, departedPrimitive;
+    float3 normal;
     int depth;
     float4 L, beta;    // radiance gathered so far; throughput
     Wavelengths wl;    // secondary wavelengths may be terminated on the way
@@ -471,6 +570,10 @@ PathState startPath(float3 o, float3 d, uint region, Wavelengths wl, float weigh
     PathState p = (PathState)0;
     p.o = o;
     p.d = d;
+    p.departed = globals().counts.w == 0 ? kGpuNone : globals().target.x;
+    p.departedPrimitive = globals().counts.w == 0 ? kGpuNone : 0;
+    p.normal = globals().sensorNormal.xyz;
+    p.scale = globals().counts.w == 0 ? 0 : max(globals().sensorSize.x, globals().sensorSize.y);
     p.region = region;
     p.wl = wl;
     p.weight = weight;
@@ -498,8 +601,11 @@ ShadowRay prepareDirectMedium(float3 x, float3 d, float g, Wavelengths wl, inout
     if (!sampleLightFrom(x, wl, rng, ls) || isZero(ls.Le) || ls.pdf <= 0) return sr;
     float ph = hgPhase(dot(-d, ls.wi), g);
     sr.o = x;
+    sr.departed = kGpuNone;
+    sr.departedPrimitive = kGpuNone;
     sr.d = ls.wi;
     sr.dist = ls.dist;
+    sr.endpoint = ls.endpoint;
     sr.scale = scale;
     sr.region = region;
     sr.value = beta * ph * ls.Le * (powerHeuristic(ls.pdf, ph) / ls.pdf);
@@ -519,7 +625,7 @@ bool stepPath(inout PathState p, inout Rng rng, inout uint4 stats) {
     const int depth = p.depth++;
 
     SurfaceHit hit;
-    bool found = intersectWorld(p.o, p.d, infinity(), hit);
+    bool found = intersectSpawnWorld(p.o, p.d, infinity(), p.departed, p.region, p.normal, p.scale, p.departedPrimitive, hit, depth == 0 && G.counts.w != 0);
     stats.y++;
     uint med = mediumOf(p.region);
     float seg = found ? hit.t : infinity();
@@ -549,6 +655,8 @@ bool stepPath(inout PathState p, inout Rng rng, inout uint4 stats) {
             p.prevP = x;
             noteScatter(p, false);
             p.o = x;
+            p.departed = kGpuNone;
+            p.departedPrimitive = kGpuNone;
             p.d = wi;
             bool alive = true;
             if (depth >= rrDepth) {
@@ -592,21 +700,22 @@ bool stepPath(inout PathState p, inout Rng rng, inout uint4 stats) {
 
     GBoundary b = g_boundaries[hit.boundary];
     bool fromFront = dot(p.d, hit.n) < 0;
-    uint inc = fromFront ? b.links.x : b.links.y;
-    uint other = fromFront ? b.links.y : b.links.x;
-    if (inc != p.region) {
+    uint inc = fromFront ? b.front : b.back;
+    uint other = fromFront ? b.back : b.front;
+    if (inc != p.region || hit.ambiguousContact) {
         stats.z++;
-        noteInconsistency(hit.boundary, p.region, inc, kGpuNone, hit.p);
+        noteInconsistency(hit.boundary, p.region, inc, p.departed, hit.p);
         p.region = inc;
     }
-    uint surfType = g_optics[b.links.z].a.x;
+    if (hit.ambiguousContact) return false;
+    uint surfType = g_optics[b.optics].a.x;
 #ifdef OWE_SPPM
     if (!p.vpDone) p.pathLength += hit.t;
 #endif
 
     // Emission.
-    if (b.links.w != kGpuNone) {
-        GEmission e = g_emissions[b.links.w];
+    if (b.emission != kGpuNone) {
+        GEmission e = g_emissions[b.emission];
         if (((fromFront && e.front != 0) || (!fromFront && e.back != 0)) && !ownedByLightTracing && counts) {
             float w = 1;
             if (!p.specular) {
@@ -619,12 +728,18 @@ bool stepPath(inout PathState p, inout Rng rng, inout uint4 stats) {
 
     if (surfType == kSurfNull) {
         p.region = other;
-        p.o = offsetOrigin(hit.p, hit.n, p.d, hit.scale);
+        p.o = hit.p;
+        p.departed = hit.boundary;
+        p.departedPrimitive = hit.prim;
+        p.normal = hit.n;
         p.scale = hit.scale;
         return depth < 4 * maxDepth;
     }
     if (surfType == kSurfStainedGlass && passStainedGlass(hit, p.d, p.wl, p.beta, rng)) {
-        p.o = offsetOrigin(hit.p, hit.n, p.d, hit.scale);
+        p.o = hit.p;
+        p.departed = hit.boundary;
+        p.departedPrimitive = hit.prim;
+        p.normal = hit.n;
         p.scale = hit.scale;
         return depth < 4 * maxDepth;
     }
@@ -674,7 +789,10 @@ bool stepPath(inout PathState p, inout Rng rng, inout uint4 stats) {
         p.prevPdf = s.pdf;
         p.prevP = hit.p;
         noteScatter(p, s.delta);
-        p.o = offsetOrigin(hit.p, hit.n, s.wi, hit.scale);
+        p.o = hit.p;
+        p.departed = hit.boundary;
+        p.departedPrimitive = hit.prim;
+        p.normal = hit.n;
         p.scale = hit.scale;
         p.d = s.wi;
         if (depth >= rrDepth) {

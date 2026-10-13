@@ -56,25 +56,22 @@ struct SppmPixel {
 static const uint kFluxWords = 3 * kSplatBins * 2 + 2;  // XYZ bins, M, pad
 static const uint kFluxCount = 3 * kSplatBins * 2;
 
-// Push constants of the SPPM kernels (pc.extra): x wavelength rotation (float), y hash mask,
-// z α (float), w initial radius per metre of path (float: radius scale × pixel angle); pc.pad0: the
-// smallest initial radius (float).
-float iterationRotation() { return asfloat(pc.extra.x); }
-uint gridMask() { return pc.extra.y; }
+float iterationRotation() { return pc.wavelengthRotation; }
+uint gridMask() { return pc.gridMask; }
 
-// Wavelength groups: an iteration's paths and photons are split into groups (pc.pad1) whose hero
+// Wavelength groups: an iteration's paths and photons are split into groups (pc.wavelengthGroups) whose hero
 // wavelengths interleave (group g rotates by g/(4·groups), between the four stratified wavelengths
 // of a set), so the union covers the spectrum evenly. A visible point seen through glass (its own
 // wavelengths fixed by dispersion on the way) takes the photons of its group; one the eye sees
 // directly takes every photon, at the photon's wavelengths: 16 spectral samples per iteration where
 // a single shared set had one, at the price of 1/groups of the photons for points seen through glass.
-uint wavelengthGroups() { return max(pc.pad1, 1u); }
+uint wavelengthGroups() { return max(pc.wavelengthGroups, 1u); }
 float groupRotation(uint g) {
     float u = iterationRotation() + float(g) / float(4 * wavelengthGroups());
     return u - floor(u);
 }
-float sppmAlpha() { return asfloat(pc.extra.z); }
-float initialRadiusPerMetre() { return asfloat(pc.extra.w); }
+float sppmAlpha() { return pc.photonAlpha; }
+float initialRadiusPerMetre() { return pc.initialRadiusPerMetre; }
 
 // ---------------------------------------------------------------- the hash grid
 
@@ -127,14 +124,14 @@ float fluxRead(uint base) {
 // The interface at a visible point at wavelength lambda.
 Interface visibleInterface(VisiblePoint v, GBoundary b, float lambda) {
     Interface it;
-    it.optics = loadOptics(b.links.z);
+    it.optics = loadOptics(b.optics);
     it.n = v.n.xyz;
     it.ns = (asuint(v.d.w) & kVpSmooth) != 0 ? octDecode(asuint(v.tex.w)) : it.n;
     it.p = v.p.xyz;
     it.nFront = it.nBack = 1;
     if (it.optics.usesIndices()) {
-        it.nFront = regionIndex(b.links.x, lambda);
-        it.nBack = regionIndex(b.links.y, lambda);
+        it.nFront = regionIndex(b.front, lambda);
+        it.nBack = regionIndex(b.back, lambda);
     }
     it.lambda = lambda;
     it.fresnelFloor = globals().misc.z;
@@ -212,14 +209,18 @@ void traceSppmPhoton(inout Wavelengths wl, uint group, inout Rng rng, inout uint
     if (!emitParticle(wl, rng, false, em)) return;
     bool useful = false;
     float3 o = em.o, d = em.d;
+    float3 normal = em.normal;
+    uint departed = em.departed;
+    uint departedPrimitive = em.departedPrimitive;
     uint region = em.region;
     float4 beta = em.beta;
+    float scale = em.scale;
     const float hero = wl.hero();
     int events = 0;  // scattering events so far (direct light is the camera pass's)
     uint lastBoundary = kGpuNone;
     for (int depth = 0;; ++depth) {
         SurfaceHit hit;
-        bool found = intersectWorld(o, d, infinity(), hit);
+        bool found = intersectSpawnWorld(o, d, infinity(), departed, region, normal, scale, departedPrimitive, hit);
         if (found && depth == 0 && em.distant) refineDistantHit(d, hit);
         stats.y++;
         uint med = mediumOf(region);
@@ -237,6 +238,8 @@ void traceSppmPhoton(inout Wavelengths wl, uint group, inout Rng rng, inout uint
                 float3 wi;
                 sampleHg(-d, g_media[med].g.x, u1, u2, wi);
                 o = o + d * t;
+                departed = kGpuNone;
+                departedPrimitive = kGpuNone;
                 d = wi;
                 ++events;
                 if (depth >= rrDepth) {
@@ -258,23 +261,32 @@ void traceSppmPhoton(inout Wavelengths wl, uint group, inout Rng rng, inout uint
         }
         GBoundary b = g_boundaries[hit.boundary];
         bool fromFront = dot(d, hit.n) < 0;
-        uint inc = fromFront ? b.links.x : b.links.y;
-        uint other = fromFront ? b.links.y : b.links.x;
-        if (inc != region) {
+        uint inc = fromFront ? b.front : b.back;
+        uint other = fromFront ? b.back : b.front;
+        if (inc != region || hit.ambiguousContact) {
             stats.z++;
             noteInconsistency(hit.boundary, region, inc, lastBoundary, hit.p);
             region = inc;
         }
         lastBoundary = hit.boundary;
-        uint surfType = g_optics[b.links.z].a.x;
+        if (hit.ambiguousContact) break;
+        uint surfType = g_optics[b.optics].a.x;
         if (surfType == kSurfNull) {
             region = other;
-            o = offsetOrigin(hit.p, hit.n, d, hit.scale);
+            o = hit.p;
+            departed = hit.boundary;
+            departedPrimitive = hit.prim;
+            normal = hit.n;
+            scale = hit.scale;
             if (depth >= 4 * maxDepth) break;
             continue;
         }
         if (surfType == kSurfStainedGlass && passStainedGlass(hit, d, wl, beta, rng)) {
-            o = offsetOrigin(hit.p, hit.n, d, hit.scale);
+            o = hit.p;
+            departed = hit.boundary;
+            departedPrimitive = hit.prim;
+            normal = hit.n;
+            scale = hit.scale;
             if (depth >= 4 * maxDepth) break;
             continue;
         }
@@ -300,7 +312,11 @@ void traceSppmPhoton(inout Wavelengths wl, uint group, inout Rng rng, inout uint
         [ForceUnroll] for (int i = 1; i < NW; ++i)
             if (wl.pdf[i] != 0) beta[i] *= secondaryScatterWeight(atWavelength(hi, wl.lambda[i]), d, s, kModeImportance);
         if (s.transmitted) region = other;
-        o = offsetOrigin(hit.p, hit.n, s.wi, hit.scale);
+        o = hit.p;
+        departed = hit.boundary;
+        departedPrimitive = hit.prim;
+        normal = hit.n;
+            scale = hit.scale;
         d = s.wi;
         ++events;
         if (depth >= rrDepth) {

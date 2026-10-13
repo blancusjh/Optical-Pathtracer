@@ -634,7 +634,10 @@ struct RaySlabs {
         float3 tn = min(t0, t1), tf = max(t0, t1);
         [ForceUnroll] for (int a = 0; a < 3; ++a) {
             tmin = tn[a] > tmin ? tn[a] : tmin;
-            float f = tf[a] * 1.0000004;
+            // Contact neighborhoods include negative t. Widen toward +infinity
+            // on either side of zero; multiplying a negative far bound by >1
+            // would shrink the interval and reject a touching slab.
+            float f = tf[a] * (tf[a] >= 0 ? 1.0000004 : 0.9999996);
             tmax = f < tmax ? f : tmax;
         }
         tEnter = tmin;
@@ -682,7 +685,7 @@ bool intersectMesh(GBoundary b, float3 o, float3 d, float tmin, float tmax, inou
     uint stackNode[kStack];
     float stackT[kStack];
     int sp = 0;
-    uint cur = b.mesh.y;
+    uint cur = b.meshNodes;
     float best = tmax;
     bool found = false;
     uint bestSlot = 0;
@@ -729,8 +732,8 @@ bool intersectMesh(GBoundary b, float3 o, float3 d, float tmin, float tmax, inou
     h.t = best;
     h.p = o + d * best;
     h.n = normalize(triangleNormal(tri.v0.xyz, tri.v1.xyz, tri.v2.xyz));
-    h.prim = asuint(tri.v0.w);
-    h.owner = asuint(tri.v1.w);
+    h.prim = tri.primitive;
+    h.owner = tri.owner;
     h.slot = bestSlot;
     return true;
 }
@@ -768,7 +771,7 @@ bool triangleBarycentrics(GTriangle tri, float3 p, out float3 b) {
 // p's barycentric coordinates), on the side of the geometric normal n; n itself for a flat one.
 float3 meshShadingNormal(uint slot, float3 p, float3 n) {
     GTriangle tri = g_triangles[slot];
-    uint cw = asuint(tri.v2.w);
+    uint cw = tri.corners;
     if (cw == kGpuNone || (cw & kCornerNormals) == 0) return n;
     float3 b;
     if (!triangleBarycentrics(tri, p, b)) return n;
@@ -783,7 +786,7 @@ float3 meshShadingNormal(uint slot, float3 p, float3 n) {
 bool meshUv(uint slot, float3 p, out float2 uv) {
     uv = 0;
     GTriangle tri = g_triangles[slot];
-    uint cw = asuint(tri.v2.w);
+    uint cw = tri.corners;
     if (cw == kGpuNone || (cw & kCornerUvs) == 0) return false;
     float3 b;
     triangleBarycentrics(tri, p, b);
@@ -800,7 +803,7 @@ bool meshUvFrame(uint slot, out float3 dpdu, out float3 dpdv) {
     dpdu = 0;
     dpdv = 0;
     GTriangle tri = g_triangles[slot];
-    uint cw = asuint(tri.v2.w);
+    uint cw = tri.corners;
     if (cw == kGpuNone || (cw & kCornerUvs) == 0) return false;
     uint w = (cw & kCornerIndex) + ((cw & kCornerNormals) != 0 ? 3 : 0);
     float2 t0 = float2(asfloat(g_normals[w]), asfloat(g_normals[w + 1]));
@@ -817,7 +820,7 @@ bool meshUvFrame(uint slot, out float3 dpdu, out float3 dpdv) {
 
 // Boundaries a shadow ray crosses (null) or is attenuated by (stained glass) rather than stopped.
 bool isPassableType(uint type) { return type == kSurfNull || type == kSurfStainedGlass; }
-bool isNullBoundary(uint boundary) { return isPassableType(g_optics[g_boundaries[boundary].links.z].a.x); }
+bool isNullBoundary(uint boundary) { return isPassableType(g_optics[g_boundaries[boundary].optics].a.x); }
 
 // Any hit on matter (a triangle whose boundary is not null) in (tmin, tmax); no ordering, first
 // found wins. sawNull reports crossing a null boundary's triangle.
@@ -825,7 +828,7 @@ bool occludedMesh(GBoundary b, float3 o, float3 d, float tmin, float tmax, inout
     RaySlabs rs = RaySlabs(o, d);
     uint stackNode[kStack];
     int sp = 0;
-    uint cur = b.mesh.y;
+    uint cur = b.meshNodes;
     float tEnter;
     GNode root = g_nodes[cur];
     if (!rs.hit(root.lo.xyz, root.hi.xyz, tmin, tmax, tEnter)) return false;
@@ -837,7 +840,7 @@ bool occludedMesh(GBoundary b, float3 o, float3 d, float tmin, float tmax, inout
                 GTriangle tri = g_triangles[na + i];
                 float tt;
                 if (!hitTriangle(tri, o, d, tmin, tmax, tt)) continue;
-                if (!isNullBoundary(asuint(tri.v1.w))) return true;
+                if (!isNullBoundary(tri.owner)) return true;
                 sawNull = true;
             }
         } else {
@@ -862,7 +865,7 @@ bool occludedMesh(GBoundary b, float3 o, float3 d, float tmin, float tmax, inout
 }
 
 bool intersectShape(GBoundary b, float3 o, float3 d, float tmin, float tmax, inout LocalHit h) {
-    uint kind = asuint(b.boxLo.w), data = asuint(b.boxHi.w);
+    uint kind = b.shape, data = b.data;
     switch (kind) {
         case kShapeSag: return intersectSagQuadric(loadSag(data, false), o, d, tmin, tmax, h);
         case kShapeAsphere: return intersectSagNumeric(loadSag(data, true), o, d, tmin, tmax, h);
@@ -884,11 +887,77 @@ bool intersectShape(GBoundary b, float3 o, float3 d, float tmin, float tmax, ino
     }
 }
 
+bool hasSphereFrame(GBoundary b) {
+    return b.shape == kShapeSphere && g_shapeData[b.data].y != 0;
+}
+
+bool usesSphereFrame(GBoundary b, float3 o) {
+    if (!hasSphereFrame(b)) return false;
+    uint data = b.data;
+    float3 lo;
+    [ForceUnroll] for (int k = 0; k < 3; ++k) {
+        float4 row = g_shapeData[data + 1 + k];
+        lo[k] = dot(row.xyz, o) + row.w;
+    }
+    // Far-origin light paths keep the existing closest-approach sphere roots. Their normalized
+    // quadratic discriminant would subtract large nearly equal terms in the pole frame.
+    return maxAbsComponent(lo) < g_shapeData[data].x / 8;
+}
+
+// Same complete analytic sphere, expressed about the pole nearest the detector. Dividing its
+// equation by 2R keeps both the planetary radius squared and subtractive cancellation out of
+// the coefficients: |p|²/(2R) + p.z = 0. Both roots remain available (including the far hemisphere).
+[noinline]
+bool intersectBoundary(GBoundary b, float3 o, float3 d, float tmin, float tmax, inout LocalHit h) {
+    if (!usesSphereFrame(b, o)) return intersectShape(b, xfPoint(b.toLocal, o), xfVector(b.toLocal, d), tmin, tmax, h);
+    uint data = b.data;
+    float R = g_shapeData[data].x;
+    float4 toPole[3], fromPole[3];
+    [ForceUnroll] for (int k = 0; k < 3; ++k) {
+        toPole[k] = g_shapeData[data + 1 + k];
+        fromPole[k] = g_shapeData[data + 4 + k];
+    }
+    float3 lo = xfPoint(toPole, o), ld = xfVector(toPole, d);
+    float A = dot(ld, ld) / (2 * R);
+    float B = ld.z + dot(lo, ld) / R;
+    float C = lo.z + dot(lo, lo) / (2 * R);
+    float disc = B * B - 4 * A * C;
+    if (disc < 0) return false;
+    float q = -0.5 * (B + copySign(sqrt(disc), B));
+    float t0 = q / A, t1 = q != 0 ? C / q : t0;
+    if (t0 > t1) { float tmp = t0; t0 = t1; t1 = tmp; }
+    float t = 0;
+    bool found = false;
+    [ForceUnroll] for (int root = 0; root < 2 && !found; ++root) {
+        float tr = root == 0 ? t0 : t1;
+        if (!mayLieIn(tr, tmin, tmax)) continue;
+        [ForceUnroll] for (int step = 0; step < 2; ++step) {
+            float3 p = lo + ld * tr;
+            float derivative = ld.z + dot(p, ld) / R;
+            if (derivative == 0) break;
+            float correction = -(p.z + dot(p, p) / (2 * R)) / derivative;
+            if (abs(correction) < kRefine * (1 + abs(tr))) tr += correction;
+        }
+        if (tr > tmin && tr < tmax) { t = tr; found = true; }
+    }
+    if (!found) return false;
+    float3 p = lo + ld * t;
+    float3 n = normalize(float3(p.xy / R, 1 + p.z / R));
+    h.t = t;
+    // Native coordinates remain authoritative for textures and emitter PDFs. World reconstruction
+    // projects the hit on the pole-anchored sphere, preserving its small surface displacement.
+    h.p = xfPoint(b.toLocal, o + d * t);
+    h.n = normalize(xfVector(b.toLocal, xfVector(fromPole, n)));
+    h.prim = 0;
+    return true;
+}
+
 // ---------------------------------------------------------------- emitter sampling (local frame)
 
 // Uniform area sampling; false when the shape has no area sampler.
-bool sampleArea(GBoundary b, float u1, float u2, float u3, out float3 p, out float3 n) {
-    uint kind = asuint(b.boxLo.w), data = asuint(b.boxHi.w);
+bool sampleArea(GBoundary b, float u1, float u2, float u3, out float3 p, out float3 n, out uint primitive) {
+    primitive = 0;
+    uint kind = b.shape, data = b.data;
     float4 a = g_shapeData[data];
     p = 0;
     n = float3(0, 0, 1);
@@ -926,7 +995,7 @@ bool sampleArea(GBoundary b, float u1, float u2, float u3, out float3 p, out flo
             return true;
         }
         case kShapeMesh: {
-            uint cdf = asuint(a.x), count = b.mesh.w;
+            uint cdf = asuint(a.x), count = b.meshCount;
             uint lo = 0, len = count;  // first CDF entry ≥ u3 (std::lower_bound)
             while (len > 0) {
                 uint half = len / 2;
@@ -934,7 +1003,8 @@ bool sampleArea(GBoundary b, float u1, float u2, float u3, out float3 p, out flo
                 else len = half;
             }
             uint i = min(lo, count - 1);
-            GTriangle tri = g_triangles[b.mesh.z + i];
+            GTriangle tri = g_triangles[b.meshTris + i];
+            primitive = b.meshTris + i;  // transient departure identity is a global triangle slot
             float su = sqrt(u1);
             float b0 = 1 - su, b1 = u2 * su;
             p = tri.v0.xyz * b0 + tri.v1.xyz * b1 + tri.v2.xyz * (1 - b0 - b1);
@@ -945,15 +1015,22 @@ bool sampleArea(GBoundary b, float u1, float u2, float u3, out float3 p, out flo
     }
 }
 
+bool sampleArea(GBoundary b, float u1, float u2, float u3, out float3 p, out float3 n) {
+    uint primitive;
+    return sampleArea(b, u1, u2, u3, p, n, primitive);
+}
+
 // Point on the shape as seen from `ref` with a solid-angle pdf (false on failure). Local frame.
-bool sampleFrom(GBoundary b, float3 ref, float u1, float u2, float u3, out float3 p, out float3 n, out float pdfW) {
-    uint kind = asuint(b.boxLo.w);
-    float area = b.misc.y;
+bool sampleFrom(GBoundary b, float3 ref, float u1, float u2, float u3, out float3 p, out float3 n, out float pdfW,
+                out uint primitive) {
+    primitive = 0;
+    uint kind = b.shape;
+    float area = b.area;
     pdfW = 0;
     p = 0;
     n = float3(0, 0, 1);
     if (kind == kShapeSphere) {
-        float R = g_shapeData[asuint(b.boxHi.w)].x;
+        float R = g_shapeData[b.data].x;
         float dc2 = dot(ref, ref);
         if (dc2 > R * R * (1 + 1e-6)) {
             float dc = sqrt(dc2);
@@ -978,8 +1055,8 @@ bool sampleFrom(GBoundary b, float3 ref, float u1, float u2, float u3, out float
             return true;
         }
     }
-    if (asuint(b.misc.z) == 0 || area <= 0) return false;
-    if (!sampleArea(b, u1, u2, u3, p, n)) return false;
+    if (b.sampleable == 0 || area <= 0) return false;
+    if (!sampleArea(b, u1, u2, u3, p, n, primitive)) return false;
     float3 w = p - ref;
     float d2 = dot(w, w);
     if (d2 <= 0) return false;
@@ -989,11 +1066,16 @@ bool sampleFrom(GBoundary b, float3 ref, float u1, float u2, float u3, out float
     return true;
 }
 
+bool sampleFrom(GBoundary b, float3 ref, float u1, float u2, float u3, out float3 p, out float3 n, out float pdfW) {
+    uint primitive;
+    return sampleFrom(b, ref, u1, u2, u3, p, n, pdfW, primitive);
+}
+
 float pdfFrom(GBoundary b, float3 ref, float3 p, float3 n) {
-    uint kind = asuint(b.boxLo.w);
-    float area = b.misc.y;
+    uint kind = b.shape;
+    float area = b.area;
     if (kind == kShapeSphere) {
-        float R = g_shapeData[asuint(b.boxHi.w)].x;
+        float R = g_shapeData[b.data].x;
         float dc2 = dot(ref, ref);
         if (dc2 > R * R * (1 + 1e-6)) {
             float sin2Max = R * R / dc2;
@@ -1001,7 +1083,7 @@ float pdfFrom(GBoundary b, float3 ref, float3 p, float3 n) {
             return 1 / (2 * kPi * sin2Max / (1 + cosMax));
         }
     }
-    if (asuint(b.misc.z) == 0 || area <= 0) return 0;
+    if (b.sampleable == 0 || area <= 0) return 0;
     float3 w = p - ref;
     float d2 = dot(w, w);
     float cosL = abs(dot(n, w)) / sqrt(d2);

@@ -60,7 +60,7 @@ message(STATUS "slangc: ${OWE_SLANGC}")
 # the variant that traverses with VK_KHR_ray_query (used where the device has ray-tracing hardware).
 function(owe_add_kernel target source symbol)
   get_filename_component(_dir ${source} DIRECTORY)
-  file(GLOB _deps CONFIGURE_DEPENDS ${_dir}/*.slang)
+  file(GLOB _deps CONFIGURE_DEPENDS ${_dir}/*.slang ${_dir}/../*.inc)
   set(_spv ${CMAKE_BINARY_DIR}/shaders/${symbol}.spv)
   set(_cpp ${CMAKE_BINARY_DIR}/shaders/${symbol}.cpp)
   set(_flags -profile spirv_1_3)

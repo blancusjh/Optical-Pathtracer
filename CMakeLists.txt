@@ -86,6 +86,8 @@ if(OWE_GPU)
     src/owe/backends/gpu/gpu_accel.cpp
     src/owe/backends/gpu/gpu_backend.cpp
     src/owe/backends/gpu/gpu_renderer.cpp
+    src/owe/backends/gpu/gpu_renderer_passes.cpp
+    src/owe/backends/gpu/gpu_renderer_film.cpp
     src/owe/backends/gpu/vulkan_context.cpp)
   target_link_libraries(owe_backend_gpu PRIVATE owe_volk)
   if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -109,6 +111,7 @@ if(OWE_GPU)
   owe_add_kernel(owe_backend_gpu ${_kernels}/vcm_camera_kernel.slang owe_kernel_vcm_camera)
   owe_add_kernel(owe_backend_gpu ${_kernels}/vcm_camera_kernel.slang owe_kernel_vcm_camera_rq RAY_QUERY)
   owe_add_kernel(owe_backend_gpu ${_kernels}/vcm_grid_kernel.slang owe_kernel_vcm_grid)
+  owe_add_kernel(owe_backend_gpu ${_kernels}/film_kernel.slang owe_kernel_film)
 else()
   target_sources(owe_backend_gpu PRIVATE src/owe/backends/gpu/gpu_unavailable.cpp)
 endif()

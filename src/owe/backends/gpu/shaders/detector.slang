@@ -113,7 +113,7 @@ bool generateRay(float px, float py, inout Rng rng, out float3 o, out float3 d, 
         dir = f.toWorld(sampleCosineHemisphere(u1, u2));
         weight = kPi;
     }
-    o = offsetOrigin(p, nrm, dir, max(G.sensorSize.x, G.sensorSize.y));
+    o = p;  // startPath retains the sensor boundary and processes contacts before any offset
     d = dir;
     return true;
 }
