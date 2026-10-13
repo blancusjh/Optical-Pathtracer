@@ -15,6 +15,7 @@
 #include "owe/backends/gpu/gpu_renderer.hpp"
 #include "owe/backends/gpu/gpu_scene.hpp"
 #include "owe/backends/gpu/gpu_push.hpp"
+#include "owe/backends/gpu/gpu_film.hpp"
 #include "owe/backends/gpu/vulkan_context.hpp"
 
 
@@ -33,7 +34,7 @@ static_assert(sizeof(PixelState) == 64, "PixelState layout");
 
 // Particle splats (shaders/particle.slang): per pixel, XYZ × kSplatBins 64-bit bins (lo, hi words).
 constexpr int kSplatBins = 4;
-constexpr VkDeviceSize kFilmPixelBytes = 64; // film_kernel.slang: two compensated XYZ sums
+constexpr VkDeviceSize kFilmPixelBytes = sizeof(FilmPixel);
 constexpr uint32_t kSplatWords = 3 * kSplatBins * 2;
 // SPPM (shaders/sppm.slang): visible points and pixel states of 5 and 2 float4, flux words per pixel.
 constexpr VkDeviceSize kVisiblePointBytes = 5 * 16, kSppmPixelBytes = 2 * 16;

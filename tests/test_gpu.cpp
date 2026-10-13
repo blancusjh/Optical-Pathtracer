@@ -7,6 +7,7 @@
 #include "check.hpp"
 #include "owe/backends/gpu/gpu_scene.hpp"
 #include "owe/backends/gpu/gpu_push.hpp"
+#include "owe/backends/gpu/gpu_film.hpp"
 #include "owe/backends/registry.hpp"
 #include "owe/loader/scene_loader.hpp"
 #include "owe/scene/builders.hpp"

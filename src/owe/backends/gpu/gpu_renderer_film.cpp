@@ -16,12 +16,12 @@ Image GpuRenderer::resolve() const {
         }
     }, "resolve film");
     img.xyz.resize(size_t(W_) * H_ * 3);
-    const float* film = static_cast<const float*>(filmReadback_.mapped);
+    const FilmPixel* film = static_cast<const FilmPixel*>(filmReadback_.mapped);
     const double norm = totalSpp_ > 0 ? 1.0 / double(totalSpp_) : 0;
     const double lightNorm = particleCount_ > 0 ? 1.0 / particleCount_ : 0;
     for (size_t i = 0; i < size_t(W_) * H_; ++i)
         for (int c = 0; c < 3; ++c)
-            img.xyz[3 * i + c] = double(film[16 * i + c]) * norm + double(film[16 * i + 8 + c]) * lightNorm;
+            img.xyz[3 * i + c] = double(film[i].camera[c]) * norm + double(film[i].light[c]) * lightNorm;
     if (sppm_ && iterations_ > 0) {
         // L = L_direct / iterations (above) + τ / (N_emitted · π r²).
         const double emitted = double(photonsPerIteration_) * double(iterations_);

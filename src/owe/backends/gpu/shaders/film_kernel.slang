@@ -3,8 +3,9 @@
 #include "scene.slang"
 
 struct FilmPixel {
-    float4 camera, cameraCompensation;
-    float4 light, lightCompensation;
+#define OWE_FILM_FIELD(name, offset) float4 name;
+#include "../film_fields.inc"
+#undef OWE_FILM_FIELD
 };
 [[vk::binding(27, 0)]] RWStructuredBuffer<FilmPixel> g_film;
 groupshared uint4 groupStats[256];
