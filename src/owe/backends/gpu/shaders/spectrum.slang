@@ -31,6 +31,9 @@ float tableEval(uint table, uint count, float l) {
     return g_scalars[vals + i - 1] * (1 - t) + g_scalars[vals + i] * t;
 }
 
+// Spectra are evaluated at every wavelength of every scattering and emission term: inlined, their
+// copies were half of each tracing kernel (and of its compile time), and calling them is faster.
+[noinline]
 float spectrumEval(uint id, float l) {
     GSpectrum s = g_spectra[id];
     float scale = s.abcs.w;
@@ -42,6 +45,29 @@ float spectrumEval(uint id, float l) {
         case kSpecRgbIlluminant: return scale * dot(s.abcs.xyz, rgbBasis(l)) * rgbIlluminantBase(l);
         default: return 0;
     }
+}
+// The spectrum at four wavelengths in one call: the record read and its kind dispatched once.
+[noinline]
+float4 spectrumEval4(uint id, float4 l) {
+    GSpectrum s = g_spectra[id];
+    float4 r = 0;
+    switch (s.info.x) {
+        case kSpecConstant: return s.abcs.w * s.abcs.x;
+        case kSpecBlackbody:
+            [ForceUnroll] for (int i = 0; i < 4; ++i) r[i] = planck(l[i], s.abcs.x);
+            break;
+        case kSpecTabulated:
+            [ForceUnroll] for (int i = 0; i < 4; ++i) r[i] = tableEval(s.info.y, s.info.z, l[i]);
+            break;
+        case kSpecRgbReflectance:
+            [ForceUnroll] for (int i = 0; i < 4; ++i) r[i] = dot(s.abcs.xyz, rgbBasis(l[i]));
+            break;
+        case kSpecRgbIlluminant:
+            [ForceUnroll] for (int i = 0; i < 4; ++i) r[i] = dot(s.abcs.xyz, rgbBasis(l[i])) * rgbIlluminantBase(l[i]);
+            break;
+        default: return 0;
+    }
+    return s.abcs.w * r;
 }
 bool spectrumIsZero(uint id) {
     GSpectrum s = g_spectra[id];
@@ -106,10 +132,7 @@ struct Wavelengths {
         if (secondaryTerminated()) return;
         pdf = float4(pdf.x / NW, 0, 0, 0);
     }
-    float4 eval(uint spectrum) {
-        return float4(spectrumEval(spectrum, lambda.x), spectrumEval(spectrum, lambda.y), spectrumEval(spectrum, lambda.z),
-                      spectrumEval(spectrum, lambda.w));
-    }
+    float4 eval(uint spectrum) { return spectrumEval4(spectrum, lambda); }
     // XYZ contribution: (1/NW) Σ L(λᵢ) cmf(λᵢ)/pdf(λᵢ) / ∫ȳ.
     float3 toXYZ(float4 L, float cieYIntegral) {
         float3 c = 0;

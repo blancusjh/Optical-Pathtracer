@@ -78,6 +78,7 @@ inline uint32_t hashSize(uint64_t n) {
 struct Spirv {
     const unsigned char* bytes;
     size_t size;
+    const char* name;  // the kernel's build name (owe_kernel_<name>)
 };
 
 inline uint64_t word64(const uint32_t* w) { return uint64_t(w[0]) | (uint64_t(w[1]) << 32); }

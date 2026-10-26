@@ -356,7 +356,7 @@ float skyDirectPdf(float3 toward) {
 float4 sigmaT(uint medium, Wavelengths wl) {
     GMedium m = g_media[medium];
     float4 r;
-    [ForceUnroll] for (int i = 0; i < NW; ++i) r[i] = spectrumEval(m.props.x, wl.lambda[i]) + spectrumEval(m.props.y, wl.lambda[i]);
+    r = wl.eval(m.props.x) + wl.eval(m.props.y);
     return r;
 }
 
@@ -565,15 +565,14 @@ uint sampleMedium(uint med, float seg, Wavelengths wl, inout float4 beta, inout 
         t = -log(1 - rng.uniform()) / sT.x;
         if (t < seg) {
             float pdf0 = sT.x * exp(-sT.x * t);
-            [ForceUnroll] for (int i = 0; i < NW; ++i)
-                beta[i] *= spectrumEval(g_media[med].props.y, wl.lambda[i]) * exp(-sT[i] * t) / pdf0;
+            beta *= wl.eval(g_media[med].props.y) * exp(-sT * t) / pdf0;
             return kMediumScatter;
         }
         if (isinf(seg)) return kMediumEnd;
         beta *= exp(-sT * seg) / exp(-sT.x * seg);
     } else if (mediumAbsorbs(med)) {
         if (isinf(seg)) return kMediumEnd;
-        [ForceUnroll] for (int i = 0; i < NW; ++i) beta[i] *= exp(-spectrumEval(g_media[med].props.x, wl.lambda[i]) * seg);
+        beta *= exp(-wl.eval(g_media[med].props.x) * seg);
     }
     return kMediumPass;
 }

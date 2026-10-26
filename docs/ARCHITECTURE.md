@@ -335,7 +335,10 @@ thread for 64-thread groups, 128 for 256), and the larger group keeps a third mo
 resident to hide latency, for a small spill (−5% time with hardware traversal, −7% software).
 (5) The hardware-traversal kernels leave out the software mesh traversal: a mesh never reaches
 the analytic shape code there, but that code, inlined at every traversal site with its stacks,
-had spilled ~4 KB of local memory per thread (now 0.1–0.4 KB). None of this changes an image.
+had spilled ~4 KB of local memory per thread (now 0.1–0.4 KB). (6) Spectra are evaluated by a
+`noinline` call (`spectrumEval`, `spectrumEval4`): inlined at every wavelength of every term they
+were half of each kernel; the call halves the SPIR-V and the driver's compile time (a VCM render's
+kernels, uncached: 217 s → 68 s) and is faster (VCM bench −8%). None of this changes an image.
 (Path regeneration — a lane starting its next sample as soon as its path ends — measured ~5%
 faster with hardware traversal, less than (4) and (5), but its interleaved loop is miscompiled
 by Mesa's Intel compiler, which loses the device; portability wins, so a pixel's samples run

@@ -165,6 +165,13 @@ kernel and submission categories**. Traversal, shading and NEE inside a megakern
 separate stage measurements. Queues that cannot supply timestamps report why profiling is
 unavailable.
 
+`OWE_KERNEL_DIR=<dir>` loads `owe_kernel_<name>.spv` files from a directory in place of the
+embedded kernels (stderr names each one), so a shader variant compiled with `slangc` can be
+compared without relinking; the GPU ABI is shared, so even an earlier revision's kernels run on the
+current host. On the reference laptop (RTX 4060 Laptop) repeated runs of one kernel differ by about
+±3%; alternate baseline and candidate runs. Time cold pipeline compiles with
+`__GL_SHADER_DISK_CACHE=0` and a fresh `OWE_CACHE_DIR`, or NVIDIA's own cache hides them.
+
 Profiling inserts serialization around dispatches and perturbs execution. Profile runs are
 useful for selecting work, but cannot satisfy the 4× throughput goal; run the baseline/candidate
 comparisons with profiling disabled. The profiling environment participates in reuse and

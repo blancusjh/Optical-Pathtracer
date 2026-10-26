@@ -12,9 +12,27 @@ OWE_KERNEL(vcm_light) OWE_KERNEL(vcm_light_rq)
 OWE_KERNEL(vcm_camera) OWE_KERNEL(vcm_camera_rq)
 OWE_KERNEL(vcm_grid)
 #undef OWE_KERNEL
-#define OWE_SPIRV(name) Spirv{owe_kernel_##name, owe_kernel_##name##_size}
+#define OWE_SPIRV(name) Spirv{owe_kernel_##name, owe_kernel_##name##_size, #name}
+
+#include <fstream>
+#include <iterator>
 
 namespace owe::gpu::detail {
+
+namespace {
+// OWE_KERNEL_DIR: a directory whose owe_kernel_<name>.spv files replace the embedded kernels, so a
+// shader change can be measured without relinking. Empty when unset or the file is missing.
+std::vector<uint32_t> kernelOverride(const char* name) {
+    const char* dir = std::getenv("OWE_KERNEL_DIR");
+    if (!dir || !*dir) return {};
+    std::ifstream in(std::string(dir) + "/owe_kernel_" + name + ".spv", std::ios::binary);
+    std::vector<char> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    std::vector<uint32_t> words(bytes.size() / 4);
+    std::memcpy(words.data(), bytes.data(), words.size() * 4);
+    if (!words.empty()) std::fprintf(stderr, "kernel %s from %s\n", name, dir);
+    return words;
+}
+}  // namespace
 
 GpuRenderer::GpuRenderer(const Scene& scene, int detectorIndex, const RenderSettings& settings)
     : Renderer(scene, detectorIndex, settings, {"path", "light", "hybrid", "sppm", "bdpt", "vcm"}) {
@@ -82,7 +100,10 @@ GpuRenderer::GpuRenderer(const Scene& scene, int detectorIndex, const RenderSett
         for (const Job& j : jobs) {
             kernels_.push_back({j.slot, j.traces});
             compiling.push_back(std::async(std::launch::async, [this, j, accel] {
-                *j.slot = std::make_unique<Kernel>(*ctx_, j.code.bytes, j.code.size, kAllBindings, uint32_t(sizeof(PushConstants)),
+                const std::vector<uint32_t> own = kernelOverride(j.code.name);
+                const auto* bytes = own.empty() ? j.code.bytes : reinterpret_cast<const unsigned char*>(own.data());
+                const size_t size = own.empty() ? j.code.size : own.size() * 4;
+                *j.slot = std::make_unique<Kernel>(*ctx_, bytes, size, kAllBindings, uint32_t(sizeof(PushConstants)),
                                                    j.name.c_str(), j.traces ? accel : kNoBinding);
             }));
         }
