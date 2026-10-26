@@ -91,6 +91,29 @@ void reconstructBoundaryHit(GBoundary b, float3 o, float3 d, LocalHit lh, inout 
     hit.scale = max(maxAbsComponent(p), max(abs(fromPole[0].w), max(abs(fromPole[1].w), abs(fromPole[2].w))));
 }
 
+// The surface hit of the ray o + t d at the winning local hit lh on boundary record bi: the world
+// point and normal reconstructed (reconstructBoundaryHit), a mesh's shading normal and texture
+// coordinates interpolated.
+SurfaceHit completeHit(uint bi, LocalHit lh, float3 o, float3 d) {
+    GBoundary b = g_boundaries[bi];
+    SurfaceHit hit = (SurfaceHit)0;
+    hit.t = lh.t;
+    hit.pLocal = lh.p;
+    hit.nLocal = lh.n;
+    reconstructBoundaryHit(b, o, d, lh, hit);
+    hit.ns = hit.n;
+    hit.tri = kGpuNone;
+    if (b.shape == kShapeMesh) {
+        float3 ns = meshShadingNormal(lh.slot, lh.p, lh.n);
+        if (any(ns != lh.n)) hit.ns = normalize(xfVector(b.toWorld, ns));
+        hit.hasUv = meshUv(lh.slot, lh.p, hit.uv);
+        hit.tri = lh.slot;
+    }
+    hit.boundary = bi;
+    hit.prim = b.shape == kShapeMesh ? lh.slot : lh.prim;
+    return hit;
+}
+
 #ifdef OWE_RAY_QUERY
 // Hardware traversal (VK_KHR_ray_query): the device walks its acceleration structures; analytic
 // boundaries come back as box candidates that the kernel's own intersection code resolves (in the
@@ -145,21 +168,7 @@ bool intersectWorld(float3 o, float3 d, float tmax, out SurfaceHit hit) {
         bestLocal.slot = g.meshTris + q.CommittedPrimitiveIndex();
         bestB = tri.owner;
     }
-    GBoundary b = g_boundaries[bestB];
-    hit.t = bestLocal.t;
-    hit.pLocal = bestLocal.p;
-    hit.nLocal = bestLocal.n;
-    reconstructBoundaryHit(b, o, d, bestLocal, hit);
-    hit.ns = hit.n;
-    hit.tri = kGpuNone;
-    if (b.shape == kShapeMesh) {
-        float3 ns = meshShadingNormal(bestLocal.slot, bestLocal.p, bestLocal.n);
-        if (any(ns != bestLocal.n)) hit.ns = normalize(xfVector(b.toWorld, ns));
-        hit.hasUv = meshUv(bestLocal.slot, bestLocal.p, hit.uv);
-        hit.tri = bestLocal.slot;
-    }
-    hit.boundary = bestB;
-    hit.prim = b.shape == kShapeMesh ? bestLocal.slot : bestLocal.prim;
+    hit = completeHit(bestB, bestLocal, o, d);
     return true;
 }
 
@@ -252,21 +261,7 @@ bool intersectWorld(float3 o, float3 d, float tmax, out SurfaceHit hit) {
         cur = stackNode[sp];
     }
     if (!found) return false;
-    GBoundary b = g_boundaries[bestB];
-    hit.t = bestLocal.t;
-    hit.pLocal = bestLocal.p;
-    hit.nLocal = bestLocal.n;
-    reconstructBoundaryHit(b, o, d, bestLocal, hit);
-    hit.ns = hit.n;
-    hit.tri = kGpuNone;
-    if (b.shape == kShapeMesh) {
-        float3 ns = meshShadingNormal(bestLocal.slot, bestLocal.p, bestLocal.n);
-        if (any(ns != bestLocal.n)) hit.ns = normalize(xfVector(b.toWorld, ns));
-        hit.hasUv = meshUv(bestLocal.slot, bestLocal.p, hit.uv);
-        hit.tri = bestLocal.slot;
-    }
-    hit.boundary = bestB;
-    hit.prim = b.shape == kShapeMesh ? bestLocal.slot : bestLocal.prim;
+    hit = completeHit(bestB, bestLocal, o, d);
     return true;
 }
 
@@ -414,24 +409,13 @@ void considerContact(uint bi, LocalHit lh, float3 d, Endpoint departure, bool fo
 }
 
 void fillContactHit(uint bestB, LocalHit bestLocal, float3 o, float3 d, bool ambiguous, out SurfaceHit hit) {
-    GBoundary b = g_boundaries[bestB];
-    hit = (SurfaceHit)0;
+    hit = completeHit(bestB, bestLocal, o, d);
     hit.t = max(0, bestLocal.t);
-    hit.pLocal = bestLocal.p;
-    hit.nLocal = bestLocal.n;
-    reconstructBoundaryHit(b, o, d, bestLocal, hit);
-    hit.ns = hit.n;
-    hit.tri = kGpuNone;
-    hit.boundary = bestB;
-    hit.prim = b.shape == kShapeMesh ? bestLocal.slot : bestLocal.prim;
     hit.ambiguousContact = ambiguous;
-    if (b.shape == kShapeMesh) {
-        float3 ns = meshShadingNormal(bestLocal.slot, bestLocal.p, bestLocal.n);
-        if (any(ns != bestLocal.n)) hit.ns = normalize(xfVector(b.toWorld, ns));
-        hit.hasUv = meshUv(bestLocal.slot, bestLocal.p, hit.uv);
-        hit.tri = bestLocal.slot;
-    }
 }
+
+// The next float above t (the next candidate root after a rejected one).
+float nextUp(float t) { return t == 0 ? asfloat(1u) : asfloat(asuint(t) + (t > 0 ? 1u : uint(-1))); }
 
 // The departed mesh face supplies an exact native plane even when transforming the
 // rounded world anchor back to this frame leaves a small normal displacement.
@@ -543,8 +527,7 @@ bool intersectContactNeighborhood(float3 o, float3 d, float window, uint departe
         if (query.CandidateType() == CANDIDATE_PROCEDURAL_PRIMITIVE) {
             if (!intersectBoundary(b, o, d, -lag, window + lag, lh)) continue;
             if (!contactAccepted(bi, lh, d, departure, forwardOnly)) {
-                float next = lh.t == 0 ? asfloat(1u) : asfloat(asuint(lh.t) + (lh.t > 0 ? 1u : uint(-1)));
-                if (!intersectBoundary(b, o, d, next, window + error, lh)) continue;
+                if (!intersectBoundary(b, o, d, nextUp(lh.t), window + error, lh)) continue;
             }
         } else {
             uint slot = b.meshTris + query.CandidatePrimitiveIndex();
@@ -620,8 +603,7 @@ bool intersectContactNeighborhood(float3 o, float3 d, float window, uint departe
                 lh.owner = kGpuNone;
                 if (!intersectBoundary(b, o, d, -lag, window + lag, lh)) continue;
                 if (!contactAccepted(bi, lh, d, departure, forwardOnly)) {
-                    float next = lh.t == 0 ? asfloat(1u) : asfloat(asuint(lh.t) + (lh.t > 0 ? 1u : uint(-1)));
-                    if (!intersectBoundary(b, o, d, next, window + error, lh)) continue;
+                    if (!intersectBoundary(b, o, d, nextUp(lh.t), window + error, lh)) continue;
                 }
                 considerContact(bi, lh, d, departure, forwardOnly,
                                 found, bestB, bestLocal, ambiguous);

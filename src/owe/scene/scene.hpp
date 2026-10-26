@@ -89,6 +89,17 @@ struct Scene {
             if (detectors[i]->name == name) return int(i);
         return -1;
     }
+    // A detector's resolution, with the world rebuilt for it.
+    void setResolution(int di, int width, int height) {
+        detectors[size_t(di)]->width = width;
+        detectors[size_t(di)]->height = height;
+        build();
+    }
+    // The note about a detector (a camera's focal length, aperture and depth of field), or "".
+    std::string noteFor(const std::string& detector) const {
+        auto it = notes.find(detector);
+        return it == notes.end() ? std::string() : it->second;
+    }
     // Applies a detector's sampling override (sun share) to the world, rebuilding if it changes.
     void useDetector(int di) {
         if (!defaultSunShare) defaultSunShare = world.env.sunNeeShare;

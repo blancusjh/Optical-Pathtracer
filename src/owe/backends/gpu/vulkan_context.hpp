@@ -100,6 +100,8 @@ public:
 private:
     VkCommandBuffer beginAsync();
     void endAsync();
+    void beginCommand(VkCommandBuffer cmd);                 // reset and begin a one-time recording
+    void submitCommand(VkCommandBuffer cmd, VkFence fence);  // end and submit, signalling fence
     void begin();
     void endAndWait(const char* label);
     uint32_t memoryType(uint32_t bits, VkMemoryPropertyFlags want, VkMemoryPropertyFlags fallback) const;
@@ -167,8 +169,15 @@ private:
     std::string name_;
 };
 
+// A global memory barrier: accesses srcAccess at srcStage complete and are visible to dstAccess at dstStage.
+void memoryBarrier(VkCommandBuffer cmd, VkPipelineStageFlags srcStage, VkAccessFlags srcAccess,
+                   VkPipelineStageFlags dstStage, VkAccessFlags dstAccess);
 // Serialises compute writes before the next compute dispatch or a transfer.
 void computeBarrier(VkCommandBuffer cmd, bool toTransfer = false);
+// Transfer writes (buffer fills, copies) before compute reads and writes.
+void transferToCompute(VkCommandBuffer cmd);
+// Copies the first `bytes` bytes of src into dst.
+void copyBuffer(VkCommandBuffer cmd, const Buffer& src, const Buffer& dst, VkDeviceSize bytes);
 
 // Process-wide contexts, one per requested device, created on first use.
 std::shared_ptr<Context> acquireContext(int device);

@@ -3,6 +3,8 @@
 #include <sstream>
 #include <stdexcept>
 
+#include "owe/core/shared/optics.hpp"
+
 namespace owe {
 
 double Image::meanY() const {
@@ -137,7 +139,6 @@ void SurfaceSensor::prepare(const World& world) {
     if (optics.type != SurfaceType::Detector && !(optics.type == SurfaceType::Diffuse && optics.detector >= 0))
         throw std::runtime_error("sensor '" + name + "' boundary is not a detector surface");
     toWorld_ = b.toWorld;
-    toLocal_ = b.toLocal;
     normal_ = normalize(toWorld_.vector(Vec3(0, 0, 1)));
     region = b.front;
 }
@@ -164,16 +165,8 @@ bool SurfaceSensor::generate(double px, double py, Rng& rng, Ray& ray, double& w
         if (!useAim) dir = Frame(normal_).toWorld(sampleCosineHemisphere(u.u1, u.u2));
         double cosS = dot(dir, normal_);
         if (cosS <= 0) { weight = 0; return false; }
-        // Solid-angle density of a direction under uniform sampling of a disk ⟂ aimNormal.
-        auto diskPdf = [&](const Vec3& center, double radius, bool generatingDisk) {
-            double dn = dot(dir, aimNormal);
-            if (std::abs(dn) <= 1e-12) return 0.0;
-            double t = dot(center - p, aimNormal) / dn;
-            if (t <= 0 || (!generatingDisk && lengthSq(p + dir * t - center) > radius * radius)) return 0.0;
-            return t * t / (std::abs(dn) * Pi * radius * radius);
-        };
-        double pdfW = (1 - focusShare) * diskPdf(aimCenter, aimRadius, useAim && !useFocus);
-        if (focusShare > 0) pdfW += focusShare * diskPdf(focusCenter, focusRadius, useAim && useFocus);
+        double pdfW = (1 - focusShare) * diskAimPdf(p, dir, aimCenter, aimNormal, aimRadius, useAim && !useFocus);
+        if (focusShare > 0) pdfW += focusShare * diskAimPdf(p, dir, focusCenter, aimNormal, focusRadius, useAim && useFocus);
         pdfW = aimShare * pdfW + (1 - aimShare) * cosS * InvPi;
         if (!(pdfW > 0)) { weight = 0; return false; }
         weight = cosS / pdfW;

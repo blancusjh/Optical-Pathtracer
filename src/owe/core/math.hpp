@@ -1,60 +1,20 @@
-// Core double-precision geometry for the CPU reference tracer.
+// Frames, rigid transforms, rays and boxes of the CPU reference tracer (IEEE-754 double).
 #pragma once
 
-#include <algorithm>
-#include <cmath>
-#include <cstdint>
-#include <limits>
+#include "owe/core/shared/warps.hpp"
+#include "owe/core/vector.hpp"
 
 namespace owe {
 
-constexpr double Pi = 3.14159265358979323846;
-constexpr double InvPi = 1.0 / Pi;
-constexpr double Inf = std::numeric_limits<double>::infinity();
-constexpr double SpeedOfLight = 299792458.0;  // m/s
-
-inline double sqr(double x) { return x * x; }
-inline double clampd(double x, double lo, double hi) { return std::min(hi, std::max(lo, x)); }
-inline double safeSqrt(double x) { return std::sqrt(std::max(0.0, x)); }
-inline double radians(double deg) { return deg * (Pi / 180.0); }
-inline double degrees(double rad) { return rad * (180.0 / Pi); }
-
-struct Vec3 {
-    double x = 0, y = 0, z = 0;
-    constexpr Vec3() = default;
-    constexpr Vec3(double x_, double y_, double z_) : x(x_), y(y_), z(z_) {}
-    double operator[](int i) const { return i == 0 ? x : (i == 1 ? y : z); }
-    double& operator[](int i) { return i == 0 ? x : (i == 1 ? y : z); }
-    Vec3 operator-() const { return {-x, -y, -z}; }
-    Vec3& operator+=(const Vec3& o) { x += o.x; y += o.y; z += o.z; return *this; }
-    Vec3& operator-=(const Vec3& o) { x -= o.x; y -= o.y; z -= o.z; return *this; }
-    Vec3& operator*=(double s) { x *= s; y *= s; z *= s; return *this; }
-};
-
-inline Vec3 operator+(Vec3 a, const Vec3& b) { return a += b; }
-inline Vec3 operator-(Vec3 a, const Vec3& b) { return a -= b; }
-inline Vec3 operator*(Vec3 a, double s) { return a *= s; }
-inline Vec3 operator*(double s, Vec3 a) { return a *= s; }
-inline Vec3 operator/(const Vec3& a, double s) { return a * (1.0 / s); }
-inline Vec3 mul(const Vec3& a, const Vec3& b) { return {a.x * b.x, a.y * b.y, a.z * b.z}; }
-inline double dot(const Vec3& a, const Vec3& b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
-inline Vec3 cross(const Vec3& a, const Vec3& b) {
-    return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
+// The unit direction at azimuth az (from +y toward +x) and elevation el above the xy plane.
+inline Vec3 directionFromAzimuthElevation(double az, double el) {
+    return {std::cos(el) * std::sin(az), std::cos(el) * std::cos(az), std::sin(el)};
 }
-inline double lengthSq(const Vec3& a) { return dot(a, a); }
-inline double length(const Vec3& a) { return std::sqrt(dot(a, a)); }
-inline Vec3 normalize(const Vec3& a) { return a / length(a); }
-inline Vec3 vmin(const Vec3& a, const Vec3& b) { return {std::min(a.x, b.x), std::min(a.y, b.y), std::min(a.z, b.z)}; }
-inline Vec3 vmax(const Vec3& a, const Vec3& b) { return {std::max(a.x, b.x), std::max(a.y, b.y), std::max(a.z, b.z)}; }
-inline double maxAbsComponent(const Vec3& a) { return std::max({std::abs(a.x), std::abs(a.y), std::abs(a.z)}); }
 
 // Conservative absolute bound for contact-anchor arithmetic, not a physical gap.
 inline double contactError(double scale) {
     return 64 * std::numeric_limits<double>::epsilon() * std::max(1e-12, scale);
 }
-
-// Mirror reflection of an incident propagation direction d about normal n.
-inline Vec3 reflect(const Vec3& d, const Vec3& n) { return d - 2.0 * dot(d, n) * n; }
 
 struct Mat3 {
     // Row-major.
@@ -62,6 +22,28 @@ struct Mat3 {
     static Mat3 fromColumns(const Vec3& a, const Vec3& b, const Vec3& c) {
         Mat3 r;
         for (int i = 0; i < 3; ++i) { r.m[i][0] = a[i]; r.m[i][1] = b[i]; r.m[i][2] = c[i]; }
+        return r;
+    }
+    static Mat3 fromRows(const double rows[3][3]) {
+        Mat3 r;
+        for (int i = 0; i < 3; ++i)
+            for (int j = 0; j < 3; ++j) r.m[i][j] = rows[i][j];
+        return r;
+    }
+    // The cofactor matrix: det · (M⁻¹)ᵀ, which carries surface normals (the inverse transpose up to
+    // the determinant's scale).
+    Mat3 cofactor() const {
+        Mat3 c;
+        for (int i = 0; i < 3; ++i)
+            for (int j = 0; j < 3; ++j) c.m[i][j] = cofactorOf(i, j);
+        return c;
+    }
+    double determinant() const { return m[0][0] * cofactorOf(0, 0) + m[0][1] * cofactorOf(0, 1) + m[0][2] * cofactorOf(0, 2); }
+    Mat3 inverse() const {
+        Mat3 r = cofactor().transposed();
+        const double inv = 1 / determinant();
+        for (auto& row : r.m)
+            for (double& x : row) x *= inv;
         return r;
     }
     Vec3 col(int j) const { return {m[0][j], m[1][j], m[2][j]}; }
@@ -76,6 +58,10 @@ struct Mat3 {
             for (int j = 0; j < 3; ++j)
                 r.m[i][j] = m[i][0] * o.m[0][j] + m[i][1] * o.m[1][j] + m[i][2] * o.m[2][j];
         return r;
+    }
+    double cofactorOf(int i, int j) const {
+        const int i1 = (i + 1) % 3, i2 = (i + 2) % 3, j1 = (j + 1) % 3, j2 = (j + 2) % 3;
+        return m[i1][j1] * m[i2][j2] - m[i1][j2] * m[i2][j1];
     }
     Mat3 transposed() const {
         Mat3 r;
@@ -94,15 +80,6 @@ struct Mat3 {
         return r;
     }
 };
-
-// Orthonormal basis around a unit vector (Duff et al. 2017).
-inline void orthonormalBasis(const Vec3& n, Vec3& b1, Vec3& b2) {
-    double sign = std::copysign(1.0, n.z);
-    double a = -1.0 / (sign + n.z);
-    double b = n.x * n.y * a;
-    b1 = {1.0 + sign * n.x * n.x * a, sign * b, -sign * n.x};
-    b2 = {b, sign + n.y * n.y * a, -n.y};
-}
 
 struct Frame {
     Vec3 s, t, n;
@@ -133,6 +110,15 @@ struct Transform {
     }
     static Transform translate(const Vec3& v) { Transform r; r.t = v; return r; }
     static Transform rotate(const Vec3& axis, double angle) { Transform r; r.R = Mat3::rotation(axis, angle); return r; }
+    // The minimal rotation taking unit vector `from` to unit vector `to` (a half turn when opposite).
+    static Transform rotateTo(const Vec3& from, const Vec3& to) {
+        const Vec3 axis = cross(from, to);
+        if (length(axis) > 1e-12) return rotate(axis, std::acos(clamp(dot(from, to), -1, 1)));
+        if (dot(from, to) > 0) return Transform{};
+        Vec3 a, b;
+        orthonormalBasis(to, a, b);
+        return rotate(a, Pi);
+    }
     // Rotation mapping local +z onto `axis`; `up` hints where local +y should point.
     static Transform alignZ(const Vec3& axisIn, const Vec3& upHint = {0, 1, 0}) {
         Vec3 z = normalize(axisIn);
@@ -165,6 +151,8 @@ struct AABB {
     void expand(const Vec3& p) { lo = vmin(lo, p); hi = vmax(hi, p); }
     void expand(const AABB& b) { lo = vmin(lo, b.lo); hi = vmax(hi, b.hi); }
     Vec3 centroid() const { return (lo + hi) * 0.5; }
+    // Corner i: bit 0 chooses hi.x, bit 1 hi.y, bit 2 hi.z.
+    Vec3 corner(int i) const { return {(i & 1) ? hi.x : lo.x, (i & 2) ? hi.y : lo.y, (i & 4) ? hi.z : lo.z}; }
     Vec3 extent() const { return hi - lo; }
     double surfaceArea() const {
         if (!valid()) return 0;
@@ -173,10 +161,7 @@ struct AABB {
     }
     AABB transformed(const Transform& xf) const {
         AABB r;
-        for (int i = 0; i < 8; ++i) {
-            Vec3 c{(i & 1) ? hi.x : lo.x, (i & 2) ? hi.y : lo.y, (i & 4) ? hi.z : lo.z};
-            r.expand(xf.point(c));
-        }
+        for (int i = 0; i < 8; ++i) r.expand(xf.point(corner(i)));
         return r;
     }
     // Slab test; invD may contain infinities.

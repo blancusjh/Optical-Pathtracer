@@ -65,15 +65,20 @@ inline bool hardwareTraversalWanted() {
     return !(e && std::string(e) == "0");
 }
 
-// Transfer writes (buffer fills) before compute reads and writes.
-inline void transferToCompute(VkCommandBuffer cmd) {
-    VkMemoryBarrier mb{};
-    mb.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-    mb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    mb.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &mb, 0, nullptr,
-                         0, nullptr);
+// Workgroups covering n items in groups of `size`.
+constexpr uint32_t groups(uint64_t n, uint32_t size) { return uint32_t((n + size - 1) / size); }
+// Buckets of a spatial hash for n entries: a power of two from 1024, at most 2^30.
+inline uint32_t hashSize(uint64_t n) {
+    uint32_t size = 1024;
+    while (size < n && size < (1u << 30)) size *= 2;
+    return size;
 }
+
+// A kernel's SPIR-V words.
+struct Spirv {
+    const unsigned char* bytes;
+    size_t size;
+};
 
 inline uint64_t word64(const uint32_t* w) { return uint64_t(w[0]) | (uint64_t(w[1]) << 32); }
 
@@ -82,21 +87,21 @@ public:
     GpuRenderer(const Scene&, int detectorIndex, const RenderSettings&);
     ~GpuRenderer() override;
     bool resetObserver() override;
-    void runPass(int spp) override;
     Image resolve() const override;
-    int passes() const override { return passes_; }
-    long long samplesPerPixel() const override { return totalSpp_; }
-    double seconds() const override { return seconds_; }
-    const TransportStats& stats() const override { return stats_; }
-    const Detector& detector() const override { return *det_; }
-    const RenderSettings& settings() const override { return settings_; }
     std::string backend() const override;
 private:
+    void pass(int spp) override;
     void allocateImageBuffers();
     static uint64_t cacheEnvironment(const char* name);
     void allocateLightCache(uint64_t capacity);
     void bindAll();
-    void dispatchLightPaths(const PushConstants&, uint64_t lightPaths);
+    // Dispatches work items [0, total) of a kernel: samples per pixel over the image (perPixel),
+    // or one thread per particle.
+    void dispatchChunked(Kernel& kernel, PushConstants pc, uint64_t total, bool perPixel);
+    // Fills whole buffers with zeros before the next compute work.
+    void zeroBuffers(std::initializer_list<Binding> bindings);
+    uint64_t photonsPerIteration() const;  // SPPM photons and VCM light paths per iteration
+    float wavelengthRotation(uint64_t iteration) const;
     uint32_t vcmGroups() const;
     uint64_t vcmLightPaths() const;
     void validateVcmCounts(uint64_t lightPaths) const;
@@ -112,9 +117,6 @@ private:
     PushConstants push(uint32_t spp) const;
     void passPath(uint32_t spp, uint32_t extraFlags = 0);
     void passParticles(uint32_t ppp);
-    const Scene& scene_;
-    const Detector* det_ = nullptr;
-    RenderSettings settings_;
     bool camera_ = true, particles_ = false, partition_ = false, sppm_ = false;  // vcm_ below
     int W_ = 0, H_ = 0;
     GpuScene gs_;
@@ -124,6 +126,11 @@ private:
     std::unique_ptr<Kernel> pathKernel_, particleKernel_, filmKernel_;
     std::unique_ptr<Kernel> sppmCamera_, sppmPhoton_, sppmGrid_, sppmUpdate_, sppmGuide_;
     std::unique_ptr<Kernel> vcmLight_, vcmCamera_, vcmGrid_;
+    struct KernelSlot {
+        std::unique_ptr<Kernel>* kernel;
+        bool traces;  // binds the acceleration structure (hardware traversal)
+    };
+    std::vector<KernelSlot> kernels_;  // this integrator's kernels
     Buffer buffers_[kAllBindings];
     Buffer filmReadback_, counterReadback_, sppmReadback_, vcmCounterReadback_, vcmGuideBackup_;
     // BDPT/VCM: whether it merges, the light vertex cache's capacity and its budget per light path
@@ -140,10 +147,6 @@ private:
     uint32_t gridSize_ = 0;
     float r0PerMetre_ = 0, r0Floor_ = 0;
     double particleCount_ = 0;
-    int passes_ = 0;
-    long long totalSpp_ = 0;
-    double seconds_ = 0;
-    TransportStats stats_;
     uint32_t chunk_ = 1;
     uint32_t particleChunk_ = 16384;
 };

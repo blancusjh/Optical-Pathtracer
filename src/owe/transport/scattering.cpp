@@ -1,8 +1,6 @@
 #include "owe/transport/scattering.hpp"
 
-#include <complex>
-
-#include "owe/transport/optics.hpp"
+#include "owe/core/shared/optics.hpp"
 
 namespace owe {
 
@@ -31,73 +29,35 @@ namespace {
 
 double screenAimPdf(const Interface& it, const Vec3& wi, bool generatingDisk = false) {
     const auto& o = *it.optics;
-    if (!(o.sampleAimRadius > 0)) return 0;
-    double dn = dot(wi, o.sampleAimNormal);
-    if (std::abs(dn) < 1e-12) return 0;
-    double t = dot(o.sampleAimCenter - it.p, o.sampleAimNormal) / dn;
-    if (t <= 0 || (!generatingDisk && lengthSq(it.p + wi * t - o.sampleAimCenter) > sqr(o.sampleAimRadius))) return 0;
-    return t * t / (std::abs(dn) * Pi * sqr(o.sampleAimRadius));
+    return diskAimPdf(it.p, wi, o.sampleAimCenter, o.sampleAimNormal, o.sampleAimRadius, generatingDisk);
 }
 
-std::complex<double> conductorEta(const SurfaceOptics& o, double lambda, double nMedium) {
-    return std::complex<double>(o.conductor.n.eval(lambda), o.conductor.k.eval(lambda)) / nMedium;
+Vec2 conductorEta(const SurfaceOptics& o, double lambda, double nMedium) {
+    return Vec2(o.conductor.n.eval(lambda), o.conductor.k.eval(lambda)) / nMedium;
 }
 
-// --- rough dielectric (Walter et al. 2007, pbrt-v4 formulation) in local frame; eta = nBack/nFront.
-bool sampleRoughDielectric(const GGX& mf, const Vec3& wo, double eta, double uc, double u1, double u2,
-                           TransportMode mode, ScatterSample& s, Vec3& wiLocal) {
-    Vec3 wm = mf.sampleWm(wo, u1, u2);
-    double R = fresnelDielectric(dot(wo, wm), eta), T = 1 - R;
-    s.R = R;
-    s.T = T;
-    if (uc < R / (R + T)) {
-        wiLocal = reflect(-wo, wm);
-        if (!sameHemisphere(wo, wiLocal)) return false;
-        s.pdf = mf.pdf(wo, wm) / (4 * std::abs(dot(wo, wm))) * R / (R + T);
-        double f = mf.D(wm) * mf.G(wo, wiLocal) * R / (4 * absCosTheta(wiLocal) * absCosTheta(wo));
-        s.weight = f * absCosTheta(wiLocal) / s.pdf;
-        s.event = EventKind::Glossy;
-        s.transmitted = false;
-    } else {
-        double etap;
-        if (!refractLocal(wo, wm, eta, etap, wiLocal)) return false;
-        if (sameHemisphere(wo, wiLocal) || wiLocal.z == 0) return false;
-        double denom = sqr(dot(wiLocal, wm) + dot(wo, wm) / etap);
-        double dwmdwi = std::abs(dot(wiLocal, wm)) / denom;
-        s.pdf = mf.pdf(wo, wm) * dwmdwi * T / (R + T);
-        double ft = T * mf.D(wm) * mf.G(wo, wiLocal) *
-                    std::abs(dot(wiLocal, wm) * dot(wo, wm) / (cosTheta(wiLocal) * cosTheta(wo) * denom));
-        if (mode == TransportMode::Radiance) ft /= sqr(etap);
-        s.weight = ft * absCosTheta(wiLocal) / s.pdf;
-        s.event = EventKind::GlossyT;
-        s.transmitted = true;
-    }
+// A lobe sample (local frame) as the interface's world sample.
+void fromLobe(const Frame& frame, const LobeSample& l, EventKind event, ScatterSample& s) {
+    s.wi = frame.toWorld(l.wi);
+    s.weight = l.weight;
+    s.pdf = l.pdf;
     s.delta = false;
-    return std::isfinite(s.weight) && s.pdf > 0;
+    s.transmitted = l.transmitted;
+    s.event = event;
+    s.R = l.R;
+    s.T = l.T;
+    s.cosT = std::abs(l.wi.z);
 }
 
-double evalRoughDielectric(const GGX& mf, const Vec3& wo, const Vec3& wi, double eta, TransportMode mode, double& pdf) {
-    pdf = 0;
-    double co = cosTheta(wo), ci = cosTheta(wi);
-    if (co == 0 || ci == 0) return 0;
-    bool refl = co * ci > 0;
-    double etap = 1;
-    if (!refl) etap = co > 0 ? eta : 1 / eta;
-    Vec3 wm = wi * etap + wo;
-    if (lengthSq(wm) == 0) return 0;
-    wm = normalize(wm);
-    if (wm.z < 0) wm = -wm;
-    if (dot(wm, wi) * ci < 0 || dot(wm, wo) * co < 0) return 0;
-    double R = fresnelDielectric(dot(wo, wm), eta), T = 1 - R;
-    if (refl) {
-        pdf = mf.pdf(wo, wm) / (4 * std::abs(dot(wo, wm))) * R / (R + T);
-        return mf.D(wm) * mf.G(wo, wi) * R / std::abs(4 * ci * co);
-    }
-    double denom = sqr(dot(wi, wm) + dot(wo, wm) / etap);
-    pdf = mf.pdf(wo, wm) * std::abs(dot(wi, wm)) / denom * T / (R + T);
-    double ft = mf.D(wm) * T * mf.G(wo, wi) * std::abs(dot(wi, wm) * dot(wo, wm) / (denom * ci * co));
-    if (mode == TransportMode::Radiance) ft /= sqr(etap);
-    return ft;
+// A specular reflection about the frame's normal with the given weight.
+bool specularReflection(const Frame& frame, const Vec3& wo, double weight, ScatterSample& s) {
+    s.wi = frame.toWorld(Vec3(-wo.x, -wo.y, wo.z));
+    s.weight = weight;
+    s.delta = true;
+    s.event = EventKind::Reflect;
+    s.R = weight;
+    s.cosT = s.cosI;
+    return weight > 0;
 }
 
 }  // namespace
@@ -105,6 +65,7 @@ double evalRoughDielectric(const GGX& mf, const Vec3& wo, const Vec3& wi, double
 bool sampleScatter(const Interface& it, const Vec3& d, double uc, double u1, double u2, TransportMode mode,
                    ScatterSample& s) {
     const SurfaceOptics& o = *it.optics;
+    const bool radiance = mode == TransportMode::Radiance;
     Frame frame(it.n);
     Vec3 wo = frame.toLocal(-d);
     bool fromFront = wo.z > 0;
@@ -120,38 +81,30 @@ bool sampleScatter(const Interface& it, const Vec3& d, double uc, double u1, dou
 
         case SurfaceType::Dielectric: {
             double eta = it.nBack / it.nFront;
-            if (o.roughness < 1e-3 || eta == 1) {
-                double ni = fromFront ? it.nFront : it.nBack;
-                double nt = fromFront ? it.nBack : it.nFront;
-                double R = fresnelDielectric(wo.z, eta);
-                s.R = R;
-                s.T = 1 - R;
-                s.delta = true;
-                s.pdf = 0;
-                double pR = R;
-                if (it.fresnelFloor > 0 && R < 1) pR = clampd(R, it.fresnelFloor, 1 - it.fresnelFloor);
-                if (uc < pR) {
-                    s.wi = frame.toWorld(Vec3(-wo.x, -wo.y, wo.z));
-                    s.weight = R / pR;
-                    s.event = R >= 1 ? EventKind::TIR : EventKind::Reflect;
-                    s.transmitted = false;
-                    s.cosT = s.cosI;
-                } else {
-                    Vec3 wt;
-                    if (!refractDirection(d, it.n, ni, nt, wt)) return false;
-                    s.wi = wt;
-                    s.weight = (1 - R) / (1 - pR) * (mode == TransportMode::Radiance ? sqr(ni / nt) : 1.0);
-                    s.event = EventKind::Refract;
-                    s.transmitted = true;
-                    s.cosT = std::abs(dot(wt, it.n));
-                }
+            if (o.roughness >= kSmoothRoughness && eta != 1) {
+                LobeSample l;
+                if (!sampleRoughDielectric(ggxAlpha(o.roughness), wo, eta, uc, u1, u2, radiance, l)) return false;
+                fromLobe(frame, l, l.transmitted ? EventKind::GlossyT : EventKind::Glossy, s);
                 return true;
             }
-            GGX mf(o.roughness);
-            Vec3 wiL;
-            if (!sampleRoughDielectric(mf, wo, eta, uc, u1, u2, mode, s, wiL)) return false;
-            s.wi = frame.toWorld(wiL);
-            s.cosT = std::abs(wiL.z);
+            double ni = fromFront ? it.nFront : it.nBack;
+            double nt = fromFront ? it.nBack : it.nFront;
+            double R = fresnelDielectric(wo.z, eta);
+            double pR = fresnelBranchProbability(R, it.fresnelFloor);
+            s.R = R;
+            s.T = 1 - R;
+            s.delta = true;
+            if (uc < pR) {
+                specularReflection(frame, wo, R / pR, s);
+                s.R = R;
+                s.event = R >= 1 ? EventKind::TIR : EventKind::Reflect;
+                return true;
+            }
+            if (!refractDirection(d, it.n, ni, nt, s.wi)) return false;
+            s.weight = (1 - R) / (1 - pR) * (radiance ? sqr(ni / nt) : 1.0);
+            s.event = EventKind::Refract;
+            s.transmitted = true;
+            s.cosT = std::abs(dot(s.wi, it.n));
             return true;
         }
 
@@ -164,7 +117,7 @@ bool sampleScatter(const Interface& it, const Vec3& d, double uc, double u1, dou
             s.wi = frame.toWorld(w);
             s.pdf = std::abs(w.z) * InvPi;
             s.weight = albedo;
-            double share = fromFront && mode == TransportMode::Radiance ? o.sampleAimShare : 0;
+            double share = fromFront && radiance ? o.sampleAimShare : 0;
             if (share > 0) {
                 if (uc < share) {
                     Vec3 a, b;
@@ -177,58 +130,27 @@ bool sampleScatter(const Interface& it, const Vec3& d, double uc, double u1, dou
                 s.pdf = (1 - share) * c * InvPi + share * screenAimPdf(it, s.wi, uc < share);
                 s.weight = albedo * c * InvPi / s.pdf;
             }
-            s.delta = false;
             s.event = EventKind::Diffuse;
             s.R = albedo;
             s.cosT = std::abs(dot(s.wi, it.n));
             return s.pdf > 0;
         }
 
-        case SurfaceType::Mirror: {
+        case SurfaceType::Mirror:
             if (!fromFront && o.backAbsorbs) return false;
-            double r = o.reflectance.eval(it.lambda);
-            if (r <= 0) return false;
-            s.wi = frame.toWorld(Vec3(-wo.x, -wo.y, wo.z));
-            s.weight = r;
-            s.delta = true;
-            s.event = EventKind::Reflect;
-            s.R = r;
-            s.cosT = s.cosI;
-            return true;
-        }
+            return specularReflection(frame, wo, o.reflectance.eval(it.lambda), s);
 
         case SurfaceType::Conductor: {
             if (!fromFront && o.backAbsorbs) return false;
-            double nMed = fromFront ? it.nFront : it.nBack;
-            auto eta = conductorEta(o, it.lambda, nMed);
+            const Vec2 eta = conductorEta(o, it.lambda, fromFront ? it.nFront : it.nBack);
+            const double tint = o.reflectance.eval(it.lambda);
             Vec3 w = fromFront ? wo : Vec3(wo.x, wo.y, -wo.z);  // work in the upper hemisphere
-            if (o.roughness < 1e-3) {
-                double F = fresnelConductor(w.z, eta) * o.reflectance.eval(it.lambda);
-                s.wi = frame.toWorld(Vec3(-wo.x, -wo.y, wo.z));
-                s.weight = F;
-                s.delta = true;
-                s.event = EventKind::Reflect;
-                s.R = F;
-                s.cosT = s.cosI;
-                return F > 0;
-            }
-            GGX mf(o.roughness);
-            Vec3 wm = mf.sampleWm(w, u1, u2);
-            Vec3 wiL = reflect(-w, wm);
-            if (wiL.z <= 0) return false;
-            double pdf = mf.pdf(w, wm) / (4 * std::abs(dot(w, wm)));
-            double F = fresnelConductor(std::abs(dot(w, wm)), eta) * o.reflectance.eval(it.lambda);
-            double f = mf.D(wm) * F * mf.G(w, wiL) / (4 * wiL.z * w.z);
-            if (!(pdf > 0)) return false;
-            if (!fromFront) wiL.z = -wiL.z;
-            s.wi = frame.toWorld(wiL);
-            s.pdf = pdf;
-            s.weight = f * std::abs(wiL.z) / pdf;
-            s.delta = false;
-            s.event = EventKind::Glossy;
-            s.R = F;
-            s.cosT = std::abs(wiL.z);
-            return std::isfinite(s.weight);
+            if (o.roughness < kSmoothRoughness) return specularReflection(frame, wo, fresnelConductor(w.z, eta) * tint, s);
+            LobeSample l;
+            if (!sampleRoughConductor(ggxAlpha(o.roughness), w, eta, tint, u1, u2, l)) return false;
+            if (!fromFront) l.wi.z = -l.wi.z;
+            fromLobe(frame, l, EventKind::Glossy, s);
+            return true;
         }
     }
     return false;
@@ -238,6 +160,7 @@ double evalScatter(const Interface& it, const Vec3& d, const Vec3& wiWorld, Tran
     pdf = 0;
     const SurfaceOptics& o = *it.optics;
     if (o.isDelta()) return 0;
+    const bool radiance = mode == TransportMode::Radiance;
     Frame frame(it.n);
     Vec3 wo = frame.toLocal(-d);
     Vec3 wi = frame.toLocal(wiWorld);
@@ -247,7 +170,7 @@ double evalScatter(const Interface& it, const Vec3& d, const Vec3& wiWorld, Tran
             if (!fromFront && o.backAbsorbs) return 0;
             if (!sameHemisphere(wo, wi)) return 0;
             pdf = std::abs(wi.z) * InvPi;
-            double share = fromFront && mode == TransportMode::Radiance ? o.sampleAimShare : 0;
+            double share = fromFront && radiance ? o.sampleAimShare : 0;
             if (share > 0) pdf = (1 - share) * pdf + share * screenAimPdf(it, wiWorld);
             return surfaceAlbedo(it) * InvPi;
         }
@@ -255,20 +178,11 @@ double evalScatter(const Interface& it, const Vec3& d, const Vec3& wiWorld, Tran
             if (!fromFront && o.backAbsorbs) return 0;
             if (!sameHemisphere(wo, wi)) return 0;
             if (!fromFront) { wo.z = -wo.z; wi.z = -wi.z; }
-            GGX mf(o.roughness);
-            Vec3 wm = wo + wi;
-            if (lengthSq(wm) == 0) return 0;
-            wm = normalize(wm);
-            double nMed = fromFront ? it.nFront : it.nBack;
-            double F = fresnelConductor(std::abs(dot(wo, wm)), conductorEta(o, it.lambda, nMed)) *
-                       o.reflectance.eval(it.lambda);
-            pdf = mf.pdf(wo, wm) / (4 * std::abs(dot(wo, wm)));
-            return mf.D(wm) * F * mf.G(wo, wi) / (4 * wi.z * wo.z);
+            const Vec2 eta = conductorEta(o, it.lambda, fromFront ? it.nFront : it.nBack);
+            return evalRoughConductor(ggxAlpha(o.roughness), wo, wi, eta, o.reflectance.eval(it.lambda), pdf);
         }
-        case SurfaceType::Dielectric: {
-            GGX mf(o.roughness);
-            return evalRoughDielectric(mf, wo, wi, it.nBack / it.nFront, mode, pdf);
-        }
+        case SurfaceType::Dielectric:
+            return evalRoughDielectric(ggxAlpha(o.roughness), wo, wi, it.nBack / it.nFront, radiance, pdf);
         default: return 0;
     }
 }

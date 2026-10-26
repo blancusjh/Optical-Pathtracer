@@ -14,26 +14,6 @@ namespace owe::gpu {
 
 namespace {
 
-float roundDown(double x) {
-    float f = float(x);
-    if (double(f) > x) f = std::nextafter(f, -INFINITY);
-    return f;
-}
-float roundUp(double x) {
-    float f = float(x);
-    if (double(f) < x) f = std::nextafter(f, INFINITY);
-    return f;
-}
-float bitsAsFloat(uint32_t u) {
-    float f;
-    std::memcpy(&f, &u, 4);
-    return f;
-}
-uint32_t floatBits(float f) {
-    uint32_t u;
-    std::memcpy(&u, &f, 4);
-    return u;
-}
 
 // Box rounded outward to float, with a margin of a few float ulps of its own magnitude: a float
 // ray reaching a primitive near the box face must still be inside the box.
@@ -158,6 +138,13 @@ bool exportSphereFrame(const Boundary& b, const Vec3& origin, GBoundary& r, std:
 
 float groupScale(const World& w, const MeshGroup& g, const Vec3& origin) {
     return float(length(origin - w.boundaries()[g.frame].toWorld.t) + g.ext);
+}
+
+// A mesh group's record: the frame of its members, its box and error scale (camera-relative).
+void exportGroupFrame(const World& w, const MeshGroup& grp, const Vec3& origin, GBoundary& r) {
+    exportFrame(w.boundaries()[grp.frame], origin, r);
+    exportBox(grp.worldBox, origin, r.boxLo, r.boxHi);
+    r.scale = groupScale(w, grp, origin);
 }
 
 bool sameFrame(const Transform& a, const Transform& b) {
@@ -372,27 +359,23 @@ public:
             r.roughness = float(o.roughness);
             r.texScale = float(o.texture.scale);
             r.texParam = float(o.texture.param);
-            if (o.texture.kind == Texture::Kind::Image && o.texture.image) {
-                // The image record, with the mapping in the top bits (31: triplanar, 30: uv).
-                uint32_t rec = imageRecord(*o.texture.image);
-                if (o.texture.mapping == Texture::Mapping::Triplanar) rec |= 0x80000000u;
-                if (o.texture.mapping == Texture::Mapping::UV) rec |= 0x40000000u;
-                std::memcpy(&r.texParam, &rec, 4);
-            }
-            if (o.roughnessMap.size() == 3 && o.texture.kind != Texture::Kind::None)
-                for (int k = 0; k < 4; ++k) r.roughMap[k] = k < 3 ? float(o.roughnessMap[size_t(k)]) : 1.0f;
-            auto mapWord = [&](const ImageMap& m) -> uint32_t {
-                if (!m.image) return kGpuNone;
-                uint32_t rec = imageRecord(*m.image);
-                if (m.mapping == Texture::Mapping::Triplanar) rec |= 0x80000000u;
-                if (m.mapping == Texture::Mapping::UV) rec |= 0x40000000u;
+            // An image placed by a mapping: its record, with the mapping in the top bits (31:
+            // triplanar, 30: uv); kGpuNone: none.
+            auto mappedImage = [&](const std::shared_ptr<const ImageRGB>& img, Texture::Mapping mapping) -> uint32_t {
+                if (!img) return kGpuNone;
+                uint32_t rec = imageRecord(*img);
+                if (mapping == Texture::Mapping::Triplanar) rec |= 0x80000000u;
+                if (mapping == Texture::Mapping::UV) rec |= 0x40000000u;
                 return rec;
             };
-            r.maps[0] = mapWord(o.normalImage);
-            r.maps[1] = mapWord(o.roughnessImage);
-            const float ns = float(o.normalImage.scale), rs = float(o.roughnessImage.scale);
-            std::memcpy(&r.maps[2], &ns, 4);
-            std::memcpy(&r.maps[3], &rs, 4);
+            if (o.texture.kind == Texture::Kind::Image && o.texture.image)
+                r.texParam = bitsAsFloat(mappedImage(o.texture.image, o.texture.mapping));
+            if (o.roughnessMap.size() == 3 && o.texture.kind != Texture::Kind::None)
+                for (int k = 0; k < 4; ++k) r.roughMap[k] = k < 3 ? float(o.roughnessMap[size_t(k)]) : 1.0f;
+            r.maps[0] = mappedImage(o.normalImage.image, o.normalImage.mapping);
+            r.maps[1] = mappedImage(o.roughnessImage.image, o.roughnessImage.mapping);
+            r.maps[2] = floatBits(float(o.normalImage.scale));
+            r.maps[3] = floatBits(float(o.roughnessImage.scale));
             r.mapParams[0] = float(o.normalStrength);
             r.mapParams[1] = o.normalDirectX ? 1.0f : 0.0f;
             r.mapParams[2] = float(o.roughnessChannel);
@@ -413,8 +396,7 @@ public:
                 r.sampleAimCenter[2] = float(g.haze);
                 r.sampleAimCenter[3] = float(g.reflectionScale);
                 r.sampleAimNormal[0] = float(g.maskThreshold);
-                const uint32_t stone = g.stone >= 0 ? uint32_t(g.stone) : kGpuNone;
-                std::memcpy(&r.sampleAimNormal[1], &stone, 4);
+                r.sampleAimNormal[1] = bitsAsFloat(g.stone >= 0 ? uint32_t(g.stone) : kGpuNone);
                 r.sampleAimNormal[2] = float(g.thickness);
                 r.roughness = 0;
             } else if (o.sampleAimShare > 0) {
@@ -447,7 +429,7 @@ public:
             g_.texels[4 * i + 1] = uint32_t(img.width);
             g_.texels[4 * i + 2] = uint32_t(img.height);
             g_.texels[4 * i + 3] = img.hdr ? 1u : 0u;
-            at += img.hdr ? img.rgb.size() : img.srgb8.size();
+            at += imageBytes(img) / 4;
         }
         g_.texelWords = at;
     }
@@ -523,12 +505,11 @@ public:
         r.meshCount = uint32_t(m.triangles().size());
         const auto& pos = m.positions();
         uint32_t cdf = uint32_t(g_.scalars.size());
-        double acc = 0, total = m.area();
+        const double total = m.area();
         for (uint32_t prim = 0; prim < m.triangles().size(); ++prim) {
             const auto& t = m.triangles()[prim];
             g_.triangles.push_back(exportTriangle(pos[t[0]], pos[t[1]], pos[t[2]], prim, owner));
-            acc += 0.5 * length(cross(pos[t[1]] - pos[t[0]], pos[t[2]] - pos[t[0]]));
-            g_.scalars.push_back(total > 0 ? float(acc / total) : 1.0f);
+            g_.scalars.push_back(total > 0 ? float(m.areaCdf()[prim] / total) : 1.0f);  // the mesh's own area CDF
         }
         if (!m.triangles().empty()) g_.scalars.back() = 1.0f;
         g_.shapeData[4 * r.data] = bitsAsFloat(cdf);
@@ -578,9 +559,7 @@ public:
         for (size_t k = 0; k < groups_->groups.size(); ++k) {
             const MeshGroup& grp = groups_->groups[k];
             GBoundary r{};
-            exportFrame(w_.boundaries()[grp.frame], origin, r);
-            exportBox(grp.worldBox, origin, r.boxLo, r.boxHi);
-            r.scale = groupScale(w_, grp, origin);
+            exportGroupFrame(w_, grp, origin, r);
             r.shape = kShapeMesh;
             r.data = 0;
             r.front = r.back = r.optics = 0;
@@ -652,21 +631,23 @@ void setCentre(GGlobals& G, const Vec3& c) {
     G.emit[3] = float(c.z);
 }
 
-}  // namespace
-
-size_t GpuScene::bytes() const {
-    return sizeof(globals) + nodes.size() * sizeof(GNode) + boundaries.size() * sizeof(GBoundary) +
-           shapeData.size() * 4 + triangles.size() * sizeof(GTriangle) + regions.size() * 4 +
-           media.size() * sizeof(GMedium) + spectra.size() * sizeof(GSpectrum) + scalars.size() * 4 +
-           optics.size() * sizeof(GOptics) + emissions.size() * sizeof(GEmission) + lights.size() * sizeof(GLight) +
-           texelWords * 4 + normals.size() * 4;
-}
-
-namespace {
 // The observer's pupil guide, relative to the eye (the camera-relative origin).
 void setGuide(GGlobals& G, const IdealObserver& o) {
     set3(G.guide, o.guide.center - o.position, float(o.guide.radius));
     G.guideShare = float(o.guide.share);
+}
+
+// An observer's eye: its frame, field, pupil, focus and pupil guide.
+void setObserver(GGlobals& G, const IdealObserver& o) {
+    G.detectorKind = kDetObserver;
+    set3(G.fwd, o.forward());
+    set3(G.right, o.right());
+    set3(G.upv, o.upVec());
+    G.tanX = float(o.tanX());
+    G.tanY = float(o.tanY());
+    G.pupilRadius = float(o.pupilRadius);
+    G.focusDistance = std::isfinite(o.focusDistance) ? float(o.focusDistance) : -1.0f;
+    setGuide(G, o);
 }
 }  // namespace
 
@@ -680,15 +661,7 @@ GpuScene flattenScene(const Scene& scene, int detectorIndex, const RenderSetting
     // The camera-relative origin: the observer's eye or the sensor's centre.
     if (auto* o = dynamic_cast<const IdealObserver*>(&det)) {
         g.origin = o->position;
-        G.detectorKind = kDetObserver;
-        set3(G.fwd, o->forward());
-        set3(G.right, o->right());
-        set3(G.upv, o->upVec());
-        G.tanX = float(o->tanX());
-        G.tanY = float(o->tanY());
-        G.pupilRadius = float(o->pupilRadius);
-        G.focusDistance = std::isfinite(o->focusDistance) ? float(o->focusDistance) : -1.0f;
-        setGuide(G, *o);
+        setObserver(G, *o);
     } else if (auto* s = dynamic_cast<const SurfaceSensor*>(&det)) {
         g.origin = s->toWorld().t;
         G.detectorKind = kDetSensor;
@@ -764,7 +737,7 @@ GpuScene flattenScene(const Scene& scene, int detectorIndex, const RenderSetting
     set3(G.sunDir, env.sunDir, float(std::cos(env.sunAngularRadius)));
     G.sunSolidAngle = float(env.sunSolidAngle());
     G.cieYIntegral = float(cieYIntegral());
-    G.fresnelFloor = float(clampd(settings.fresnelFloor, 0.0, 0.49));
+    G.fresnelFloor = float(clamp(settings.fresnelFloor, 0.0, 0.49));
     G.sceneScale = float(w.sceneRadius());
     G.maxDepth = settings.maxDepth;
     G.rrDepth = settings.rrDepth;
@@ -792,19 +765,11 @@ GpuScene flattenScene(const Scene& scene, int detectorIndex, const RenderSetting
 
 void updateObserver(GpuScene& g, const World& w, const IdealObserver& o) {
     GGlobals& G = g.globals;
-    G.detectorKind = kDetObserver;
+    setObserver(G, o);
     G.detRegion = o.region;
     G.width = o.width;
     G.height = o.height;
-    set3(G.fwd, o.forward());
-    set3(G.right, o.right());
-    set3(G.upv, o.upVec());
-    G.tanX = float(o.tanX());
-    G.tanY = float(o.tanY());
-    G.pupilRadius = float(o.pupilRadius);
-    G.focusDistance = std::isfinite(o.focusDistance) ? float(o.focusDistance) : -1.0f;
     G.pixelSigma = float(o.pixelSigma);
-    setGuide(G, o);
     // Rebase from the original double-precision world each time, never from previous float data.
     g.origin = o.position;
     setCentre(G, w.sceneCenter() - g.origin);
@@ -822,9 +787,7 @@ void updateObserver(GpuScene& g, const World& w, const IdealObserver& o) {
     for (size_t k = 0; k < g.groups->groups.size(); ++k) {
         const MeshGroup& grp = g.groups->groups[k];
         GBoundary& r = g.boundaries[nb + k];
-        exportFrame(w.boundaries()[grp.frame], g.origin, r);
-        exportBox(grp.worldBox, g.origin, r.boxLo, r.boxHi);
-        r.scale = groupScale(w, grp, g.origin);
+        exportGroupFrame(w, grp, g.origin, r);
     }
     for (size_t i = 0; i < g.top->nodes().size(); ++i) exportBox(g.top->nodes()[i].box, g.origin, g.nodes[i].lo, g.nodes[i].hi);
 }

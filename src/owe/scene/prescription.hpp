@@ -44,6 +44,24 @@ struct Prescription {
 
 Prescription parsePrescription(const std::string& text, const std::string& origin = "<string>");
 Prescription loadPrescription(const std::string& path);
+// The same system with its object at infinity.
+inline Prescription atInfinity(Prescription p) {
+    p.objectDistance = Inf;
+    return p;
+}
+// The surface marked as the aperture stop (−1: none).
+inline int stopIndex(const Prescription& p) {
+    int stop = -1;
+    for (size_t i = 0; i < p.surfaces.size(); ++i)
+        if (p.surfaces[i].stop) stop = int(i);
+    return stop;
+}
+// The largest semi-diameter among the surfaces.
+inline double maxSemiDiameter(const Prescription& p) {
+    double r = 0;
+    for (const auto& s : p.surfaces) r = std::max(r, s.sd);
+    return r;
+}
 std::string formatPrescription(const Prescription& p, double unit = 1e-3);
 
 using IndexFn = std::function<double(const std::string& medium, double lambdaNm)>;
@@ -67,12 +85,10 @@ double solveAfocal(Prescription& p, double lambdaNm, const IndexFn& index);
 
 struct BuiltInstrument {
     int assembly = -1;
-    std::vector<int> bodies;
     std::vector<double> vertexZ;
     double lastVertexZ = 0;
     double rearNearestZ = 0;       // largest z occupied by the last lens group
     double rearEdgeRadius = 0;
-    double maxRadius = 0;
     Paraxial paraxial;
 };
 // Builds lens groups (cemented where media are adjacent), stops and optional

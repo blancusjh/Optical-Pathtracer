@@ -110,7 +110,7 @@ TEST(meter_is_robust_to_one_sample_noise) {
 TEST(meter_is_scale_invariant_and_a_locked_meter_keeps_the_picture) {
     Image img = roomWithLamp(100, 60, 50, 30, 10, 3);
     auto inside = displayRGB8(img, 0, true);
-    auto locked = displayRGB8(img, autoExposureEV(img), false);
+    auto locked = displayRGB8(img, meterEV(img), false);
     CHECK(inside == locked);  // locking the meter must not change the current brightness
     for (double& x : img.xyz) x *= 1e6;  // daylight: the same scene a million times brighter
     auto outside = displayRGB8(img, 0, true);

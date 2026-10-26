@@ -1,3 +1,4 @@
+#include "owe/core/units.hpp"
 #include "owe/scene/prescription.hpp"
 
 #include <fstream>
@@ -44,12 +45,8 @@ Prescription parsePrescription(const std::string& text, const std::string& origi
             p.name = a == std::string::npos ? "" : rest.substr(a, b - a + 1);
         } else if (key == "units") {
             if (tok.size() < 2) throw std::runtime_error(ctx + ": units needs a value");
-            if (tok[1] == "mm") unit = 1e-3;
-            else if (tok[1] == "m") unit = 1;
-            else if (tok[1] == "cm") unit = 1e-2;
-            else if (tok[1] == "um") unit = 1e-6;
-            else if (tok[1] == "in") unit = 0.0254;
-            else throw std::runtime_error(ctx + ": unknown unit " + tok[1]);
+            unit = lengthUnitMetres(tok[1]);
+            if (!(unit > 0)) throw std::runtime_error(ctx + ": unknown unit " + tok[1]);
         } else if (key == "ambient") {
             p.ambient = tok.at(1);
         } else if (key == "object_distance") {
@@ -254,9 +251,7 @@ Paraxial paraxialAnalysis(const Prescription& p, double l, const IndexFn& index)
         r.imageDistance = nuk == 0 ? Inf : -yk * nk / nuk;
     }
     // Aperture stop: explicit, else the surface limiting a marginal ray from the object.
-    int stop = -1;
-    for (size_t i = 0; i < N; ++i)
-        if (p.surfaces[i].stop) stop = int(i);
+    int stop = stopIndex(p);
     if (stop < 0) {
         double best = -1;
         double y = 1, nu = std::isinf(p.objectDistance) ? 0 : n0 / p.objectDistance;
@@ -364,13 +359,9 @@ BuiltInstrument buildPrescription(World& w, const Prescription& p, const std::st
         if (s.reflect) {
             // The mirror's own frame has its reflecting face toward +z: met travelling +z, it is
             // turned over (and its sag with it).
-            SurfaceSpec f;
-            f.R = dir > 0 ? -s.R : s.R;
-            f.k = s.k;
-            f.A = s.A;
+            SurfaceSpec f{dir > 0 ? -s.R : s.R, s.k, s.A, s.sd};
             if (dir > 0)
                 for (double& a : f.A) a = -a;
-            f.semiDiameter = s.sd;
             uint32_t optics;
             if (materialOf) optics = materialOf(s.material);
             else {
@@ -380,18 +371,17 @@ BuiltInstrument buildPrescription(World& w, const Prescription& p, const std::st
             }
             Transform at = Transform::translate({0, 0, bi.vertexZ[i]});
             if (dir > 0) at = at * Transform::rotate({1, 0, 0}, Pi);
-            bi.bodies.push_back(buildMirror(w, name + "." + s.label, f, s.substrate, optics, bi.assembly, at, s.hole / 2));
-            bi.maxRadius = std::max(bi.maxRadius, s.sd);
+            buildMirror(w, name + "." + s.label, f, s.substrate, optics, bi.assembly, at, s.hole / 2);
             // Struts behind the mirror (on the side away from its face), one substrate deep.
             for (int k = 0; k < s.spiderCount; ++k) {
                 const double a = s.spiderAngle + 2 * Pi * k / s.spiderCount;
-                const double zBack = std::min(0.0, SagSurface(f.curvature(), f.k, f.A, f.semiDiameter).sag(f.semiDiameter)) - s.substrate;
+                const double zBack = std::min(0.0, f.edgeSag()) - s.substrate;
                 Transform strut = at * Transform::rotate({0, 0, 1}, a) *
                                   Transform::translate({0.5 * s.spiderOuter, 0, zBack - 0.5 * s.substrate - 1e-6});
                 BodyMaterial m;
                 m.optics = w.absorberOptics();
-                bi.bodies.push_back(buildBox(w, name + "." + s.label + ".strut" + std::to_string(k),
-                                             {s.spiderOuter, s.spiderWidth, s.substrate}, m, bi.assembly, strut));
+                buildBox(w, name + "." + s.label + ".strut" + std::to_string(k), {s.spiderOuter, s.spiderWidth, s.substrate}, m,
+                         bi.assembly, strut);
             }
             dir = -dir;
             ++i;
@@ -400,9 +390,7 @@ BuiltInstrument buildPrescription(World& w, const Prescription& p, const std::st
         if (before == p.ambient && s.medium == p.ambient) {
             if (s.stop && s.sd > 0) {
                 double outer = tubeRadius > s.sd ? tubeRadius : s.sd * 3;
-                int b = buildStop(w, name + "." + s.label, s.sd, outer, bi.assembly,
-                                  Transform::translate({0, 0, bi.vertexZ[i]}));
-                bi.bodies.push_back(b);
+                buildStop(w, name + "." + s.label, s.sd, outer, bi.assembly, Transform::translate({0, 0, bi.vertexZ[i]}));
             }
             ++i;
             continue;
@@ -414,12 +402,8 @@ BuiltInstrument buildPrescription(World& w, const Prescription& p, const std::st
         LensSpec spec;
         spec.rim = rim;
         for (size_t k = i; k <= j; ++k) {
-            SurfaceSpec sf;
-            sf.R = p.surfaces[k].R;
-            sf.k = p.surfaces[k].k;
-            sf.A = p.surfaces[k].A;
-            sf.semiDiameter = p.surfaces[k].sd;
-            spec.surfaces.push_back(sf);
+            const auto& q = p.surfaces[k];
+            spec.surfaces.push_back({q.R, q.k, q.A, q.sd});
             if (k < j) {
                 spec.media.push_back(p.surfaces[k].medium);
                 spec.thickness.push_back(p.surfaces[k].t);
@@ -427,24 +411,17 @@ BuiltInstrument buildPrescription(World& w, const Prescription& p, const std::st
         }
         std::string label = name + ".L" + std::to_string(++group);
         int b = buildLens(w, label, spec, bi.assembly, Transform::translate({0, 0, bi.vertexZ[i]}));
-        bi.bodies.push_back(b);
         double edge = w.bodies()[b].params["edge_radius"];
-        bi.maxRadius = std::max(bi.maxRadius, edge);
         // Extent of the group along z.
-        double zFirstEdge = bi.vertexZ[i] + SagSurface(spec.surfaces.front().curvature(), spec.surfaces.front().k,
-                                                     spec.surfaces.front().A, spec.surfaces.front().semiDiameter)
-                                                .sag(spec.surfaces.front().semiDiameter);
-        double zLastEdge = bi.vertexZ[j] + SagSurface(spec.surfaces.back().curvature(), spec.surfaces.back().k,
-                                                    spec.surfaces.back().A, spec.surfaces.back().semiDiameter)
-                                               .sag(spec.surfaces.back().semiDiameter);
+        double zFirstEdge = bi.vertexZ[i] + spec.surfaces.front().edgeSag();
+        double zLastEdge = bi.vertexZ[j] + spec.surfaces.back().edgeSag();
         bi.rearNearestZ = std::max({bi.vertexZ[j], zLastEdge, bi.vertexZ[i], zFirstEdge});
         bi.rearEdgeRadius = edge;
         if (tubeRadius > edge) {
             // The mount's bore clears the rim by 1e-9 relative (picometres) so the two bodies do
             // not share an edge; rays then never meet an ambiguous rim/mount junction.
-            int m = buildStop(w, label + "-mount", edge * (1 + 1e-9), tubeRadius, bi.assembly,
-                              Transform::translate({0, 0, 0.5 * (zFirstEdge + zLastEdge)}));
-            bi.bodies.push_back(m);
+            buildStop(w, label + "-mount", edge * (1 + 1e-9), tubeRadius, bi.assembly,
+                      Transform::translate({0, 0, 0.5 * (zFirstEdge + zLastEdge)}));
         }
         i = j + 1;
     }

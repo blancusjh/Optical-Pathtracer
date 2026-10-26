@@ -30,9 +30,6 @@ void writePFM(const std::string& path, const Image& img) {
     }
 }
 
-namespace {
-Mat3 inverse(const double a[3][3]);
-}
 
 Image readPFM(const std::string& path) {
     std::ifstream in(path, std::ios::binary);
@@ -54,8 +51,7 @@ Image readPFM(const std::string& path) {
             std::memcpy(&f, &u, 4);
         }
     // The exact inverse of the XYZ → linear sRGB matrix writePFM used.
-    const double m[3][3] = {{3.2404542, -1.5371385, -0.4985314}, {-0.9692660, 1.8760108, 0.0415560}, {0.0556434, -0.2040259, 1.0572252}};
-    static const Mat3 toXYZ = inverse(m);
+    static const Mat3 toXYZ = Mat3::fromRows(kXyzToLinearSRGB).inverse();
     Image img;
     img.width = w;
     img.height = h;
@@ -98,7 +94,7 @@ void chunk(std::ofstream& out, const char* type, const std::vector<unsigned char
     out.write(reinterpret_cast<const char*>(buf.data()), std::streamsize(buf.size()));
 }
 double srgbEncode(double v) {
-    v = clampd(v, 0, 1);
+    v = clamp(v, 0, 1);
     return v <= 0.0031308 ? 12.92 * v : 1.055 * std::pow(v, 1 / 2.4) - 0.055;
 }
 }  // namespace
@@ -123,7 +119,6 @@ void bradfordToD65(const XYZ& w, double M[3][3]) {
 }
 }  // namespace
 
-double autoExposureEV(const Image& img) { return meterEV(img); }
 
 namespace {
 // Oklab (B. Ottosson, 2020) from and to linear sRGB.
@@ -185,18 +180,6 @@ constexpr double kAgxInset[3][3] = {{0.842479062253094, 0.0784335999999992, 0.07
                                     {0.0423756549057051, 0.0784336, 0.879142973793104}};
 constexpr double kAgxMinEv = -12.47393, kAgxMaxEv = 4.026069;
 
-Mat3 inverse(const double a[3][3]) {
-    Mat3 r;
-    const double det = a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1]) - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0]) +
-                       a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0]);
-    for (int i = 0; i < 3; ++i)
-        for (int j = 0; j < 3; ++j) {
-            const int i1 = (j + 1) % 3, i2 = (j + 2) % 3, j1 = (i + 1) % 3, j2 = (i + 2) % 3;
-            r.m[i][j] = (a[i1][j1] * a[i2][j2] - a[i1][j2] * a[i2][j1]) / det;
-        }
-    return r;
-}
-
 double agxSigmoid(double x) {
     const double x2 = x * x, x4 = x2 * x2;
     return 15.5 * x4 * x2 - 40.14 * x4 * x + 31.96 * x4 - 6.868 * x2 * x + 0.4298 * x2 + 0.1191 * x - 0.00232;
@@ -215,7 +198,7 @@ Mat3 agxInset() {
 
 void applyTone(Tone tone, double rgb[3]) {
     if (tone == Tone::AgX) {
-        static const Mat3 inset = agxInset(), outset = inverse(inset.m);
+        static const Mat3 inset = agxInset(), outset = inset.inverse();
         double v[3];
         for (int i = 0; i < 3; ++i) {
             double x = inset.m[i][0] * rgb[0] + inset.m[i][1] * rgb[1] + inset.m[i][2] * rgb[2];
@@ -238,14 +221,14 @@ void applyTone(Tone tone, double rgb[3]) {
         top = std::max(top, rgb[k]);
     }
     if (top > 1) {
-        double Y = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+        double Y = luminanceRec709(rgb[0], rgb[1], rgb[2]);
         double t = Y >= 1 ? 1.0 : (top - 1) / (top - Y);
         for (int k = 0; k < 3; ++k) rgb[k] = Y >= 1 ? 1.0 : rgb[k] + t * (Y - rgb[k]);
     }
 }
 
 std::vector<unsigned char> displayRGB8(const Image& img, double exposureEV, bool autoExposure, double whiteKelvin, Tone tone) {
-    double scale = std::exp2(exposureEV + (autoExposure ? autoExposureEV(img) : 0));
+    double scale = std::exp2(exposureEV + (autoExposure ? meterEV(img) : 0));
     double wb[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
     if (whiteKelvin > 0) bradfordToD65(Spectrum::blackbody(whiteKelvin, 1.0).toXYZ(), wb);
     std::vector<unsigned char> out;

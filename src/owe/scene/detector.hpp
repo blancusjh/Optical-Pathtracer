@@ -129,6 +129,7 @@ public:
     Vec3 upVec() const { return up_; }
     double tanX() const { return tanX_; }
     double tanY() const { return tanY_; }
+    double pixelAngle() const { return 2 * tanY_ / height; }  // a pixel's angular height
 
 private:
     Vec3 fwd_, right_, up_;
@@ -168,7 +169,7 @@ public:
     Vec3 normal() const { return normal_; }
 
 private:
-    Transform toWorld_, toLocal_;
+    Transform toWorld_;
     Vec3 normal_;
 };
 

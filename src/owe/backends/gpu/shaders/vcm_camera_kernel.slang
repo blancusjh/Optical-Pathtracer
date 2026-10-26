@@ -14,21 +14,14 @@ void main(uint3 tid : SV_DispatchThreadID) {
         ps.comp = 0;
         ps.stats = 0;
     }
-    Rng rng;
-    rng.seed(hashCombine(pack64(pc.seedLo, pc.seedHi) ^ 0x2b992ddfa23249d6ULL, uint64_t(pixel)), uint64_t(pc.pass));
+    Rng rng = pathStream(0x2b992ddfa23249d6ULL, uint64_t(pixel));
     const uint group = pixelGroup(pixel);
     Wavelengths wl = groupWavelengths(group);
     float px = float(tid.x) + rng.uniform();
     float py = float(tid.y) + rng.uniform();
     float2 f = filterOffset(rng);
     uint4 stats = ps.stats;
-    float3 c = traceCameraVcm(px + f.x, py + f.y, wl, group, rng, stats);
-    if (isfinite(c.x + c.y + c.z)) {
-        precise float3 y = c - ps.comp.xyz;
-        precise float3 t = ps.acc.xyz + y;
-        ps.comp.xyz = (t - ps.acc.xyz) - y;
-        ps.acc.xyz = t;
-    }
+    accumulate(ps, traceCameraVcm(px + f.x, py + f.y, wl, group, rng, stats));
     ps.stats = stats;
     g_pixels[pixel] = ps;
 }

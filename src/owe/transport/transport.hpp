@@ -76,7 +76,7 @@ public:
     void setCausticPartition(bool on) { partition_ = on; }
     // Minimum probability of choosing either branch at smooth dielectric interfaces (0 = exact
     // Fresnel probabilities). Unbiased for any value in [0, 0.5); raises ghost-path sampling.
-    void setFresnelFloor(double f) { fresnelFloor_ = clampd(f, 0.0, 0.49); }
+    void setFresnelFloor(double f) { fresnelFloor_ = clamp(f, 0.0, 0.49); }
 
     // Spectral radiance (or its adjoint measurement) arriving along -ray.d at ray.o, at the
     // path's wavelengths. `wl` may have its secondary wavelengths terminated on return.

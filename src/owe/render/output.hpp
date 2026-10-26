@@ -12,8 +12,6 @@ namespace owe {
 
 void writePFM(const std::string& path, const Image& img);                 // linear sRGB, raw
 Image readPFM(const std::string& path);                                   // as writePFM wrote it
-// Display meter gain in stops (meterEV, owe/render/exposure.hpp); never changes the raw estimate.
-double autoExposureEV(const Image& img);
 // Brings a linear sRGB colour with a negative component into the gamut by reducing its chroma at
 // constant Oklab lightness and hue (every monochromatic colour needs this). In-gamut colours are
 // unchanged.

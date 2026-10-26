@@ -1,3 +1,4 @@
+#include "owe/core/json.hpp"
 #include "owe/analysis/inspect.hpp"
 
 #include <algorithm>
@@ -16,7 +17,7 @@ void wavelengthToRGB(double l, double rgb[3]) {
     double m = 0;
     for (int i = 0; i < 3; ++i) { rgb[i] = std::max(0.0, rgb[i]); m = std::max(m, rgb[i]); }
     // Fade toward the ends of the visible range.
-    double fade = clampd(std::min((l - 380) / 40.0, (780 - l) / 60.0), 0.25, 1.0);
+    double fade = clamp(std::min((l - 380) / 40.0, (780 - l) / 60.0), 0.25, 1.0);
     for (int i = 0; i < 3; ++i) {
         double v = m > 0 ? rgb[i] / m : 0;
         rgb[i] = std::pow(v, 1 / 2.2) * fade;
@@ -41,8 +42,8 @@ const char* opticsColor(SurfaceType t) {
 
 std::string hexColor(const double rgb[3]) {
     char buf[16];
-    std::snprintf(buf, sizeof buf, "#%02x%02x%02x", unsigned(255 * clampd(rgb[0], 0, 1)) & 0xFFu,
-                  unsigned(255 * clampd(rgb[1], 0, 1)) & 0xFFu, unsigned(255 * clampd(rgb[2], 0, 1)) & 0xFFu);
+    std::snprintf(buf, sizeof buf, "#%02x%02x%02x", unsigned(255 * clamp(rgb[0], 0, 1)) & 0xFFu,
+                  unsigned(255 * clamp(rgb[1], 0, 1)) & 0xFFu, unsigned(255 * clamp(rgb[2], 0, 1)) & 0xFFu);
     return buf;
 }
 
@@ -65,7 +66,7 @@ void writePathsSVG(const std::string& path, const World& world, const std::vecto
         if (!(a1 > a0) || !(b1 > b0) || paths.empty()) {
             AABB wb = world.bounds();
             for (int i = 0; i < 8; ++i)
-                grow(proj({(i & 1) ? wb.hi.x : wb.lo.x, (i & 2) ? wb.hi.y : wb.lo.y, (i & 4) ? wb.hi.z : wb.lo.z}));
+                grow(proj(wb.corner(i)));
         }
         double ea = (a1 - a0) * opt.margin + 1e-9, eb = (b1 - b0) * opt.margin + 1e-9;
         double ext = std::max(a1 - a0, b1 - b0);
@@ -287,7 +288,7 @@ std::string pathsJSON(const World& w, const std::vector<PathRecord>& paths) {
         for (size_t i = 0; i < r.v.size(); ++i) {
             const PathVertex& v = r.v[i];
             os << (i ? ", " : "") << "{\"p\": [" << v.p.x << ", " << v.p.y << ", " << v.p.z << "], \"event\": \""
-               << eventName(v.event) << "\", \"boundary\": \"" << (v.boundary == kNone ? "" : w.boundaryLabel(v.boundary))
+               << eventName(v.event) << "\", \"boundary\": \"" << (v.boundary == kNone ? "" : jsonEscape(w.boundaryLabel(v.boundary)))
                << "\", \"n_i\": " << v.nI << ", \"n_t\": " << v.nT << ", \"theta_i_deg\": " << degrees(v.thetaI)
                << ", \"theta_t_deg\": " << degrees(v.thetaT) << ", \"R\": " << v.R << ", \"T\": " << v.T
                << ", \"optical_path_m\": " << v.opl << ", \"beta\": " << v.beta << "}";

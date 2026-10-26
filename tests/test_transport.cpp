@@ -2,7 +2,7 @@
 #include "analytic.hpp"
 #include "check.hpp"
 #include "owe/scene/builders.hpp"
-#include "owe/transport/optics.hpp"
+#include "owe/core/shared/optics.hpp"
 #include "owe/backends/registry.hpp"
 #include "owe/loader/scene_loader.hpp"
 #include "owe/transport/transport.hpp"

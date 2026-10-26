@@ -1,51 +1,24 @@
 #include "owe/backends/gpu/gpu_renderer_internal.hpp"
 
-extern const unsigned char owe_kernel_film[];
-extern const size_t owe_kernel_film_size;
-extern const unsigned char owe_kernel_path[];
-extern const size_t owe_kernel_path_size;
-extern const unsigned char owe_kernel_particle[];
-extern const size_t owe_kernel_particle_size;
-extern const unsigned char owe_kernel_path_rq[];
-extern const size_t owe_kernel_path_rq_size;
-extern const unsigned char owe_kernel_particle_rq[];
-extern const size_t owe_kernel_particle_rq_size;
-extern const unsigned char owe_kernel_sppm_camera[];
-extern const size_t owe_kernel_sppm_camera_size;
-extern const unsigned char owe_kernel_sppm_camera_rq[];
-extern const size_t owe_kernel_sppm_camera_rq_size;
-extern const unsigned char owe_kernel_sppm_photon[];
-extern const size_t owe_kernel_sppm_photon_size;
-extern const unsigned char owe_kernel_sppm_photon_rq[];
-extern const size_t owe_kernel_sppm_photon_rq_size;
-extern const unsigned char owe_kernel_sppm_grid[];
-extern const size_t owe_kernel_sppm_grid_size;
-extern const unsigned char owe_kernel_sppm_update[];
-extern const size_t owe_kernel_sppm_update_size;
-extern const unsigned char owe_kernel_sppm_guide[];
-extern const size_t owe_kernel_sppm_guide_size;
-extern const unsigned char owe_kernel_vcm_light[];
-extern const size_t owe_kernel_vcm_light_size;
-extern const unsigned char owe_kernel_vcm_light_rq[];
-extern const size_t owe_kernel_vcm_light_rq_size;
-extern const unsigned char owe_kernel_vcm_camera[];
-extern const size_t owe_kernel_vcm_camera_size;
-extern const unsigned char owe_kernel_vcm_camera_rq[];
-extern const size_t owe_kernel_vcm_camera_rq_size;
-extern const unsigned char owe_kernel_vcm_grid[];
-extern const size_t owe_kernel_vcm_grid_size;
+// The kernels' SPIR-V, embedded at build time (cmake/OweGpu.cmake's owe_add_kernel).
+#define OWE_KERNEL(name) extern const unsigned char owe_kernel_##name[]; extern const size_t owe_kernel_##name##_size;
+OWE_KERNEL(film)
+OWE_KERNEL(path) OWE_KERNEL(path_rq)
+OWE_KERNEL(particle) OWE_KERNEL(particle_rq)
+OWE_KERNEL(sppm_camera) OWE_KERNEL(sppm_camera_rq)
+OWE_KERNEL(sppm_photon) OWE_KERNEL(sppm_photon_rq)
+OWE_KERNEL(sppm_grid) OWE_KERNEL(sppm_update) OWE_KERNEL(sppm_guide)
+OWE_KERNEL(vcm_light) OWE_KERNEL(vcm_light_rq)
+OWE_KERNEL(vcm_camera) OWE_KERNEL(vcm_camera_rq)
+OWE_KERNEL(vcm_grid)
+#undef OWE_KERNEL
+#define OWE_SPIRV(name) Spirv{owe_kernel_##name, owe_kernel_##name##_size}
 
 namespace owe::gpu::detail {
 
 GpuRenderer::GpuRenderer(const Scene& scene, int detectorIndex, const RenderSettings& settings)
-    : scene_(scene), settings_(settings), stats_() {
-    if (detectorIndex < 0 || detectorIndex >= int(scene.detectors.size())) throw std::runtime_error("no such detector");
-    det_ = scene.detectors[size_t(detectorIndex)].get();
+    : Renderer(scene, detectorIndex, settings, {"path", "light", "hybrid", "sppm", "bdpt", "vcm"}) {
     const std::string& I = settings_.integrator;
-    if (I != "path" && I != "light" && I != "hybrid" && I != "sppm" && I != "bdpt" && I != "vcm")
-        throw std::runtime_error("unknown integrator '" + I + "' (expected path, light, hybrid, sppm, bdpt or vcm)");
-    if (I == "hybrid" && !det_->isVirtual())
-        throw std::runtime_error("the hybrid integrator needs a virtual observer; use path or light for surface sensors");
     vcm_ = I == "bdpt" || I == "vcm";
     merging_ = I == "vcm";
     if (vcm_ && !dynamic_cast<const IdealObserver*>(det_))
@@ -67,59 +40,52 @@ GpuRenderer::GpuRenderer(const Scene& scene, int detectorIndex, const RenderSett
     rayQuery_ = ctx_->rayQuery() && hardwareTraversalWanted();
     const uint32_t accel = rayQuery_ ? kSceneBinding : kNoBinding;
     // Only this integrator's kernels, compiled in parallel: each one is a separate driver
-    // compilation of up to a minute when neither cache holds it.
-    struct KernelJob {
+    // compilation of up to a minute when neither cache holds it. A kernel that traces rays comes in
+    // two variants, hardware (ray queries) and software traversal.
+    struct Job {
         std::unique_ptr<Kernel>* slot;
-        const unsigned char* spirv;
-        size_t bytes;
-        const char* name;
+        Spirv code;
+        std::string name;
         bool traces;
     };
-    std::vector<KernelJob> jobs;
-    auto tracing = [&](std::unique_ptr<Kernel>& slot, const unsigned char* rq, size_t rqBytes, const char* rqName,
-                       const unsigned char* sw, size_t swBytes, const char* swName) {
-        jobs.push_back(rayQuery_ ? KernelJob{&slot, rq, rqBytes, rqName, true} : KernelJob{&slot, sw, swBytes, swName, false});
+    std::vector<Job> jobs;
+    auto tracing = [&](std::unique_ptr<Kernel>& slot, Spirv rq, Spirv sw, const std::string& name) {
+        jobs.push_back(rayQuery_ ? Job{&slot, rq, name + " (ray queries)", true} : Job{&slot, sw, name, false});
     };
-    auto plain = [&](std::unique_ptr<Kernel>& slot, const unsigned char* code, size_t bytes, const char* name) {
-        jobs.push_back(KernelJob{&slot, code, bytes, name, false});
+    auto plain = [&](std::unique_ptr<Kernel>& slot, Spirv code, const std::string& name) {
+        jobs.push_back(Job{&slot, code, name, false});
     };
-    plain(filmKernel_, owe_kernel_film, owe_kernel_film_size, "film accumulation");
-    if (camera_ || mediumPartition_)
-        tracing(pathKernel_, owe_kernel_path_rq, owe_kernel_path_rq_size, "path (ray queries)", owe_kernel_path,
-                owe_kernel_path_size, "path");
-    if (particles_)
-        tracing(particleKernel_, owe_kernel_particle_rq, owe_kernel_particle_rq_size, "particle (ray queries)",
-                owe_kernel_particle, owe_kernel_particle_size, "particle");
+    plain(filmKernel_, OWE_SPIRV(film), "film accumulation");
+    if (camera_ || mediumPartition_) tracing(pathKernel_, OWE_SPIRV(path_rq), OWE_SPIRV(path), "path");
+    if (particles_) tracing(particleKernel_, OWE_SPIRV(particle_rq), OWE_SPIRV(particle), "particle");
     if (sppm_) {
-        tracing(sppmCamera_, owe_kernel_sppm_camera_rq, owe_kernel_sppm_camera_rq_size, "sppm camera (ray queries)",
-                owe_kernel_sppm_camera, owe_kernel_sppm_camera_size, "sppm camera");
-        tracing(sppmPhoton_, owe_kernel_sppm_photon_rq, owe_kernel_sppm_photon_rq_size, "sppm photon (ray queries)",
-                owe_kernel_sppm_photon, owe_kernel_sppm_photon_size, "sppm photon");
-        plain(sppmGrid_, owe_kernel_sppm_grid, owe_kernel_sppm_grid_size, "sppm grid");
-        plain(sppmUpdate_, owe_kernel_sppm_update, owe_kernel_sppm_update_size, "sppm update");
+        tracing(sppmCamera_, OWE_SPIRV(sppm_camera_rq), OWE_SPIRV(sppm_camera), "sppm camera");
+        tracing(sppmPhoton_, OWE_SPIRV(sppm_photon_rq), OWE_SPIRV(sppm_photon), "sppm photon");
+        plain(sppmGrid_, OWE_SPIRV(sppm_grid), "sppm grid");
+        plain(sppmUpdate_, OWE_SPIRV(sppm_update), "sppm update");
         buffers_[kLevels] = ctx_->createDeviceBuffer(8 * sizeof(int32_t));
     }
     if (vcm_) {
-        tracing(vcmLight_, owe_kernel_vcm_light_rq, owe_kernel_vcm_light_rq_size, "vcm light (ray queries)",
-                owe_kernel_vcm_light, owe_kernel_vcm_light_size, "vcm light");
-        tracing(vcmCamera_, owe_kernel_vcm_camera_rq, owe_kernel_vcm_camera_rq_size, "vcm camera (ray queries)",
-                owe_kernel_vcm_camera, owe_kernel_vcm_camera_size, "vcm camera");
-        plain(vcmGrid_, owe_kernel_vcm_grid, owe_kernel_vcm_grid_size, "vcm grid");
+        tracing(vcmLight_, OWE_SPIRV(vcm_light_rq), OWE_SPIRV(vcm_light), "vcm light");
+        tracing(vcmCamera_, OWE_SPIRV(vcm_camera_rq), OWE_SPIRV(vcm_camera), "vcm camera");
+        plain(vcmGrid_, OWE_SPIRV(vcm_grid), "vcm grid");
         buffers_[kVcmCounters] = ctx_->createDeviceBuffer(16 * sizeof(uint32_t));
         vcmCounterReadback_ = ctx_->createHostBuffer(16 * sizeof(uint32_t), true);
     }
     if (sppm_ || vcm_) {
         // SPPM's photons and VCM's sun light paths are guided by the same map and its CDF kernel.
-        plain(sppmGuide_, owe_kernel_sppm_guide, owe_kernel_sppm_guide_size, "sppm guide");
+        plain(sppmGuide_, OWE_SPIRV(sppm_guide), "sppm guide");
         buffers_[kGuide] = ctx_->createDeviceBuffer((2 * kGuideCells + 1) * sizeof(uint32_t));
     }
     {
         std::vector<std::future<void>> compiling;
-        for (const KernelJob& j : jobs)
+        for (const Job& j : jobs) {
+            kernels_.push_back({j.slot, j.traces});
             compiling.push_back(std::async(std::launch::async, [this, j, accel] {
-                *j.slot = std::make_unique<Kernel>(*ctx_, j.spirv, j.bytes, kAllBindings, uint32_t(sizeof(PushConstants)),
-                                                   j.name, j.traces ? accel : kNoBinding);
+                *j.slot = std::make_unique<Kernel>(*ctx_, j.code.bytes, j.code.size, kAllBindings, uint32_t(sizeof(PushConstants)),
+                                                   j.name.c_str(), j.traces ? accel : kNoBinding);
             }));
+        }
         std::exception_ptr failed;
         for (auto& c : compiling) try {
                 c.get();
@@ -153,8 +119,7 @@ GpuRenderer::GpuRenderer(const Scene& scene, int detectorIndex, const RenderSett
     for (size_t i = 0; i < gs_.images.size(); ++i) {
         const ImageRGB& img = *gs_.images[i];
         const void* words = img.hdr ? static_cast<const void*>(img.rgb.data()) : static_cast<const void*>(img.srgb8.data());
-        const size_t bytes = img.hdr ? img.rgb.size() * 4 : img.srgb8.size() * 4;
-        ctx_->uploadAt(buffers_[kTexels], VkDeviceSize(gs_.texels[4 * i]) * 4, words, bytes);
+        ctx_->uploadAt(buffers_[kTexels], VkDeviceSize(gs_.texels[4 * i]) * 4, words, imageBytes(img));
     }
     vec(kNormals, gs_.normals);
     // Integrator buffers a kernel does not use are bound as placeholders (every kernel has the
@@ -177,17 +142,12 @@ GpuRenderer::~GpuRenderer() {
     ctx_->destroy(vcmGuideBackup_);
 }
 
-void GpuRenderer::runPass(int spp) {
-    if (spp <= 0) return;
-    auto t0 = std::chrono::steady_clock::now();
+void GpuRenderer::pass(int spp) {
     if (camera_) passPath(uint32_t(spp));
     if (particles_) passParticles(uint32_t(spp));
     if (sppm_) passSppm(uint32_t(spp));
     if (vcm_) passVcm(uint32_t(spp));
     if (mediumPartition_) passPath(uint32_t(spp), kFlagMediumOnly);
-    passes_++;
-    totalSpp_ += spp;
-    seconds_ += std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
 }
 
 bool GpuRenderer::resetObserver() {
@@ -209,11 +169,8 @@ bool GpuRenderer::resetObserver() {
 
     clearFilm();
     particleCount_ = 0;
-    passes_ = 0;
-    totalSpp_ = 0;
-    seconds_ = 0;
     chunk_ = 1;
-    stats_ = {};
+    resetProgress();
     if (sppm_) resetSppm();
     if (vcm_) resetVcm();
     return true;
@@ -244,8 +201,7 @@ void GpuRenderer::allocateImageBuffers() {
     if (sppm_) {
         for (Binding b : {kVisiblePoints, kSppmState, kFlux, kGridHead, kGridNext}) ctx_->destroy(buffers_[b]);
         ctx_->destroy(sppmReadback_);
-        gridSize_ = 1024;
-        while (gridSize_ < 2 * pixels) gridSize_ *= 2;
+        gridSize_ = hashSize(2 * pixels);
         buffers_[kVisiblePoints] = ctx_->createDeviceBuffer(pixels * kVisiblePointBytes);
         buffers_[kSppmState] = ctx_->createDeviceBuffer(pixels * kSppmPixelBytes);
         buffers_[kFlux] = ctx_->createDeviceBuffer(pixels * kFluxWords * sizeof(uint32_t));
@@ -266,8 +222,7 @@ void GpuRenderer::allocateLightCache(uint64_t capacity) {
     if (rounded > boundedLimit)
         throw std::runtime_error("vcm: complete light vertex cache needs " + std::to_string(rounded) +
                                  " vertices, exceeding capacity limit " + std::to_string(boundedLimit));
-    uint32_t gridSize = 1024;
-    while (gridSize < 2 * rounded && gridSize < (1u << 30)) gridSize *= 2;
+    const uint32_t gridSize = hashSize(2 * rounded);
     if (VkDeviceSize(gridSize) * sizeof(uint32_t) > ctx_->maxStorageBufferRange())
         throw std::runtime_error("vcm: light vertex hash exceeds the device storage buffer limit");
     // Keep the old cache usable if an allocation fails. No descriptors point to
@@ -308,14 +263,10 @@ uint64_t GpuRenderer::cacheEnvironment(const char* name) {
 }
 
 void GpuRenderer::bindAll() {
-    for (Kernel* k : {pathKernel_.get(), particleKernel_.get(), sppmCamera_.get(), sppmPhoton_.get(), sppmGrid_.get(),
-                      sppmUpdate_.get(), sppmGuide_.get(), vcmLight_.get(), vcmCamera_.get(), vcmGrid_.get(), filmKernel_.get()})
-        if (k) {
-            for (uint32_t b = 0; b < kAllBindings; ++b) k->bind(b, buffers_[b]);
-            const bool traces = k != sppmGrid_.get() && k != sppmUpdate_.get() && k != sppmGuide_.get() &&
-                                k != vcmGrid_.get() && k != filmKernel_.get();
-            if (hardware_ && traces) k->bindAccel(kSceneBinding, hardware_->tlas());
-        }
+    for (const KernelSlot& k : kernels_) {
+        for (uint32_t b = 0; b < kAllBindings; ++b) (*k.kernel)->bind(b, buffers_[b]);
+        if (hardware_ && k.traces) (*k.kernel)->bindAccel(kSceneBinding, hardware_->tlas());
+    }
 }
 
 } // namespace owe::gpu::detail

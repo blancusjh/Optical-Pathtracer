@@ -1,47 +1,12 @@
-// Spectral quantities: float port of spectrum.cpp, medium.cpp (index models) and wavelengths.hpp.
-// A path carries four hero-stratified wavelengths, so spectral values are float4.
+// Spectra, refractive indices and hero wavelengths read from the scene buffers. The formulas are
+// the reference's (owe/core/shared/spectra.hpp); a path carries four hero-stratified wavelengths,
+// so spectral values are float4.
 #pragma once
+#include "owe/core/shared/spectra.hpp"
 #include "common.slang"
 #include "scene.slang"
 
-static const float kLambdaMin = 360.0;
-static const float kLambdaMax = 830.0;
 static const int NW = 4;
-
-float lobe(float x, float mu, float s1, float s2) {
-    float t = (x - mu) / (x < mu ? s1 : s2);
-    return exp(-0.5 * t * t);
-}
-float cieX(float l) {
-    return 1.056 * lobe(l, 599.8, 37.9, 31.0) + 0.362 * lobe(l, 442.0, 16.0, 26.7) - 0.065 * lobe(l, 501.1, 20.4, 26.2);
-}
-float cieY(float l) { return 0.821 * lobe(l, 568.8, 46.9, 40.5) + 0.286 * lobe(l, 530.9, 16.3, 31.1); }
-float cieZ(float l) { return 1.217 * lobe(l, 437.0, 11.8, 36.0) + 0.681 * lobe(l, 459.0, 26.0, 13.8); }
-
-float sampleVisibleWavelength(float u) {
-    return clamp(538.0 - 138.888889 * atanhf(0.85691062 - 1.82750197 * u), kLambdaMin, kLambdaMax);
-}
-float visibleWavelengthPdf(float l) {
-    if (l < kLambdaMin || l > kLambdaMax) return 0;
-    return 0.0039398042 / sqr(cosh(0.0072 * (l - 538.0)));
-}
-
-// Planck spectral radiance B(λ,T) in W·m⁻²·sr⁻¹·m⁻¹ for λ in nm. Evaluated in micrometres
-// (c1 = 2hc² = 1.191e8 W·µm⁴·m⁻²·sr⁻¹, c2 = hc/k = 14388 µm·K): in metres λ⁵ ≈ 1e-32, and an
-// optimiser that reassociates the constant factors (legal in Vulkan) underflows float to zero.
-float planck(float lambdaNm, float kelvin) {
-    const float c1 = 1.191042972e8, c2 = 1.438776877e4;
-    float l = lambdaNm * 1e-3;
-    float l2 = l * l;
-    return 1e6 * c1 / (l2 * l2 * l * (exp(c2 / (l * kelvin)) - 1));
-}
-
-float logistic(float x) { return 1.0 / (1.0 + exp(-x)); }
-float3 rgbBasis(float l) {
-    float hiEdge = logistic((l - 590.0) / 11.0);
-    float loEdge = logistic((l - 492.0) / 11.0);
-    return float3(hiEdge, loEdge - hiEdge, 1.0 - loEdge);
-}
 
 static const uint kSpecConstant = 0;
 static const uint kSpecBlackbody = 1;
@@ -74,7 +39,7 @@ float spectrumEval(uint id, float l) {
         case kSpecBlackbody: return scale * planck(l, s.abcs.x);
         case kSpecTabulated: return scale * tableEval(s.info.y, s.info.z, l);
         case kSpecRgbReflectance: return scale * dot(s.abcs.xyz, rgbBasis(l));
-        case kSpecRgbIlluminant: return scale * dot(s.abcs.xyz, rgbBasis(l)) * planck(l, 6504.0) * 1e-13;
+        case kSpecRgbIlluminant: return scale * dot(s.abcs.xyz, rgbBasis(l)) * rgbIlluminantBase(l);
         default: return 0;
     }
 }
@@ -91,8 +56,6 @@ static const uint kIndexSellmeier = 2;
 static const uint kIndexTabulated = 3;
 static const uint kIndexCiddor = 4;
 
-float ciddorAir(float s2) { return 1.0 + 0.05792105 / (238.0185 - s2) + 0.00167917 / (57.362 - s2); }
-
 float mediumIndex(uint medium, float lambdaNm) {
     GMedium m = g_media[medium];
     float l = lambdaNm * 1e-3;  // μm
@@ -101,19 +64,19 @@ float mediumIndex(uint medium, float lambdaNm) {
     float v = 1;
     switch (m.index.x) {
         case kIndexConstant: v = g_scalars[c]; break;
-        case kIndexCauchy: v = g_scalars[c] + g_scalars[c + 1] / l2 + g_scalars[c + 2] / (l2 * l2); break;
+        case kIndexCauchy: v = cauchyIndex(g_scalars[c], g_scalars[c + 1], g_scalars[c + 2], l2); break;
         case kIndexSellmeier: {
             float s = 1;
             uint n = m.index.w;
-            for (uint i = 0; i < n; ++i) s += g_scalars[c + i] * l2 / (l2 - g_scalars[c + n + i]);
+            for (uint i = 0; i < n; ++i) s += sellmeierTerm(g_scalars[c + i], g_scalars[c + n + i], l2);
             v = sqrt(s);
             break;
         }
         case kIndexTabulated: v = spectrumEval(c, lambdaNm); break;
-        case kIndexCiddor: v = ciddorAir(1.0 / l2); break;
+        case kIndexCiddor: v = ciddorAir(l2); break;
         default: break;
     }
-    if (m.index.y != 0) v *= ciddorAir(1.0 / l2);
+    if (m.index.y != 0) v *= ciddorAir(l2);
     return v;
 }
 uint mediumOf(uint region) { return g_regions[region]; }

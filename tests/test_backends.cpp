@@ -11,7 +11,7 @@
 #include "owe/loader/scene_loader.hpp"
 #include "owe/scene/builders.hpp"
 #include "owe/scene/prescription.hpp"
-#include "owe/transport/optics.hpp"
+#include "owe/core/shared/optics.hpp"
 
 using namespace owe;
 

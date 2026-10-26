@@ -1,5 +1,6 @@
 // Measurement rays of the detectors (camera-relative): float port of detector.cpp.
 #pragma once
+#include "owe/core/shared/optics.hpp"
 #include "world.slang"
 
 // A displacement (pixels) drawn from the pixel response's Gaussian (Detector::filterOffset).
@@ -44,10 +45,10 @@ bool generateRay(float px, float py, inout Rng rng, out float3 o, out float3 d, 
             q = fromGuide ? c + (right * dk.x + up * dk.y) * gr : (right * dk.x + up * dk.y) * pupil;
             if (guided) {
                 if (fromGuide && dot(q, q) > pupil * pupil) return false;
-                float pEye = 1 / (kPi * pupil * pupil);
+                float pEye = 1 / (Pi * pupil * pupil);
                 float3 e = q - c;
                 bool inGuide = fromGuide || dot(e, e) <= gr * gr;
-                float pGuide = inGuide ? 1 / (kPi * gr * gr) : 0;
+                float pGuide = inGuide ? 1 / (Pi * gr * gr) : 0;
                 weight = pEye / ((1 - share) * pEye + share * pGuide);
             }
         }
@@ -86,24 +87,10 @@ bool generateRay(float px, float py, inout Rng rng, out float3 o, out float3 d, 
         if (!useAim) dir = Frame(nrm).toWorld(sampleCosineHemisphere(u1, u2));
         float cosS = dot(dir, nrm);
         if (cosS <= 0) return false;
-        float pdfW = 0;
-        [ForceUnroll] for (int k = 0; k < 2; ++k) {
-            float3 center = k == 0 ? G.aimCenter.xyz : G.focusCenter.xyz;
-            float radius = k == 0 ? G.sensorSize.z : G.sensorSize.w;
-            float mix = k == 0 ? 1 - share : share;
-            if (mix <= 0) continue;
-            float dn = dot(dir, aimN);
-            if (abs(dn) <= 1e-12) continue;
-            float t = dot(center - p, aimN) / dn;
-            float3 hitP = p + dir * t - center;
-            // The generating component is known to contain its own sample. Rebuilding
-            // its disk point loses precision for millimetre pupils metres away; a false
-            // rejection would leave only the cosine PDF and create enormous weights.
-            bool generatingDisk = useAim && ((k == 1) == useFocus);
-            if (t <= 0 || (!generatingDisk && dot(hitP, hitP) > radius * radius)) continue;
-            pdfW += mix * t * t / (abs(dn) * kPi * radius * radius);
-        }
-        pdfW = aimShare * pdfW + (1 - aimShare) * cosS * kInvPi;
+        // (The generating disc is known to contain its own sample: see diskAimPdf.)
+        float pdfW = (1 - share) * diskAimPdf(p, dir, G.aimCenter.xyz, aimN, G.sensorSize.z, useAim && !useFocus);
+        if (share > 0) pdfW += share * diskAimPdf(p, dir, G.focusCenter.xyz, aimN, G.sensorSize.w, useAim && useFocus);
+        pdfW = aimShare * pdfW + (1 - aimShare) * cosS * InvPi;
         if (!(pdfW > 0)) return false;
         weight = cosS / pdfW;
     } else {
@@ -111,7 +98,7 @@ bool generateRay(float px, float py, inout Rng rng, out float3 o, out float3 d, 
         float u2 = rng.uniform();
         float u1 = rng.uniform();
         dir = f.toWorld(sampleCosineHemisphere(u1, u2));
-        weight = kPi;
+        weight = Pi;
     }
     o = p;  // startPath retains the sensor boundary and processes contacts before any offset
     d = dir;

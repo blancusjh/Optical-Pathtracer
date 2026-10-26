@@ -8,9 +8,10 @@
 #include <string>
 #include <vector>
 
-#include "owe/scene/bvh.hpp"
 #include "owe/core/math.hpp"
 #include "owe/core/sampling.hpp"
+#include "owe/core/shared/surfaces.hpp"
+#include "owe/scene/bvh.hpp"
 
 namespace owe {
 
@@ -68,8 +69,6 @@ public:
     bool canSample() const override { return isFlat(); }
     double area() const override { return Pi * (rMax_ * rMax_ - rMin_ * rMin_); }
     void sampleArea(double u1, double u2, double u3, Vec3& p, Vec3& n) const override;
-
-    double clearSemiDiameter = 0;  // annotation only (0 = unspecified)
 
 private:
     bool intersectQuadric(const Ray& r, double tmin, double tmax, LocalHit& h) const;
@@ -145,7 +144,8 @@ private:
 // Plane z = 0 trimmed by an aperture. Normal +z.
 class PlaneShape : public Shape {
 public:
-    enum class Aperture { Disk, Rect, Ellipse, DiskHole };
+    enum class Aperture { Disk, Rect, Ellipse, DiskHole };  // the order of shared/surfaces.hpp's kAp*
+    PlaneShape(Aperture ap, double a, double b, double hx = 0, double hy = 0) : ap_(ap), a_(a), b_(b), hx_(hx), hy_(hy) {}
     static std::shared_ptr<PlaneShape> disk(double rMax, double rMin = 0);
     // Disk of radius rMax with a circular hole of radius holeR centred at (hx, hy).
     static std::shared_ptr<PlaneShape> diskWithHole(double rMax, double holeR, double hx, double hy);

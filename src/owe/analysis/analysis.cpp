@@ -8,6 +8,22 @@ namespace owe {
 
 namespace {
 
+// Where a ray of direction d through point (x, y) of the entrance pupil plane (at zEP) starts, at zStart.
+Vec3 launchOrigin(double zEP, double x, double y, const Vec3& d, double zStart) {
+    Vec3 P{x, y, zEP};
+    return P + d * ((zStart - zEP) / d.z);
+}
+
+// The direction of a field angle (degrees) in the meridional (y, z) plane.
+Vec3 fieldDirection(double deg) { return {0, std::sin(radians(deg)), std::cos(radians(deg))}; }
+
+// A prescription as matter in a world of its own (blackened rims, no tube), built.
+BuiltInstrument buildLensWorld(const Prescription& p, World& w) {
+    BuiltInstrument bi = buildPrescription(w, p, "lens", -1, Transform{}, 0.0, catalogIndex(), LensSpec::Rim::Black);
+    w.build();
+    return bi;
+}
+
 struct LensWorld {
     Scene scene;
     BuiltInstrument bi;
@@ -15,8 +31,7 @@ struct LensWorld {
 };
 
 void makeLensWorld(const Prescription& p, LensWorld& lw) {
-    lw.bi = buildPrescription(lw.scene.world, p, "lens", -1, Transform{}, 0.0, catalogIndex(), LensSpec::Rim::Black);
-    lw.scene.world.build();
+    lw.bi = buildLensWorld(p, lw.scene.world);
     lw.surfaces = 0;
     lw.mirrors = 0;
     for (size_t i = 0; i < p.surfaces.size(); ++i) {
@@ -51,10 +66,6 @@ TracedRay traceThrough(const LensWorld& lw, const Vec3& origin, const Vec3& dir,
     return r;
 }
 
-Vec3 launchOrigin(double zEP, double x, double y, const Vec3& d, double zStart) {
-    Vec3 P{x, y, zEP};
-    return P + d * ((zStart - zEP) / d.z);
-}
 
 }  // namespace
 
@@ -74,7 +85,7 @@ LensReport analyzeLens(const Prescription& p, const std::vector<double>& fields,
             SpotResult s;
             s.lambda = lambda;
             s.fieldDeg = f;
-            Vec3 d{0, std::sin(radians(f)), std::cos(radians(f))};
+            const Vec3 d = fieldDirection(f);
             std::vector<TracedRay> rays;
             for (int k = 0; k <= rings; ++k) {
                 int n = k == 0 ? 1 : 6 * k;
@@ -115,21 +126,18 @@ LensReport analyzeLens(const Prescription& p, const std::vector<double>& fields,
                     varb += sqr(B[i].x - mb.x) + sqr(B[i].y - mb.y);
                 }
                 double zBest = varb > 0 ? -cov / varb : zImg;
-                auto rmsAt = [&](double z, double* cy, std::vector<Vec2>* pts) {
+                // The spot's RMS radius in the plane z (and its centroid's height).
+                auto rmsAt = [&](double z, double* cy) {
                     Vec2 c{};
-                    for (size_t i = 0; i < rays.size(); ++i) { c.x += (A[i].x + B[i].x * z) / n; c.y += (A[i].y + B[i].y * z) / n; }
+                    for (size_t i = 0; i < rays.size(); ++i) c += (A[i] + B[i] * z) / n;
                     double v = 0;
-                    for (size_t i = 0; i < rays.size(); ++i) {
-                        double dx = A[i].x + B[i].x * z - c.x, dy = A[i].y + B[i].y * z - c.y;
-                        v += dx * dx + dy * dy;
-                        if (pts) pts->push_back({dx, dy});
-                    }
+                    for (size_t i = 0; i < rays.size(); ++i) v += dot(A[i] + B[i] * z - c, A[i] + B[i] * z - c);
                     if (cy) *cy = c.y;
                     return std::sqrt(v / n);
                 };
                 s.bestFocusZ = zBest - lw.bi.lastVertexZ;
-                s.rmsBest = rmsAt(zBest, nullptr, nullptr);
-                s.rmsParaxial = rmsAt(zImg, &s.centroidY, &s.spot);
+                s.rmsBest = rmsAt(zBest, nullptr);
+                s.rmsParaxial = rmsAt(zImg, &s.centroidY);
             }
             rep.spots.push_back(s);
         }
@@ -161,7 +169,7 @@ LensReport analyzeLens(const Prescription& p, const std::vector<double>& fields,
     if (!px.afocal)
         for (double f : fields) {
             if (f == 0) continue;
-            Vec3 d{0, std::sin(radians(f)), std::cos(radians(f))};
+            const Vec3 d = fieldDirection(f);
             TracedRay t = traceThrough(lw, launchOrigin(px.entrancePupilZ, 0, 0, d, zStart), d, l0);
             if (!t.ok) continue;
             double yReal = t.p.y + t.d.y / t.d.z * (zImg - t.p.z);
@@ -238,19 +246,16 @@ std::string LensReport::text() const {
 }
 
 std::vector<PathRecord> lensFan(const Prescription& p, double fieldDeg, double lambda, int rays, Scene& sceneOut) {
-    BuiltInstrument bi = buildPrescription(sceneOut.world, p, "lens", -1, Transform{}, 0.0, catalogIndex(), LensSpec::Rim::Black);
-    sceneOut.world.build();
+    BuiltInstrument bi = buildLensWorld(p, sceneOut.world);
     const Paraxial& px = bi.paraxial;
     double zStart = -0.02 - 0.1 * px.length;
-    Vec3 d{0, std::sin(radians(fieldDeg)), std::cos(radians(fieldDeg))};
+    const Vec3 d = fieldDirection(fieldDeg);
     Tracer tr(sceneOut);
     std::vector<PathRecord> out;
     for (int i = 0; i < rays; ++i) {
         double y = px.entrancePupilRadius * (rays == 1 ? 0.0 : (2.0 * i / (rays - 1) - 1)) * 0.999;
         Rng rng(7, uint64_t(i));
-        Vec3 P{0, y, px.entrancePupilZ};
-        Vec3 o = P + d * ((zStart - px.entrancePupilZ) / d.z);
-        PathRecord rec = tr.walk(Ray{o, d}, sceneOut.world.ambientRegion(), lambda, WalkMode::PrimaryTransmission, rng, 64);
+        PathRecord rec = tr.walk(Ray{launchOrigin(px.entrancePupilZ, 0, y, d, zStart), d}, sceneOut.world.ambientRegion(), lambda, WalkMode::PrimaryTransmission, rng, 64);
         // Clip escaping segments at a sensible distance behind the lens.
         if (rec.v.size() >= 2 && rec.v.back().event == EventKind::Escape) {
             const PathVertex& last = rec.v[rec.v.size() - 2];

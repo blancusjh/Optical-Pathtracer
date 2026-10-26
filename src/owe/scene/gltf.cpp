@@ -42,16 +42,6 @@ std::string textureImage(const cgltf_texture* t, const std::filesystem::path& di
     return (dir / uri).lexically_normal().string();
 }
 
-std::string baseColorImage(const cgltf_material& m, const std::filesystem::path& dir) {
-    if (!m.has_pbr_metallic_roughness) return {};
-    const cgltf_texture* t = m.pbr_metallic_roughness.base_color_texture.texture;
-    if (!t || !t->image || !t->image->uri || std::strncmp(t->image->uri, "data:", 5) == 0) return {};
-    std::string uri = t->image->uri;
-    cgltf_decode_uri(uri.data());
-    uri.resize(std::strlen(uri.c_str()));
-    return (dir / uri).lexically_normal().string();
-}
-
 }  // namespace
 
 MeshData loadGltf(const std::string& path, double scale) {
@@ -68,10 +58,10 @@ MeshData loadGltf(const std::string& path, double scale) {
     for (size_t i = 0; i < raw->materials_count; ++i) {
         const cgltf_material& mat = raw->materials[i];
         m.partNames.push_back(mat.name && *mat.name ? mat.name : "material" + std::to_string(i));
-        m.partImages.push_back(baseColorImage(mat, dir));
+        const cgltf_pbr_metallic_roughness* pbr = mat.has_pbr_metallic_roughness ? &mat.pbr_metallic_roughness : nullptr;
+        m.partImages.push_back(pbr ? textureImage(pbr->base_color_texture.texture, dir) : "");
         m.partNormalImages.push_back(textureImage(mat.normal_texture.texture, dir));
-        m.partRoughnessImages.push_back(
-            mat.has_pbr_metallic_roughness ? textureImage(mat.pbr_metallic_roughness.metallic_roughness_texture.texture, dir) : "");
+        m.partRoughnessImages.push_back(pbr ? textureImage(pbr->metallic_roughness_texture.texture, dir) : "");
     }
     const uint32_t unnamed = uint32_t(raw->materials_count);  // primitives without a material
     bool anyNormals = false, anyUvs = false, anyUnnamed = false;
@@ -96,29 +86,26 @@ MeshData loadGltf(const std::string& path, double scale) {
         const size_t nv = pos->count;
         // Column-major M; glTF's y-up turned to z-up: (x, y, z) → (x, −z, y). Normals transform
         // by the cofactor matrix (the inverse transpose up to the determinant's scale).
-        const double a00 = M[0], a01 = M[4], a02 = M[8], a10 = M[1], a11 = M[5], a12 = M[9], a20 = M[2], a21 = M[6],
-                     a22 = M[10];
-        const double det = a00 * (a11 * a22 - a12 * a21) - a01 * (a10 * a22 - a12 * a20) + a02 * (a10 * a21 - a11 * a20);
+        const double rows[3][3] = {{M[0], M[4], M[8]}, {M[1], M[5], M[9]}, {M[2], M[6], M[10]}};
+        const Mat3 A = Mat3::fromRows(rows);
+        const bool mirrored = A.determinant() < 0;
         auto zUp = [](double x, double y, double z) { return Vec3(x, -z, y); };
         const size_t base = m.positions.size(), nbase = m.normals.size();
         buf.resize(nv * 3);
         cgltf_accessor_unpack_floats(pos, buf.data(), nv * 3);
         for (size_t k = 0; k < nv; ++k) {
             const double x = buf[3 * k], y = buf[3 * k + 1], z = buf[3 * k + 2];
-            m.positions.push_back(zUp(a00 * x + a01 * y + a02 * z + M[12], a10 * x + a11 * y + a12 * z + M[13],
-                                      a20 * x + a21 * y + a22 * z + M[14]) *
-                                  scale);
+            const Vec3 p = A * Vec3(x, y, z) + Vec3(M[12], M[13], M[14]);
+            m.positions.push_back(zUp(p.x, p.y, p.z) * scale);
         }
         if (nrm && nrm->count == nv) {
             anyNormals = true;
             cgltf_accessor_unpack_floats(nrm, buf.data(), nv * 3);
-            const double c00 = a11 * a22 - a12 * a21, c01 = a12 * a20 - a10 * a22, c02 = a10 * a21 - a11 * a20,
-                         c10 = a02 * a21 - a01 * a22, c11 = a00 * a22 - a02 * a20, c12 = a01 * a20 - a00 * a21,
-                         c20 = a01 * a12 - a02 * a11, c21 = a02 * a10 - a00 * a12, c22 = a00 * a11 - a01 * a10;
-            const double s = det < 0 ? -1 : 1;
+            const Mat3 C = A.cofactor();
+            const double s = mirrored ? -1 : 1;
             for (size_t k = 0; k < nv; ++k) {
-                const double x = buf[3 * k], y = buf[3 * k + 1], z = buf[3 * k + 2];
-                Vec3 n = zUp(c00 * x + c10 * y + c20 * z, c01 * x + c11 * y + c21 * z, c02 * x + c12 * y + c22 * z) * s;
+                const Vec3 c = C * Vec3(buf[3 * k], buf[3 * k + 1], buf[3 * k + 2]);
+                const Vec3 n = zUp(c.x, c.y, c.z) * s;
                 const double l = length(n);
                 m.normals.push_back(l > 0 ? n / l : Vec3());
             }
@@ -141,7 +128,7 @@ MeshData loadGltf(const std::string& path, double scale) {
         for (size_t t = 0; t + 2 < ni; t += 3) {
             // A mirroring transform reverses the winding; restore counter-clockwise fronts.
             std::array<uint32_t, 3> c{idx[t], idx[t + 1], idx[t + 2]};
-            if (det < 0) std::swap(c[1], c[2]);
+            if (mirrored) std::swap(c[1], c[2]);
             for (uint32_t v : c)
                 if (v >= nv) throw std::runtime_error("glTF index out of range in " + path);
             m.triangles.push_back({uint32_t(base + c[0]), uint32_t(base + c[1]), uint32_t(base + c[2])});

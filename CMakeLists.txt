@@ -26,6 +26,8 @@ add_library(owe_engine STATIC
   src/owe/core/medium.cpp
   src/owe/scene/bvh.cpp
   src/owe/scene/geometry.cpp
+  src/owe/scene/mesh.cpp
+  src/owe/scene/obj.cpp
   src/owe/scene/gltf.cpp
   src/owe/scene/world.cpp
   src/owe/scene/detector.cpp
@@ -38,6 +40,9 @@ add_library(owe_engine STATIC
   src/owe/analysis/inspect.cpp
   src/owe/loader/scene_parser.cpp
   src/owe/loader/scene_loader.cpp
+  src/owe/loader/loader_bodies.cpp
+  src/owe/loader/loader_detectors.cpp
+  src/owe/loader/loader_materials.cpp
   src/owe/render/exposure.cpp
   src/owe/render/output.cpp
   src/owe/render/record.cpp

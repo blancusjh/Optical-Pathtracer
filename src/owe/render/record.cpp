@@ -1,10 +1,14 @@
 #include "owe/render/record.hpp"
 
 #include <cstdio>
+#include <cstring>
+#include <fstream>
 #include <iomanip>
 #include <sstream>
 
+#include "owe/core/json.hpp"
 #include "owe/core/version.hpp"
+#include "owe/render/exposure.hpp"
 #include "owe/render/output.hpp"
 
 namespace owe {
@@ -15,18 +19,6 @@ uint64_t fnv1a(const std::string& s) {
     return h;
 }
 
-namespace {
-std::string jsonEscape(const std::string& s) {
-    std::string r;
-    for (char c : s) {
-        if (c == '"' || c == '\\') { r += '\\'; r += c; }
-        else if (c == '\n') r += "\\n";
-        else if ((unsigned char)c < 0x20) { char buf[8]; std::snprintf(buf, sizeof buf, "\\u%04x", c); r += buf; }
-        else r += c;
-    }
-    return r;
-}
-}  // namespace
 
 std::string renderMetadataJSON(const Scene& scene, const Renderer& r, const RenderSettings& s, const Image& img) {
     const World& w = scene.world;
@@ -39,8 +31,8 @@ std::string renderMetadataJSON(const Scene& scene, const Renderer& r, const Rend
     os << "  \"scene\": {\"path\": \"" << jsonEscape(scene.sourcePath) << "\", \"fnv1a64\": \"" << hash << "\", \"edits\": [";
     for (size_t i = 0; i < scene.edits.size(); ++i) os << (i ? ", " : "") << "\"" << jsonEscape(scene.edits[i]) << "\"";
     os << "]},\n";
-    auto note = scene.notes.find(r.detector().name);
-    if (note != scene.notes.end()) os << "  \"camera\": \"" << jsonEscape(note->second) << "\",\n";
+    if (const std::string note = scene.noteFor(r.detector().name); !note.empty())
+        os << "  \"camera\": \"" << jsonEscape(note) << "\",\n";
     os << "  \"detector\": {\"name\": \"" << jsonEscape(r.detector().name) << "\", \"description\": \""
        << jsonEscape(r.detector().describe()) << "\", \"quantity\": \""
        << (r.detector().quantity() == Detector::Quantity::Radiance ? "radiance [W m^-2 sr^-1] as CIE XYZ"
@@ -89,7 +81,7 @@ std::string renderMetadataJSON(const Scene& scene, const Renderer& r, const Rend
     os << "  \"passes\": " << r.passes() << ",\n";
     os << "  \"max_depth\": " << s.maxDepth << ",\n";
     os << "  \"display\": {\"exposure_ev\": " << s.exposure << ", \"auto_exposure\": " << (s.autoExposure ? "true" : "false")
-       << ", \"auto_gain_ev\": " << (s.autoExposure ? autoExposureEV(img) : 0)
+       << ", \"auto_gain_ev\": " << (s.autoExposure ? meterEV(img) : 0)
        << ", \"white_balance_kelvin\": " << s.whiteBalance << ", \"tone\": \"" << s.tone << "\"},\n";
     os << "  \"render_seconds\": " << r.seconds() << ",\n";
     os << "  \"statistics\": {\"paths\": " << r.stats().paths << ", \"segments\": " << r.stats().segments
@@ -113,6 +105,34 @@ std::string renderMetadataJSON(const Scene& scene, const Renderer& r, const Rend
        << ", \"bodies\": " << w.bodies().size() << ", \"assemblies\": " << w.assemblies().size() << "}\n";
     os << "}\n";
     return os.str();
+}
+
+void writeRenderFiles(const std::string& prefix, const Scene& scene, const Renderer& r, const RenderSettings& s,
+                      const Image& img) {
+    writePNG(prefix + ".png", img, s.exposure, s.autoExposure, s.whiteBalance, toneFromName(s.tone));
+    writePFM(prefix + ".pfm", img);
+    std::ofstream(prefix + ".json") << renderMetadataJSON(scene, r, s, img);
+}
+
+bool readDisplaySettings(const std::string& recordPath, RenderSettings& s) {
+    std::ifstream in(recordPath);
+    if (!in) return false;
+    std::stringstream ss;
+    ss << in.rdbuf();
+    const std::string j = ss.str();
+    // The keys renderMetadataJSON writes in its "display" object, each once in the record.
+    auto value = [&](const char* key) -> std::string {
+        auto p = j.find(std::string("\"") + key + "\": ");
+        if (p == std::string::npos) return {};
+        p += std::strlen(key) + 4;
+        if (j[p] == '"') return j.substr(p + 1, j.find('"', p + 1) - p - 1);
+        return j.substr(p, j.find_first_of(",}\n", p) - p);
+    };
+    if (auto v = value("exposure_ev"); !v.empty()) s.exposure = std::stod(v);
+    if (auto v = value("white_balance_kelvin"); !v.empty()) s.whiteBalance = std::stod(v);
+    if (auto v = value("auto_exposure"); !v.empty()) s.autoExposure = v == "true";
+    if (auto v = value("tone"); !v.empty()) s.tone = v;
+    return true;
 }
 
 }  // namespace owe

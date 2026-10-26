@@ -56,7 +56,8 @@ message(STATUS "slangc: ${OWE_SLANGC}")
 
 # owe_add_kernel(<target> <entry .slang> <symbol> [RAY_QUERY]): compiles a compute kernel to SPIR-V
 # and embeds it in the target as `const unsigned char <symbol>[]` / `<symbol>_size` (in bytes).
-# Modules are looked up next to the entry point (the backend's shaders/ directory). RAY_QUERY builds
+# Modules are looked up next to the entry point (the backend's shaders/ directory) and, for the
+# formulas shared with the C++ reference, under src/ (owe/core/shared). RAY_QUERY builds
 # the variant that traverses with VK_KHR_ray_query (used where the device has ray-tracing hardware).
 function(owe_add_kernel target source symbol)
   get_filename_component(_dir ${source} DIRECTORY)
@@ -69,7 +70,7 @@ function(owe_add_kernel target source symbol)
     set(_depfile_args DEPFILE ${_spv}.d)
   else()
     # Preserve the CMake 3.20 IDE-generator build; newer generators use actual includes.
-    file(GLOB _includes CONFIGURE_DEPENDS ${_dir}/*.slang ${_dir}/../*.inc)
+    file(GLOB _includes CONFIGURE_DEPENDS ${_dir}/*.slang ${_dir}/../*.inc ${CMAKE_SOURCE_DIR}/src/owe/core/shared/*.hpp)
     list(APPEND _deps ${_includes})
   endif()
   set(_flags -profile spirv_1_3)
@@ -79,7 +80,7 @@ function(owe_add_kernel target source symbol)
   add_custom_command(
     OUTPUT ${_spv}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/shaders
-    COMMAND ${OWE_SLANGC} ${source} -I ${_dir} -target spirv ${_flags}
+    COMMAND ${OWE_SLANGC} ${source} -I ${_dir} -I ${CMAKE_SOURCE_DIR}/src -target spirv ${_flags}
             -entry main -stage compute -O3 -warnings-disable 41035 -o ${_spv} -depfile ${_spv}.d
     DEPENDS ${_deps}
     ${_depfile_args}

@@ -28,9 +28,8 @@ VkAabbPositionsKHR localBox(const Shape& shape) {
         mag = std::max({mag, std::abs(lo[a]), std::abs(hi[a])});
     }
     const double pad = 1e-3 * size + 1e-6 * mag + 1e-9;
-    auto down = [](double x) { float f = float(x); return double(f) > x ? std::nextafter(f, -INFINITY) : f; };
-    auto up = [](double x) { float f = float(x); return double(f) < x ? std::nextafter(f, INFINITY) : f; };
-    return {down(lo[0] - pad), down(lo[1] - pad), down(lo[2] - pad), up(hi[0] + pad), up(hi[1] + pad), up(hi[2] + pad)};
+    return {roundDown(lo[0] - pad), roundDown(lo[1] - pad), roundDown(lo[2] - pad),
+            roundUp(hi[0] + pad),   roundUp(hi[1] + pad),   roundUp(hi[2] + pad)};
 }
 
 VkAccelerationStructureBuildSizesInfoKHR buildSizes(VkDevice dev, const VkAccelerationStructureBuildGeometryInfoKHR& info,
@@ -44,14 +43,11 @@ VkAccelerationStructureBuildSizesInfoKHR buildSizes(VkDevice dev, const VkAccele
 // Serialises acceleration-structure builds (and their scratch memory) against each other, and
 // makes their results visible to later builds and to the kernels.
 void accelBarrier(VkCommandBuffer cmd) {
-    VkMemoryBarrier mb{};
-    mb.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-    mb.srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_TRANSFER_WRITE_BIT;
-    mb.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR |
-                       VK_ACCESS_SHADER_READ_BIT;
-    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR | VK_PIPELINE_STAGE_TRANSFER_BIT,
-                         VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1,
-                         &mb, 0, nullptr, 0, nullptr);
+    memoryBarrier(cmd, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR | VK_PIPELINE_STAGE_TRANSFER_BIT,
+                  VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_TRANSFER_WRITE_BIT,
+                  VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                  VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR |
+                      VK_ACCESS_SHADER_READ_BIT);
 }
 
 VkDeviceSize alignUp(VkDeviceSize x, VkDeviceSize a) { return (x + a - 1) / a * a; }

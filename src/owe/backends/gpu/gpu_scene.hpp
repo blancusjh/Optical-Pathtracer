@@ -10,8 +10,10 @@
 // tracer (IEEE double) remains the reference against which this backend is validated.
 #pragma once
 
+#include <cmath>
 #include <cstdint>
 #include <cstddef>
+#include <cstring>
 #include <memory>
 #include <string>
 #include <vector>
@@ -19,6 +21,26 @@
 #include "owe/scene/scene.hpp"
 
 namespace owe::gpu {
+
+// Doubles rounded to float outward (boxes stay conservative), and floats' bits.
+inline float roundDown(double x) {
+    float f = float(x);
+    return double(f) > x ? std::nextafter(f, -INFINITY) : f;
+}
+inline float roundUp(double x) {
+    float f = float(x);
+    return double(f) < x ? std::nextafter(f, INFINITY) : f;
+}
+inline float bitsAsFloat(uint32_t u) {
+    float f;
+    std::memcpy(&f, &u, 4);
+    return f;
+}
+inline uint32_t floatBits(float f) {
+    uint32_t u;
+    std::memcpy(&u, &f, 4);
+    return u;
+}
 
 // Keep every enum and struct below in sync with shaders/scene.slang.
 enum ShapeKind : uint32_t {
@@ -195,7 +217,6 @@ struct GpuScene {
     Vec3 origin;                       // world position of the camera-relative origin
     double emittedPower = 0;           // sky + lights: particles have something to carry when > 0
     std::vector<std::string> notes;    // approximations made (e.g. features not yet on the GPU)
-    size_t bytes() const;
 };
 
 // Flattens the scene as seen from detector `detectorIndex`. Throws if the scene uses a feature

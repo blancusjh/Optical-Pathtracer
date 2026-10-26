@@ -5,6 +5,9 @@
 #include <map>
 #include <stdexcept>
 
+#include "owe/core/units.hpp"
+#include "owe/core/vector.hpp"
+
 namespace owe {
 
 ValuePtr Value::get(const std::string& key) const {
@@ -27,13 +30,12 @@ struct UnitDef {
     double scale;
 };
 const std::map<std::string, UnitDef>& units() {
-    static const std::map<std::string, UnitDef> u = {
-        {"m", {Value::Unit::Length, 1}},        {"cm", {Value::Unit::Length, 1e-2}},
-        {"mm", {Value::Unit::Length, 1e-3}},    {"um", {Value::Unit::Length, 1e-6}},
-        {"nm", {Value::Unit::Length, 1e-9}},    {"km", {Value::Unit::Length, 1e3}},
-        {"in", {Value::Unit::Length, 0.0254}},  {"deg", {Value::Unit::Angle, 3.14159265358979323846 / 180}},
-        {"rad", {Value::Unit::Angle, 1}},       {"K", {Value::Unit::Temperature, 1}},
-    };
+    static const std::map<std::string, UnitDef> u = [] {
+        std::map<std::string, UnitDef> m = {
+            {"deg", {Value::Unit::Angle, radians(1)}}, {"rad", {Value::Unit::Angle, 1}}, {"K", {Value::Unit::Temperature, 1}}};
+        for (const char* l : {"m", "cm", "mm", "um", "nm", "km", "in"}) m[l] = {Value::Unit::Length, lengthUnitMetres(l)};
+        return m;
+    }();
     return u;
 }
 

@@ -1,7 +1,7 @@
 // Interface optics against closed-form results.
 #include "check.hpp"
 #include "owe/core/medium.hpp"
-#include "owe/transport/optics.hpp"
+#include "owe/core/shared/optics.hpp"
 #include "owe/transport/scattering.hpp"
 #include "owe/core/spectrum.hpp"
 
@@ -148,7 +148,6 @@ TEST(spectral_sampling_and_colorimetry) {
 TEST(ggx_distribution_normalised) {
     // Integrate in s = tanθ/α (θ = atan(α s)), mapped from [0,1) by s = y/(1−y), so the peak is resolved.
     for (double a : {0.05, 0.2, 0.6}) {
-        GGX mf(a);
         auto theta = [&](double y, double& jac) {
             double sv = y / (1 - y), ds = 1 / sqr(1 - y);
             double th = std::atan(a * sv);
@@ -159,7 +158,7 @@ TEST(ggx_distribution_normalised) {
         int N = 200000;
         for (int i = 0; i < N; ++i) {
             double jac, th = theta((i + 0.5) / N, jac);
-            s += mf.D({std::sin(th), 0, std::cos(th)}) * std::cos(th) * std::sin(th) * 2 * Pi * jac / N;
+            s += ggxD(a, {std::sin(th), 0, std::cos(th)}) * std::cos(th) * std::sin(th) * 2 * Pi * jac / N;
         }
         CHECK_NEAR(s, 1.0, 1e-4);
         // ∫ D_wo(m) dω = 1 over front-facing microfacets (wo·m > 0) for the distribution of visible normals.
@@ -172,7 +171,7 @@ TEST(ggx_distribution_normalised) {
                 double phi = 2 * Pi * (j + 0.5) / P;
                 Vec3 m{std::sin(th) * std::cos(phi), std::sin(th) * std::sin(phi), std::cos(th)};
                 if (dot(wo, m) <= 0) continue;
-                v += mf.D(wo, m) * std::sin(th) * jac / M * (2 * Pi / P);
+                v += ggxPdf(a, wo, m) * std::sin(th) * jac / M * (2 * Pi / P);
             }
         }
         CHECK_NEAR(v, 1.0, 2e-3);

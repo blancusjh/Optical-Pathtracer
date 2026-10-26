@@ -8,12 +8,8 @@ Image GpuRenderer::resolve() const {
     img.height = H_;
     ctx_->submit([&](VkCommandBuffer cmd) {
         computeBarrier(cmd, true);
-        VkBufferCopy copy{0, 0, filmReadback_.size};
-        vkCmdCopyBuffer(cmd, buffers_[kFilm].buffer, filmReadback_.buffer, 1, &copy);
-        if (sppm_) {
-            VkBufferCopy state{0, 0, sppmReadback_.size};
-            vkCmdCopyBuffer(cmd, buffers_[kSppmState].buffer, sppmReadback_.buffer, 1, &state);
-        }
+        copyBuffer(cmd, buffers_[kFilm], filmReadback_, filmReadback_.size);
+        if (sppm_) copyBuffer(cmd, buffers_[kSppmState], sppmReadback_, sppmReadback_.size);
     }, "resolve film");
     img.xyz.resize(size_t(W_) * H_ * 3);
     const FilmPixel* film = static_cast<const FilmPixel*>(filmReadback_.mapped);
@@ -56,22 +52,16 @@ void GpuRenderer::readFirstInconsistency(TransportStats& st) const {
                 Vec3(p[0], p[1], p[2]) + gs_.origin};
 }
 
-void GpuRenderer::clearFilm() {
-    ctx_->submit([&](VkCommandBuffer cmd) {
-        vkCmdFillBuffer(cmd, buffers_[kFilm].buffer, 0, VK_WHOLE_SIZE, 0);
-        transferToCompute(cmd);
-    });
-}
+void GpuRenderer::clearFilm() { zeroBuffers({kFilm}); }
 
 void GpuRenderer::accumulateFilm(bool camera, bool light) {
     PushConstants pc = push(0);
     pc.flags = (camera ? 1u : 0u) | (light ? 2u : 0u);
     ctx_->submit([&](VkCommandBuffer cmd) {
         computeBarrier(cmd);
-        filmKernel_->dispatch(cmd, &pc, (uint32_t(W_) * uint32_t(H_) + 255) / 256, 1);
+        filmKernel_->dispatch(cmd, &pc, groups(uint64_t(W_) * uint64_t(H_), 256), 1);
         computeBarrier(cmd, true);
-        VkBufferCopy counters{0, 0, counterReadback_.size};
-        vkCmdCopyBuffer(cmd, buffers_[kCounters].buffer, counterReadback_.buffer, 1, &counters);
+        copyBuffer(cmd, buffers_[kCounters], counterReadback_, counterReadback_.size);
     }, "accumulate film and read diagnostics");
 }
 

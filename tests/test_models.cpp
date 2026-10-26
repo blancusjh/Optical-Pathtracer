@@ -55,6 +55,24 @@ std::string quadGltf(const std::string& image, const std::string& node) {
            R"({"bufferView":2,"componentType":5123,"count":6,"type":"SCALAR"}]})";
 }
 
+// The same square with per-vertex normals (glTF's +z, its front) and no material.
+std::string normalQuadGltf(const std::string& node) {
+    const float pos[12] = {-0.5f, 0, 0, 0.5f, 0, 0, 0.5f, 1, 0, -0.5f, 1, 0};
+    const float nrm[12] = {0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1};
+    const uint16_t idx[6] = {0, 1, 2, 0, 2, 3};
+    std::string bin(reinterpret_cast<const char*>(pos), sizeof pos);
+    bin += std::string(reinterpret_cast<const char*>(nrm), sizeof nrm);
+    bin += std::string(reinterpret_cast<const char*>(idx), sizeof idx);
+    return R"({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0)" + node +
+           R"(}],"meshes":[{"primitives":[{"attributes":{"POSITION":0,"NORMAL":1},"indices":2}]}],)"
+           R"("buffers":[{"byteLength":108,"uri":"data:application/octet-stream;base64,)" + base64(bin) + R"("}],)"
+           R"("bufferViews":[{"buffer":0,"byteOffset":0,"byteLength":48},{"buffer":0,"byteOffset":48,"byteLength":48},)"
+           R"({"buffer":0,"byteOffset":96,"byteLength":12}],)"
+           R"("accessors":[{"bufferView":0,"componentType":5126,"count":4,"type":"VEC3","min":[-0.5,0,0],"max":[0.5,1,0]},)"
+           R"({"bufferView":1,"componentType":5126,"count":4,"type":"VEC3"},)"
+           R"({"bufferView":2,"componentType":5123,"count":6,"type":"SCALAR"}]})";
+}
+
 fs::path writeTemp(const std::string& name, const std::string& text) {
     const fs::path p = fs::temp_directory_path() / name;
     std::ofstream(p, std::ios::binary) << text;
@@ -162,6 +180,21 @@ TEST(models_gltf_is_placed_z_up_with_parts_and_uvs) {
         threw = true;
     }
     CHECK(threw);
+}
+
+TEST(models_gltf_normals_follow_rotated_and_stretched_nodes) {
+    // Normals transform by the inverse transpose of the node's matrix: after a quarter turn about
+    // glTF's y and a stretch along x, every file normal still points along its face's front.
+    for (const char* node : {R"(,"rotation":[0,0.70710678,0,0.70710678],"scale":[2,1,1])",
+                             R"(,"rotation":[0.38268343,0,0,0.92387953],"scale":[1,3,-1])"}) {
+        const MeshData m = loadModel(writeTemp("owe_test_normal_quad.gltf", normalQuadGltf(node)).string());
+        CHECK(m.normals.size() == 4 && m.normalIndex.size() == 2);
+        for (size_t t = 0; t < m.triangles.size(); ++t) {
+            const auto& tri = m.triangles[t];
+            const Vec3 face = normalize(cross(m.positions[tri[1]] - m.positions[tri[0]], m.positions[tri[2]] - m.positions[tri[0]]));
+            for (uint32_t k : m.normalIndex[t]) CHECK(dot(m.normals[k], face) > 0.999);
+        }
+    }
 }
 
 TEST(models_gltf_texture_follows_its_uvs_on_the_gpu) {

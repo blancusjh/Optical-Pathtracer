@@ -1,14 +1,10 @@
+// Analytic shapes: optical sags, liquid waves, planes, spheres, cylinders, cones, torus patches,
+// round walls and domes. Their algebra is shared with the GPU kernels (core/shared/surfaces.hpp).
 #include "owe/scene/geometry.hpp"
 
-#include <charconv>
 #include <cstdio>
-#include <cstdlib>
-#include <fstream>
-#include <iterator>
 #include <sstream>
 #include <stdexcept>
-
-#include "owe/core/parallel.hpp"
 
 namespace owe {
 
@@ -22,61 +18,51 @@ void Shape::sampleArea(double, double, double, Vec3& p, Vec3& n) const {
 bool Shape::sampleFrom(const Vec3& ref, double u1, double u2, double u3, Vec3& p, Vec3& n, double& pdfW) const {
     if (!canSample() || area() <= 0) return false;
     sampleArea(u1, u2, u3, p, n);
-    Vec3 w = p - ref;
-    double d2 = lengthSq(w);
-    if (d2 <= 0) return false;
-    double cosL = std::abs(dot(n, w)) / std::sqrt(d2);
-    if (cosL <= 1e-12) return false;
-    pdfW = d2 / (cosL * area());
-    return true;
+    return areaToSolidAngle(ref, p, n, area(), pdfW);
 }
 
 double Shape::pdfFrom(const Vec3& ref, const Vec3& p, const Vec3& n) const {
-    if (!canSample() || area() <= 0) return 0;
-    Vec3 w = p - ref;
-    double d2 = lengthSq(w);
-    double cosL = std::abs(dot(n, w)) / std::sqrt(d2);
-    if (cosL <= 1e-12) return 0;
-    return d2 / (cosL * area());
+    double pdfW;
+    return canSample() && area() > 0 && areaToSolidAngle(ref, p, n, area(), pdfW) ? pdfW : 0;
 }
 
 namespace {
-// Numerically stable real roots of a t² + b t + c = 0, ascending. Returns count.
-int solveQuadratic(double a, double b, double c, double& t0, double& t1) {
-    if (std::abs(a) < 1e-300 || std::abs(a) < 1e-14 * std::abs(b)) {
-        if (b == 0) return 0;
-        t0 = t1 = -c / b;
-        return 1;
+
+// The first of a quadric's roots t0 ≤ t1 that, refined, lies in (tmin, tmax) and is accepted by
+// solid(p) (the shape's trim); fills h with that hit and its normal normal(p).
+template <class Solid, class Normal>
+bool firstRefinedHit(const Ray& r, const Quadric& q, double t0, double t1, double tmin, double tmax, Solid solid,
+                     Normal normal, LocalHit& h) {
+    for (double t : {t0, t1}) {
+        double tr;
+        if (!refinedRootIn(q, r.o, r.d, t, tmin, tmax, tr)) continue;
+        const Vec3 p = r.at(tr);
+        if (!solid(p)) continue;
+        h.t = tr;
+        h.p = p;
+        h.n = normal(p);
+        h.prim = 0;
+        return true;
     }
-    double disc = b * b - 4 * a * c;
-    if (disc < 0) return 0;
-    double s = std::sqrt(disc);
-    double q = -0.5 * (b + std::copysign(s, b));
-    t0 = q / a;
-    t1 = (q != 0) ? c / q : t0;
-    if (t0 > t1) std::swap(t0, t1);
-    return 2;
+    return false;
 }
-// Distant origins lose precision in the quadratic's coefficients (cancellation in c and in
-// the discriminant). Re-solving from the approximate hit point, where all quantities are
-// small, and adding the correction restores near-full precision at any distance.
-template <class Coeffs>
-double refineRoot(const Ray& r, double t, Coeffs coeffs) {
-    Vec3 o1 = r.at(t);
-    double A, B, C;
-    coeffs(o1, A, B, C);
-    double u0, u1;
-    int n = solveQuadratic(A, B, C, u0, u1);
-    if (n == 0) return t;
-    double du = std::abs(u0) < std::abs(u1) ? u0 : u1;
-    return std::abs(du) < 1e-6 * (1 + std::abs(t)) ? t + du : t;
+
+// Bisects a sign change of f in [lo, hi] (f(lo) = flo) to the precision's bracket width.
+template <class F>
+double bisect(F f, double lo, double hi, double flo, int steps = kBisectSteps) {
+    for (int it = 0; it < steps && hi - lo > kBisect * (1 + std::abs(hi)); ++it) {
+        const double mid = 0.5 * (lo + hi);
+        const double fm = f(mid);
+        if ((fm <= 0) == (flo <= 0)) {
+            lo = mid;
+            flo = fm;
+        } else {
+            hi = mid;
+        }
+    }
+    return 0.5 * (lo + hi);
 }
-// refineRoot moves a root by less than 1e-6 (1 + |t|): a root farther than that outside
-// (tmin, tmax) stays outside, so its refinement is skipped without changing any result.
-inline bool mayLieIn(double t, double tmin, double tmax) {
-    double m = 1e-6 * (1 + std::abs(t));
-    return !(t + m <= tmin || t - m >= tmax);
-}
+
 }  // namespace
 
 // ---------------------------------------------------------------- SagSurface
@@ -91,8 +77,7 @@ SagSurface::SagSurface(double curvature, double conic, std::vector<double> asphe
     zMax_ = -Inf;
     const int N = 512;
     for (int i = 0; i <= N; ++i) {
-        double r = rMin_ + (rMax_ - rMin_) * i / N;
-        double z = sag(r);
+        double z = sag(rMin_ + (rMax_ - rMin_) * i / N);
         zMin_ = std::min(zMin_, z);
         zMax_ = std::max(zMax_, z);
     }
@@ -104,27 +89,22 @@ SagSurface::SagSurface(double curvature, double conic, std::vector<double> asphe
 
 double SagSurface::sag(double r) const {
     double r2 = r * r;
-    double z = c_ * r2 / (1 + safeSqrt(1 - (1 + k_) * c_ * c_ * r2));
+    double z = conicSag(c_, k_, r2);
     double rp = r2 * r2;  // r^4
     for (double a : A_) { z += a * rp; rp *= r2; }
     return z;
 }
 
 double SagSurface::dsag(double r) const {
-    double r2 = r * r;
-    double root = safeSqrt(1 - (1 + k_) * c_ * c_ * r2);
-    double d = root > 0 ? c_ * r / root : (c_ != 0 ? Inf : 0);
-    double m = 4;
-    double rp = r2 * r;  // r^3
-    for (double a : A_) { d += a * m * rp; rp *= r2; m += 2; }
+    double d = conicSlope(c_, k_, r);
+    double m = 4, rp = r * r * r;
+    for (double a : A_) { d += a * m * rp; rp *= r * r; m += 2; }
     return d;
 }
 
 Vec3 SagSurface::normalAt(const Vec3& p) const {
     double r = std::sqrt(p.x * p.x + p.y * p.y);
-    if (r < 1e-300) return {0, 0, 1};
-    double s = dsag(r);
-    return normalize(Vec3(-s * p.x / r, -s * p.y / r, 1));
+    return sagNormal(p, r, dsag(r));
 }
 
 bool SagSurface::accept(const Vec3& p) const {
@@ -137,70 +117,27 @@ bool SagSurface::intersect(const Ray& r, double tmin, double tmax, LocalHit& h) 
 }
 
 bool SagSurface::intersectQuadric(const Ray& ray, double tmin, double tmax, LocalHit& h) const {
-    const Vec3& d = ray.d;
-    double t0, t1;
-    int n;
-    // c(x²+y²) + c(1+k) z² − 2z = 0
-    double ck = c_ * (1 + k_);
-    auto coeffs = [&](const Vec3& o, double& A, double& B, double& C) {
-        A = c_ * (d.x * d.x + d.y * d.y) + ck * d.z * d.z;
-        B = 2 * (c_ * (o.x * d.x + o.y * d.y) + ck * o.z * d.z - d.z);
-        C = c_ * (o.x * o.x + o.y * o.y) + ck * o.z * o.z - 2 * o.z;
-    };
-    if (c_ == 0) {
-        if (d.z == 0) return false;
-        t0 = t1 = -ray.o.z / d.z;
-        n = 1;
-    } else {
-        double A, B, C;
-        coeffs(ray.o, A, B, C);
-        n = solveQuadratic(A, B, C, t0, t1);
-    }
-    for (int i = 0; i < n; ++i) {
-        double t = i == 0 ? t0 : t1;
-        if (c_ != 0) {
-            if (!mayLieIn(t, tmin, tmax)) continue;
-            t = refineRoot(ray, t, coeffs);
-        }
-        if (t <= tmin || t >= tmax) continue;
-        Vec3 p = ray.at(t);
-        if (!accept(p)) continue;
-        if (c_ != 0 && (1 + k_) * c_ * p.z > 1 + 1e-12) continue;  // wrong sheet of the quadric
+    auto solid = [&](const Vec3& p) { return accept(p) && onConicSheet(c_, k_, p.z); };
+    auto normal = [&](const Vec3& p) { return normalAt(p); };
+    if (c_ == 0) {  // a plane: one exact root
+        if (ray.d.z == 0) return false;
+        const double t = -ray.o.z / ray.d.z;
+        if (t <= tmin || t >= tmax || !solid(ray.at(t))) return false;
         h.t = t;
-        h.p = p;
-        h.n = normalAt(p);
+        h.p = ray.at(t);
+        h.n = normal(h.p);
         h.prim = 0;
         return true;
     }
-    return false;
+    const Quadric q = makeQuadric(kQuadSag, c_, c_ * (1 + k_), 0);
+    double A, B, C, t0, t1;
+    quadricCoeffs(q, ray.o, ray.d, A, B, C);
+    return solveQuadratic(A, B, C, t0, t1) > 0 && firstRefinedHit(ray, q, t0, t1, tmin, tmax, solid, normal, h);
 }
 
 bool SagSurface::intersectNumeric(const Ray& ray, double tmin, double tmax, LocalHit& h) const {
-    const Vec3& o = ray.o;
-    const Vec3& d = ray.d;
     double ta = tmin, tb = tmax;
-    // Clip to the cylinder r ≤ rMax.
-    double a = d.x * d.x + d.y * d.y;
-    double b = 2 * (o.x * d.x + o.y * d.y);
-    double c = o.x * o.x + o.y * o.y - rMax_ * rMax_;
-    if (a < 1e-300) {
-        if (c > 0) return false;
-    } else {
-        double q0, q1;
-        if (solveQuadratic(a, b, c, q0, q1) < 2) return false;
-        ta = std::max(ta, q0);
-        tb = std::min(tb, q1);
-    }
-    // Clip to the slab zMin ≤ z ≤ zMax.
-    if (std::abs(d.z) < 1e-300) {
-        if (o.z < zMin_ || o.z > zMax_) return false;
-    } else {
-        double s0 = (zMin_ - o.z) / d.z, s1 = (zMax_ - o.z) / d.z;
-        if (s0 > s1) std::swap(s0, s1);
-        ta = std::max(ta, s0);
-        tb = std::min(tb, s1);
-    }
-    if (!(ta < tb)) return false;
+    if (!clipCylinder(ray.o, ray.d, rMax_, ta, tb) || !clipSlab(ray.o.z, ray.d.z, zMin_, zMax_, ta, tb)) return false;
     auto f = [&](double t) {
         Vec3 p = ray.at(t);
         return sag(std::sqrt(p.x * p.x + p.y * p.y)) - p.z;
@@ -212,13 +149,7 @@ bool SagSurface::intersectNumeric(const Ray& ray, double tmin, double tmax, Loca
         double fCur = f(tCur);
         if ((fPrev <= 0 && fCur >= 0) || (fPrev >= 0 && fCur <= 0)) {
             if (fPrev == 0 && tPrev <= tmin) { tPrev = tCur; fPrev = fCur; continue; }
-            double lo = tPrev, hi = tCur, flo = fPrev;
-            for (int it = 0; it < 80 && hi - lo > 1e-15 * (1 + std::abs(hi)); ++it) {
-                double mid = 0.5 * (lo + hi);
-                double fm = f(mid);
-                if ((fm <= 0) == (flo <= 0)) { lo = mid; flo = fm; } else { hi = mid; }
-            }
-            double t = 0.5 * (lo + hi);
+            double t = bisect(f, tPrev, tCur, fPrev);
             Vec3 p = ray.at(t);
             if (t > tmin && t < tmax && accept(p)) {
                 h.t = t;
@@ -234,25 +165,27 @@ bool SagSurface::intersectNumeric(const Ray& ray, double tmin, double tmax, Loca
     return false;
 }
 
-// ---------------------------------------------------------------- WaveSurface
-
-namespace {
-// Smoothstep taper of coordinate u toward the edge at ±half over `margin`, and its derivative.
-void waveTaper(double u, double half, double margin, double& w, double& dw) {
-    w = 1;
-    dw = 0;
-    if (!(margin > 0)) return;
-    const double e = half - std::abs(u);
-    if (e >= margin) return;
-    if (e <= 0) {
-        w = 0;
-        return;
-    }
-    const double t = e / margin;
-    w = t * t * (3 - 2 * t);
-    dw = -(u < 0 ? -1.0 : 1.0) * 6 * t * (1 - t) / margin;
+AABB SagSurface::bounds() const {
+    AABB b;
+    b.expand(Vec3(-rMax_, -rMax_, zMin_));
+    b.expand(Vec3(rMax_, rMax_, zMax_));
+    return b;
 }
-}  // namespace
+
+std::string SagSurface::describe() const {
+    std::ostringstream os;
+    os << "sag(R=" << (c_ == 0 ? std::string("inf") : std::to_string(1.0 / c_)) << ", k=" << k_;
+    for (size_t i = 0; i < A_.size(); ++i) os << ", A" << 4 + 2 * i << "=" << A_[i];
+    os << ", r=[" << rMin_ << "," << rMax_ << "])";
+    return os.str();
+}
+
+void SagSurface::sampleArea(double u1, double u2, double, Vec3& p, Vec3& n) const {
+    p = sampleAnnulus(rMin_, rMax_, u1, u2);
+    n = {0, 0, 1};
+}
+
+// ---------------------------------------------------------------- WaveSurface
 
 WaveSurface::WaveSurface(std::vector<PlaneWave> waves, double halfX, double halfY, double margin, double spacing)
     : waves_(std::move(waves)), hx_(halfX), hy_(halfY), margin_(std::max(0.0, std::min({margin, halfX, halfY}))) {
@@ -319,16 +252,9 @@ void WaveSurface::height(double x, double y, double& h, double& dhdx, double& dh
     // Bicubic Hermite patch of the cell containing (x, y).
     const double fx = (x + hx_) / dx_, fy = (y + hy_) / dy_;
     const int i = std::clamp(int(fx), 0, nx_ - 2), j = std::clamp(int(fy), 0, ny_ - 2);
-    const double u = fx - i, v = fy - j;
-    // Value (P) and slope (Q) bases at the cell's two ends, and their derivatives.
-    const double P[2] = {2 * u * u * u - 3 * u * u + 1, -2 * u * u * u + 3 * u * u};
-    const double Q[2] = {u * u * u - 2 * u * u + u, u * u * u - u * u};
-    const double dP[2] = {6 * u * u - 6 * u, -6 * u * u + 6 * u};
-    const double dQ[2] = {3 * u * u - 4 * u + 1, 3 * u * u - 2 * u};
-    const double Pv[2] = {2 * v * v * v - 3 * v * v + 1, -2 * v * v * v + 3 * v * v};
-    const double Qv[2] = {v * v * v - 2 * v * v + v, v * v * v - v * v};
-    const double dPv[2] = {6 * v * v - 6 * v, -6 * v * v + 6 * v};
-    const double dQv[2] = {3 * v * v - 4 * v + 1, 3 * v * v - 2 * v};
+    Vec2 P, Q, dP, dQ, Pv, Qv, dPv, dQv;
+    hermiteBases(fx - i, P, Q, dP, dQ);
+    hermiteBases(fy - j, Pv, Qv, dPv, dQv);
     double f = 0, fu = 0, fv = 0;
     for (int b = 0; b < 2; ++b)
         for (int a = 0; a < 2; ++a) {
@@ -350,23 +276,12 @@ Vec3 WaveSurface::normalAt(double x, double y) const {
 }
 
 bool WaveSurface::intersect(const Ray& ray, double tmin, double tmax, LocalHit& hit) const {
-    const Vec3& o = ray.o;
     const Vec3& d = ray.d;
     // The surface lies in the box |x| ≤ hx, |y| ≤ hy, |z| ≤ amplitude bound.
     double ta = tmin, tb = tmax;
-    const double lo[3] = {-hx_, -hy_, -amp_}, hi[3] = {hx_, hy_, amp_};
-    for (int k = 0; k < 3; ++k) {
-        const double ok = k == 0 ? o.x : k == 1 ? o.y : o.z, dk = k == 0 ? d.x : k == 1 ? d.y : d.z;
-        if (std::abs(dk) < 1e-300) {
-            if (ok < lo[k] || ok > hi[k]) return false;
-            continue;
-        }
-        double s0 = (lo[k] - ok) / dk, s1 = (hi[k] - ok) / dk;
-        if (s0 > s1) std::swap(s0, s1);
-        ta = std::max(ta, s0);
-        tb = std::min(tb, s1);
-    }
-    if (!(ta < tb)) return false;
+    if (!clipSlab(ray.o.x, d.x, -hx_, hx_, ta, tb) || !clipSlab(ray.o.y, d.y, -hy_, hy_, ta, tb) ||
+        !clipSlab(ray.o.z, d.z, -amp_, amp_, ta, tb))
+        return false;
     // f(t) = z(t) − h(x(t), y(t)) changes by at most L per unit t: a step |f|/L cannot cross a root.
     const double L = std::abs(d.z) + slope_ * std::hypot(d.x, d.y);
     const double tol = 1e-12 * (1 + std::max({hx_, hy_, amp_}));
@@ -419,14 +334,8 @@ bool WaveSurface::intersect(const Ray& ray, double tmin, double tmax, LocalHit& 
         const double fn = f(tn, dfdt);
         if ((fn < 0) != (ft < 0)) {
             // A crossing inside a minimum step: bisect it.
-            double a = t, b = tn, fa = ft;
-            for (int k = 0; k < 80 && b - a > tol; ++k) {
-                const double m = 0.5 * (a + b);
-                double dm;
-                const double fm = f(m, dm);
-                if ((fm < 0) == (fa < 0)) { a = m; fa = fm; } else { b = m; }
-            }
-            if (accept(0.5 * (a + b))) return true;
+            auto value = [&](double x) { double dx; return f(x, dx); };
+            if (accept(bisect(value, t, tn, ft))) return true;
         }
         t = tn;
         ft = fn;
@@ -453,65 +362,30 @@ std::string WaveSurface::describe() const {
     return buf;
 }
 
-AABB SagSurface::bounds() const {
-    AABB b;
-    b.expand(Vec3(-rMax_, -rMax_, zMin_));
-    b.expand(Vec3(rMax_, rMax_, zMax_));
-    return b;
-}
-
-std::string SagSurface::describe() const {
-    std::ostringstream os;
-    os << "sag(R=" << (c_ == 0 ? std::string("inf") : std::to_string(1.0 / c_)) << ", k=" << k_;
-    for (size_t i = 0; i < A_.size(); ++i) os << ", A" << 4 + 2 * i << "=" << A_[i];
-    os << ", r=[" << rMin_ << "," << rMax_ << "])";
-    return os.str();
-}
-
-void SagSurface::sampleArea(double u1, double u2, double, Vec3& p, Vec3& n) const {
-    double r = std::sqrt(rMin_ * rMin_ + u1 * (rMax_ * rMax_ - rMin_ * rMin_));
-    double phi = 2 * Pi * u2;
-    p = {r * std::cos(phi), r * std::sin(phi), 0};
-    n = {0, 0, 1};
-}
-
 // ---------------------------------------------------------------- PlaneShape
+
+namespace {
+std::shared_ptr<PlaneShape> makePlane(PlaneShape::Aperture ap, double a, double b, double hx = 0, double hy = 0) {
+    return std::make_shared<PlaneShape>(ap, a, b, hx, hy);
+}
+}  // namespace
 
 std::shared_ptr<PlaneShape> PlaneShape::disk(double rMax, double rMin) {
     if (!(rMax > 0) || rMin < 0 || rMin >= rMax) throw std::runtime_error("disk: invalid radii");
-    auto s = std::make_shared<PlaneShape>();
-    s->ap_ = Aperture::Disk;
-    s->a_ = rMax;
-    s->b_ = rMin;
-    return s;
+    return makePlane(Aperture::Disk, rMax, rMin);
 }
 std::shared_ptr<PlaneShape> PlaneShape::diskWithHole(double rMax, double holeR, double hx, double hy) {
     if (!(rMax > 0) || !(holeR > 0) || std::sqrt(hx * hx + hy * hy) + holeR >= rMax)
         throw std::runtime_error("disk with hole: the hole must lie inside the disk");
-    auto s = std::make_shared<PlaneShape>();
-    s->ap_ = Aperture::DiskHole;
-    s->a_ = rMax;
-    s->b_ = holeR;
-    s->hx_ = hx;
-    s->hy_ = hy;
-    return s;
+    return makePlane(Aperture::DiskHole, rMax, holeR, hx, hy);
 }
-
 std::shared_ptr<PlaneShape> PlaneShape::rect(double hx, double hy) {
     if (!(hx > 0 && hy > 0)) throw std::runtime_error("rect: invalid size");
-    auto s = std::make_shared<PlaneShape>();
-    s->ap_ = Aperture::Rect;
-    s->a_ = hx;
-    s->b_ = hy;
-    return s;
+    return makePlane(Aperture::Rect, hx, hy);
 }
 std::shared_ptr<PlaneShape> PlaneShape::ellipse(double ax, double ay) {
     if (!(ax > 0 && ay > 0)) throw std::runtime_error("ellipse: invalid size");
-    auto s = std::make_shared<PlaneShape>();
-    s->ap_ = Aperture::Ellipse;
-    s->a_ = ax;
-    s->b_ = ay;
-    return s;
+    return makePlane(Aperture::Ellipse, ax, ay);
 }
 
 bool PlaneShape::intersect(const Ray& r, double tmin, double tmax, LocalHit& h) const {
@@ -520,22 +394,7 @@ bool PlaneShape::intersect(const Ray& r, double tmin, double tmax, LocalHit& h) 
     if (t <= tmin || t >= tmax) return false;
     Vec3 p = r.at(t);
     p.z = 0;
-    switch (ap_) {
-        case Aperture::Disk: {
-            double r2 = p.x * p.x + p.y * p.y;
-            if (r2 > a_ * a_ || r2 < b_ * b_) return false;
-            break;
-        }
-        case Aperture::Rect:
-            if (std::abs(p.x) > a_ || std::abs(p.y) > b_) return false;
-            break;
-        case Aperture::Ellipse:
-            if (sqr(p.x / a_) + sqr(p.y / b_) > 1) return false;
-            break;
-        case Aperture::DiskHole:
-            if (p.x * p.x + p.y * p.y > a_ * a_ || sqr(p.x - hx_) + sqr(p.y - hy_) < b_ * b_) return false;
-            break;
-    }
+    if (!inPlaneAperture(uint(ap_), a_, b_, hx_, hy_, p)) return false;
     h.t = t;
     h.p = p;
     h.n = {0, 0, 1};
@@ -567,10 +426,10 @@ std::string PlaneShape::describe() const {
 
 double PlaneShape::area() const {
     switch (ap_) {
-        case Aperture::Disk: return Pi * (a_ * a_ - b_ * b_);
+        case Aperture::Disk:
+        case Aperture::DiskHole: return Pi * (a_ * a_ - b_ * b_);
         case Aperture::Rect: return 4 * a_ * b_;
         case Aperture::Ellipse: return Pi * a_ * b_;
-        case Aperture::DiskHole: return Pi * (a_ * a_ - b_ * b_);
     }
     return 0;
 }
@@ -578,18 +437,9 @@ double PlaneShape::area() const {
 void PlaneShape::sampleArea(double u1, double u2, double, Vec3& p, Vec3& n) const {
     n = {0, 0, 1};
     switch (ap_) {
-        case Aperture::Disk: {
-            double r = std::sqrt(b_ * b_ + u1 * (a_ * a_ - b_ * b_));
-            double phi = 2 * Pi * u2;
-            p = {r * std::cos(phi), r * std::sin(phi), 0};
-            return;
-        }
-        case Aperture::Rect: p = {(2 * u1 - 1) * a_, (2 * u2 - 1) * b_, 0}; return;
-        case Aperture::Ellipse: {
-            double r = std::sqrt(u1), phi = 2 * Pi * u2;
-            p = {a_ * r * std::cos(phi), b_ * r * std::sin(phi), 0};
-            return;
-        }
+        case Aperture::Disk: p = sampleAnnulus(b_, a_, u1, u2); return;
+        case Aperture::Rect: p = sampleRect(a_, b_, u1, u2); return;
+        case Aperture::Ellipse: p = sampleEllipse(a_, b_, u1, u2); return;
         case Aperture::DiskHole: p = {}; return;  // not sampleable (see canSample)
     }
 }
@@ -597,34 +447,10 @@ void PlaneShape::sampleArea(double u1, double u2, double, Vec3& p, Vec3& n) cons
 // ---------------------------------------------------------------- SphereShape
 
 bool SphereShape::intersect(const Ray& r, double tmin, double tmax, LocalHit& h) const {
-    // Geometric formulation for accuracy with distant origins.
-    double b = dot(r.o, r.d);
-    Vec3 perp = r.o - r.d * b;
-    double disc = R_ * R_ - lengthSq(perp);
-    if (disc < 0) return false;
-    double s = std::sqrt(disc);
-    double c = lengthSq(r.o) - R_ * R_;
-    double q = -b - std::copysign(s, b);
-    double t0 = q, t1 = (q != 0) ? c / q : q;
-    if (t0 > t1) std::swap(t0, t1);
-    auto coeffs = [&](const Vec3& o, double& A, double& B, double& C) {
-        A = dot(r.d, r.d);
-        B = 2 * dot(o, r.d);
-        C = lengthSq(o) - R_ * R_;
-    };
-    auto accept = [&](double t0, double& t) {
-        if (!mayLieIn(t0, tmin, tmax)) return false;
-        t = refineRoot(r, t0, coeffs);
-        return !(t <= tmin || t >= tmax);
-    };
-    double t;
-    if (!accept(t0, t) && !accept(t1, t)) return false;
-    h.t = t;
-    h.p = r.at(t);
-    h.n = h.p / R_;
-    h.n = normalize(h.n);
-    h.prim = 0;
-    return true;
+    double t0, t1;
+    return sphereRoots(r.o, r.d, R_, t0, t1) &&
+           firstRefinedHit(r, makeQuadric(kQuadSphere, R_ * R_, 0, 0), t0, t1, tmin, tmax,
+                           [](const Vec3&) { return true; }, [&](const Vec3& p) { return normalize(p / R_); }, h);
 }
 
 AABB SphereShape::bounds() const {
@@ -641,70 +467,51 @@ void SphereShape::sampleArea(double u1, double u2, double, Vec3& p, Vec3& n) con
     p = n * R_;
 }
 
+// Seen from outside, the sphere is sampled uniformly within the cone it subtends.
 bool SphereShape::sampleFrom(const Vec3& ref, double u1, double u2, double u3, Vec3& p, Vec3& n, double& pdfW) const {
-    double dc2 = lengthSq(ref);
-    if (dc2 <= R_ * R_ * (1 + 1e-9)) return Shape::sampleFrom(ref, u1, u2, u3, p, n, pdfW);
-    double dc = std::sqrt(dc2);
-    double sin2Max = R_ * R_ / dc2;
-    double cosMax = safeSqrt(1 - sin2Max);
-    double oneMinusCos = sin2Max / (1 + cosMax);
-    Vec3 axis = -ref / dc;
-    Frame f(axis);
-    // Sample cosθ in [cosMax, 1] with good precision for small cones.
-    double oneMinusCosT = u1 * oneMinusCos;
-    double cosT = 1 - oneMinusCosT;
-    double sinT = safeSqrt(oneMinusCosT * (2 - oneMinusCosT));
-    double phi = 2 * Pi * u2;
-    Vec3 w = f.toWorld({sinT * std::cos(phi), sinT * std::sin(phi), cosT});
+    const double oneMinusCos = sphereConeSize(ref, R_);
+    if (oneMinusCos == 0) return Shape::sampleFrom(ref, u1, u2, u3, p, n, pdfW);
+    const Vec3 w = sampleSphereCone(ref, oneMinusCos, u1, u2);
     LocalHit h;
-    Ray ray{ref, w};
-    if (!intersect(ray, 0, Inf, h)) {
-        // Grazing: take the tangent point.
-        double tt = dot(-ref, w);
-        p = normalize(ref + w * tt) * R_;
-    } else {
-        p = h.p;
-    }
+    if (intersect(Ray{ref, w}, 0, Inf, h)) p = h.p;
+    else p = normalize(ref + w * dot(-ref, w)) * R_;  // grazing: the tangent point
     n = normalize(p);
     pdfW = 1 / (2 * Pi * oneMinusCos);
     return true;
 }
 
 double SphereShape::pdfFrom(const Vec3& ref, const Vec3& p, const Vec3& n) const {
-    double dc2 = lengthSq(ref);
-    if (dc2 <= R_ * R_ * (1 + 1e-9)) return Shape::pdfFrom(ref, p, n);
-    double sin2Max = R_ * R_ / dc2;
-    double cosMax = safeSqrt(1 - sin2Max);
-    return 1 / (2 * Pi * sin2Max / (1 + cosMax));
+    const double oneMinusCos = sphereConeSize(ref, R_);
+    return oneMinusCos == 0 ? Shape::pdfFrom(ref, p, n) : 1 / (2 * Pi * oneMinusCos);
 }
 
 // ---------------------------------------------------------------- CylinderShape
 
 bool CylinderShape::intersect(const Ray& r, double tmin, double tmax, LocalHit& h) const {
-    double a = r.d.x * r.d.x + r.d.y * r.d.y;
-    if (a < 1e-300) return false;
-    double b = 2 * (r.o.x * r.d.x + r.o.y * r.d.y);
-    double c = r.o.x * r.o.x + r.o.y * r.o.y - R_ * R_;
     double t0, t1;
-    if (solveQuadratic(a, b, c, t0, t1) == 0) return false;
-    auto coeffs = [&](const Vec3& o, double& A, double& B, double& C) {
-        A = a;
-        B = 2 * (o.x * r.d.x + o.y * r.d.y);
-        C = o.x * o.x + o.y * o.y - R_ * R_;
-    };
-    for (double t : {t0, t1}) {
-        if (!mayLieIn(t, tmin, tmax)) continue;
-        t = refineRoot(r, t, coeffs);
-        if (t <= tmin || t >= tmax) continue;
-        Vec3 p = r.at(t);
-        if (p.z < z0_ || p.z > z1_) continue;
-        h.t = t;
-        h.p = p;
-        h.n = normalize(Vec3(p.x, p.y, 0));
-        h.prim = 0;
-        return true;
-    }
-    return false;
+    return cylinderRoots(r.o, r.d, R_, t0, t1) &&
+           firstRefinedHit(r, makeQuadric(kQuadCylinder, R_ * R_, 0, 0), t0, t1, tmin, tmax,
+                           [&](const Vec3& p) { return p.z >= z0_ && p.z <= z1_; },
+                           [](const Vec3& p) { return normalize(Vec3(p.x, p.y, 0)); }, h);
+}
+
+AABB CylinderShape::bounds() const {
+    AABB b;
+    b.expand(Vec3(-R_, -R_, z0_));
+    b.expand(Vec3(R_, R_, z1_));
+    return b;
+}
+
+std::string CylinderShape::describe() const {
+    char buf[128];
+    std::snprintf(buf, sizeof buf, "cylinder(r=%g, z=[%g,%g])", R_, z0_, z1_);
+    return buf;
+}
+
+void CylinderShape::sampleArea(double u1, double u2, double, Vec3& p, Vec3& n) const {
+    double phi = 2 * Pi * u1;
+    n = {std::cos(phi), std::sin(phi), 0};
+    p = {R_ * n.x, R_ * n.y, z0_ + u2 * (z1_ - z0_)};
 }
 
 // ---------------------------------------------------------------- ConeShape
@@ -720,31 +527,14 @@ ConeShape::ConeShape(double r0, double z0, double r1, double z1) : r0_(r0), z0_(
 
 bool ConeShape::intersect(const Ray& r, double tmin, double tmax, LocalHit& h) const {
     // x² + y² = (r0 + k (z − z0))² along the ray, on the nappe where r0 + k (z − z0) ≥ 0.
-    auto coeffs = [&](const Vec3& o, double& A, double& B, double& C) {
-        const double rho = r0_ + k_ * (o.z - z0_);
-        A = r.d.x * r.d.x + r.d.y * r.d.y - k_ * k_ * r.d.z * r.d.z;
-        B = 2 * (o.x * r.d.x + o.y * r.d.y - k_ * rho * r.d.z);
-        C = o.x * o.x + o.y * o.y - rho * rho;
-    };
+    const Quadric q = makeQuadric(kQuadCone, r0_, z0_, k_);
     double A, B, C, t0, t1;
-    coeffs(r.o, A, B, C);
-    const int n = solveQuadratic(A, B, C, t0, t1);
-    for (int i = 0; i < n; ++i) {
-        double t = i == 0 ? t0 : t1;
-        if (!mayLieIn(t, tmin, tmax)) continue;
-        t = refineRoot(r, t, coeffs);
-        if (t <= tmin || t >= tmax) continue;
-        const Vec3 p = r.at(t);
-        if (p.z < z0_ || p.z > z1_) continue;
-        const double rho = r0_ + k_ * (p.z - z0_);
-        if (rho < 0) continue;
-        h.t = t;
-        h.p = p;
-        h.n = normalize(Vec3(p.x, p.y, -rho * k_));
-        h.prim = 0;
-        return true;
-    }
-    return false;
+    quadricCoeffs(q, r.o, r.d, A, B, C);
+    auto rho = [&](const Vec3& p) { return r0_ + k_ * (p.z - z0_); };
+    return solveQuadratic(A, B, C, t0, t1) > 0 &&
+           firstRefinedHit(r, q, t0, t1, tmin, tmax,
+                           [&](const Vec3& p) { return p.z >= z0_ && p.z <= z1_ && rho(p) >= 0; },
+                           [&](const Vec3& p) { return coneNormal(p, rho(p), k_); }, h);
 }
 
 AABB ConeShape::bounds() const {
@@ -786,43 +576,16 @@ TorusPatchShape::TorusPatchShape(double R, double zc, double rho, double a0, dou
     rMin_ = std::max(0.0, rMin_);
 }
 
-bool TorusPatchShape::onArc(const Vec3& p) const {
-    const double a = std::atan2(p.z - zc_, std::hypot(p.x, p.y) - R_);
-    const double eps = 1e-9;
-    for (double w : {a, a + 2 * Pi, a - 2 * Pi})
-        if (w >= a0_ - eps && w <= a1_ + eps) return true;
-    return false;
-}
+bool TorusPatchShape::onArc(const Vec3& p) const { return torusOnArc(R_, zc_, a0_, a1_, p); }
 
 bool TorusPatchShape::intersect(const Ray& ray, double tmin, double tmax, LocalHit& h) const {
-    const Vec3& o = ray.o;
-    const Vec3& d = ray.d;
     // Clip to the slab zMin ≤ z ≤ zMax and the cylinder ρ ≤ rMax.
     double ta = tmin, tb = tmax;
     const double pad = 1e-9 * (1 + rMax_ + std::abs(zMax_));
-    if (std::abs(d.z) < 1e-300) {
-        if (o.z < zMin_ - pad || o.z > zMax_ + pad) return false;
-    } else {
-        double s0 = (zMin_ - pad - o.z) / d.z, s1 = (zMax_ + pad - o.z) / d.z;
-        if (s0 > s1) std::swap(s0, s1);
-        ta = std::max(ta, s0);
-        tb = std::min(tb, s1);
-    }
-    const double a = d.x * d.x + d.y * d.y;
-    if (a > 1e-300) {
-        double q0, q1;
-        if (solveQuadratic(a, 2 * (o.x * d.x + o.y * d.y), o.x * o.x + o.y * o.y - sqr(rMax_ + pad), q0, q1) < 2) return false;
-        ta = std::max(ta, q0);
-        tb = std::min(tb, q1);
-    } else if (o.x * o.x + o.y * o.y > sqr(rMax_ + pad)) {
+    if (!clipSlab(ray.o.z, ray.d.z, zMin_ - pad, zMax_ + pad, ta, tb) || !clipCylinder(ray.o, ray.d, rMax_ + pad, ta, tb))
         return false;
-    }
-    if (!(ta < tb)) return false;
     // F(t) = (ρ(t) − R)² + (z(t) − zc)² − rho², sampled for sign changes and bisected.
-    auto F = [&](double t) {
-        const Vec3 p = ray.at(t);
-        return sqr(std::hypot(p.x, p.y) - R_) + sqr(p.z - zc_) - rho_ * rho_;
-    };
+    auto F = [&](double t) { return torusF(R_, zc_, rho_, ray.at(t)); };
     const int N = 64;
     double tPrev = ta, fPrev = F(ta);
     int sample = 1;
@@ -838,20 +601,12 @@ bool TorusPatchShape::intersect(const Ray& ray, double tmin, double tmax, LocalH
         else firstStep = std::min(tb - ta, firstStep * 2);
         const double fCur = F(tCur);
         if ((fPrev <= 0) != (fCur <= 0) || fCur == 0) {
-            double lo = tPrev, hi = tCur, flo = fPrev;
-            for (int it = 0; it < 100 && hi - lo > 1e-15 * (1 + std::abs(hi)); ++it) {
-                const double mid = 0.5 * (lo + hi);
-                const double fm = F(mid);
-                if ((fm <= 0) == (flo <= 0)) { lo = mid; flo = fm; } else { hi = mid; }
-            }
-            const double t = 0.5 * (lo + hi);
+            const double t = bisect(F, tPrev, tCur, fPrev, 100);
             const Vec3 p = ray.at(t);
             if (t > tmin && t < tmax && onArc(p)) {
-                const double rho = std::hypot(p.x, p.y);
-                const Vec3 c = rho > 0 ? Vec3(p.x * R_ / rho, p.y * R_ / rho, zc_) : Vec3(0, 0, zc_);
                 h.t = t;
                 h.p = p;
-                h.n = normalize(p - c);
+                h.n = torusNormal(R_, zc_, p);
                 h.prim = 0;
                 return true;
             }
@@ -876,62 +631,21 @@ std::string TorusPatchShape::describe() const {
     return buf;
 }
 
-AABB CylinderShape::bounds() const {
-    AABB b;
-    b.expand(Vec3(-R_, -R_, z0_));
-    b.expand(Vec3(R_, R_, z1_));
-    return b;
-}
-
-std::string CylinderShape::describe() const {
-    char buf[128];
-    std::snprintf(buf, sizeof buf, "cylinder(r=%g, z=[%g,%g])", R_, z0_, z1_);
-    return buf;
-}
-
-void CylinderShape::sampleArea(double u1, double u2, double, Vec3& p, Vec3& n) const {
-    double phi = 2 * Pi * u1;
-    n = {std::cos(phi), std::sin(phi), 0};
-    p = {R_ * n.x, R_ * n.y, z0_ + u2 * (z1_ - z0_)};
-}
-
 // ---------------------------------------------------------------- RoundWallShape
 
 bool RoundWallShape::solid(const Vec3& p) const {
     if (p.z < 0 || p.z > H_) return false;
-    double az = std::atan2(p.x, p.y);
-    for (const auto& o : open_) {
-        double dAz = std::remainder(az - o.azimuth, 2 * Pi);
-        if (std::abs(dAz) * R_ < 0.5 * o.width && p.z > o.sill && p.z < o.top) return false;
-    }
+    for (const auto& o : open_)
+        if (inWallOpening(R_, o.azimuth, o.width, o.sill, o.top, p)) return false;
     return true;
 }
 
 bool RoundWallShape::intersect(const Ray& r, double tmin, double tmax, LocalHit& h) const {
-    double a = r.d.x * r.d.x + r.d.y * r.d.y;
-    if (a < 1e-300) return false;
-    double b = 2 * (r.o.x * r.d.x + r.o.y * r.d.y);
-    double c = r.o.x * r.o.x + r.o.y * r.o.y - R_ * R_;
     double t0, t1;
-    if (solveQuadratic(a, b, c, t0, t1) == 0) return false;
-    auto coeffs = [&](const Vec3& o, double& A, double& B, double& C) {
-        A = a;
-        B = 2 * (o.x * r.d.x + o.y * r.d.y);
-        C = o.x * o.x + o.y * o.y - R_ * R_;
-    };
-    for (double t : {t0, t1}) {
-        if (!mayLieIn(t, tmin, tmax)) continue;
-        t = refineRoot(r, t, coeffs);
-        if (t <= tmin || t >= tmax) continue;
-        Vec3 p = r.at(t);
-        if (!solid(p)) continue;
-        h.t = t;
-        h.p = p;
-        h.n = normalize(Vec3(p.x, p.y, 0));
-        h.prim = 0;
-        return true;
-    }
-    return false;
+    return cylinderRoots(r.o, r.d, R_, t0, t1) &&
+           firstRefinedHit(r, makeQuadric(kQuadCylinder, R_ * R_, 0, 0), t0, t1, tmin, tmax,
+                           [&](const Vec3& p) { return solid(p); },
+                           [](const Vec3& p) { return normalize(Vec3(p.x, p.y, 0)); }, h);
 }
 
 AABB RoundWallShape::bounds() const {
@@ -948,45 +662,13 @@ std::string RoundWallShape::describe() const {
 
 // ---------------------------------------------------------------- DomeShape
 
-bool DomeShape::solid(const Vec3& p) const {
-    if (p.z < 0) return false;
-    if (w_ <= 0) return true;
-    double el = std::asin(clampd(p.z / R_, -1, 1));
-    if (el >= top_) return true;
-    double dAz = std::remainder(std::atan2(p.x, p.y) - az_, 2 * Pi);
-    double horiz = R_ * std::cos(el);
-    // Constant linear width: the half-angle grows toward the zenith.
-    return std::abs(std::sin(dAz)) * horiz >= 0.5 * w_ || std::cos(dAz) < 0;
-}
+bool DomeShape::solid(const Vec3& p) const { return domeSolid(R_, az_, w_, top_, p); }
 
 bool DomeShape::intersect(const Ray& r, double tmin, double tmax, LocalHit& h) const {
-    double b = dot(r.o, r.d);
-    Vec3 perp = r.o - r.d * b;
-    double disc = R_ * R_ - lengthSq(perp);
-    if (disc < 0) return false;
-    double sq = std::sqrt(disc);
-    double c = lengthSq(r.o) - R_ * R_;
-    double q = -b - std::copysign(sq, b);
-    double t0 = q, t1 = (q != 0) ? c / q : q;
-    if (t0 > t1) std::swap(t0, t1);
-    auto coeffs = [&](const Vec3& o, double& A, double& B, double& C) {
-        A = dot(r.d, r.d);
-        B = 2 * dot(o, r.d);
-        C = lengthSq(o) - R_ * R_;
-    };
-    for (double t : {t0, t1}) {
-        if (!mayLieIn(t, tmin, tmax)) continue;
-        t = refineRoot(r, t, coeffs);
-        if (t <= tmin || t >= tmax) continue;
-        Vec3 p = r.at(t);
-        if (!solid(p)) continue;
-        h.t = t;
-        h.p = p;
-        h.n = normalize(p);
-        h.prim = 0;
-        return true;
-    }
-    return false;
+    double t0, t1;
+    return sphereRoots(r.o, r.d, R_, t0, t1) &&
+           firstRefinedHit(r, makeQuadric(kQuadSphere, R_ * R_, 0, 0), t0, t1, tmin, tmax,
+                           [&](const Vec3& p) { return solid(p); }, [](const Vec3& p) { return normalize(p); }, h);
 }
 
 AABB DomeShape::bounds() const {
@@ -997,418 +679,5 @@ AABB DomeShape::bounds() const {
 }
 
 std::string DomeShape::describe() const { return "dome(r=" + std::to_string(R_) + ", slit width " + std::to_string(w_) + ")"; }
-
-// ---------------------------------------------------------------- MeshShape
-
-MeshShape::MeshShape(std::vector<Vec3> positions, std::vector<std::array<uint32_t, 3>> triangles, std::string label,
-                     std::vector<Corners> shadingNormals, std::vector<UvCorners> uvs)
-    : pos_(std::move(positions)), tris_(std::move(triangles)), normals_(std::move(shadingNormals)), uvs_(std::move(uvs)),
-      label_(std::move(label)) {
-    if (!normals_.empty() && normals_.size() != tris_.size())
-        throw std::runtime_error("mesh: shading normals must be given for every triangle");
-    if (!uvs_.empty() && uvs_.size() != tris_.size())
-        throw std::runtime_error("mesh: texture coordinates must be given for every triangle");
-    std::vector<AABB> boxes(tris_.size());
-    cdf_.resize(tris_.size());
-    parallelFor(tris_.size(), 1 << 15, [&](size_t begin, size_t end) {
-        for (size_t i = begin; i < end; ++i) {
-            const auto& t = tris_[i];
-            for (uint32_t v : t)
-                if (v >= pos_.size()) throw std::runtime_error("mesh: triangle index out of range");
-            const Vec3 &a = pos_[t[0]], &b = pos_[t[1]], &c = pos_[t[2]];
-            boxes[i].expand(a);
-            boxes[i].expand(b);
-            boxes[i].expand(c);
-            double pad = 1e-12 * (1 + maxAbsComponent(boxes[i].hi) + maxAbsComponent(boxes[i].lo));
-            boxes[i].lo -= Vec3(pad, pad, pad);
-            boxes[i].hi += Vec3(pad, pad, pad);
-            cdf_[i] = 0.5 * length(cross(b - a, c - a));
-        }
-    });
-    double acc = 0;  // the running sum in triangle order, as a sequential pass
-    for (double& a : cdf_) a = acc += a;
-    area_ = acc;
-    bvh_.build(boxes);
-}
-
-uint32_t MeshShape::sampledPrimitive(double u) const {
-    const auto& cdf = areaCdf();
-    if (cdf.empty()) return ~0u;
-    return uint32_t(std::min(size_t(std::lower_bound(cdf.begin(), cdf.end(), u * area()) - cdf.begin()),
-                             cdf.size() - 1));
-}
-
-bool MeshShape::sameFace(uint32_t first, uint32_t second) const {
-    if (first >= tris_.size() || second >= tris_.size()) return false;
-    if (first == second) return true;
-    const auto& a = tris_[first];
-    const auto& b = tris_[second];
-    auto sharedVertex = [&](uint32_t v) {
-        for (uint32_t u : a)
-            if (pos_[v].x == pos_[u].x && pos_[v].y == pos_[u].y && pos_[v].z == pos_[u].z) return true;
-        return false;
-    };
-    int shared = 0;
-    for (uint32_t v : b)
-        if (sharedVertex(v)) ++shared;
-    if (shared < 2) return false;
-    const Vec3 normal = cross(pos_[a[1]] - pos_[a[0]], pos_[a[2]] - pos_[a[0]]);
-    if (dot(normal, cross(pos_[b[1]] - pos_[b[0]], pos_[b[2]] - pos_[b[0]])) <= 0) return false;
-    // Adjacent exactly coplanar triangles form the same face. Do not use a
-    // distance tolerance: a distinct parallel layer can be closer than it.
-    for (uint32_t v : b)
-        if (!sharedVertex(v) && dot(normal, pos_[v] - pos_[a[0]]) != 0) return false;
-    return true;
-}
-
-bool MeshShape::intersect(const Ray& r, double tmin, double tmax, LocalHit& h) const {
-    bool found = false;
-    double best = tmax;
-    bvh_.traverse(r, tmin, best, [&](uint32_t i, double& tm) {
-        const auto& t = tris_[i];
-        const Vec3 &v0 = pos_[t[0]], &v1 = pos_[t[1]], &v2 = pos_[t[2]];
-        Vec3 e1 = v1 - v0, e2 = v2 - v0;
-        Vec3 pv = cross(r.d, e2);
-        double det = dot(e1, pv);
-        if (std::abs(det) < 1e-300) return;
-        double inv = 1 / det;
-        Vec3 tv = r.o - v0;
-        double u = dot(tv, pv) * inv;
-        if (u < 0 || u > 1) return;
-        Vec3 qv = cross(tv, e1);
-        double v = dot(r.d, qv) * inv;
-        if (v < 0 || u + v > 1) return;
-        double tt = dot(e2, qv) * inv;
-        if (tt <= tmin || tt >= tm) return;
-        // Near a grazing departure, t can be large even for a tiny plane error.
-        // Primitive identity and normal displacement identify the actual self face.
-        if (sameFace(r.departedPrimitive, i) &&
-            std::abs(dot(tv, normalize(cross(e1, e2)))) <= r.departureError) return;
-        tm = tt;
-        found = true;
-        h.t = tt;
-        h.prim = i;
-    });
-    if (!found) return false;
-    const auto& t = tris_[h.prim];
-    h.p = r.at(h.t);
-    h.n = normalize(cross(pos_[t[1]] - pos_[t[0]], pos_[t[2]] - pos_[t[0]]));
-    h.error = std::abs(dot(h.p - pos_[t[0]], h.n));
-    return true;
-}
-
-std::string MeshShape::describe() const {
-    return label_ + "(" + std::to_string(tris_.size()) + " triangles" + (normals_.empty() ? "" : ", smooth") + ")";
-}
-
-void MeshShape::sampleArea(double u1, double u2, double u3, Vec3& p, Vec3& n) const {
-    double target = u3 * area_;
-    size_t i = size_t(std::lower_bound(cdf_.begin(), cdf_.end(), target) - cdf_.begin());
-    if (i >= tris_.size()) i = tris_.size() - 1;
-    const auto& t = tris_[i];
-    double su = std::sqrt(u1);
-    double b0 = 1 - su, b1 = u2 * su;
-    p = pos_[t[0]] * b0 + pos_[t[1]] * b1 + pos_[t[2]] * (1 - b0 - b1);
-    n = normalize(cross(pos_[t[1]] - pos_[t[0]], pos_[t[2]] - pos_[t[0]]));
-}
-
-// ---------------------------------------------------------------- MeshData
-
-void MeshData::addTriangle(const Vec3& a, const Vec3& b, const Vec3& c) {
-    uint32_t base = uint32_t(positions.size());
-    positions.push_back(a);
-    positions.push_back(b);
-    positions.push_back(c);
-    triangles.push_back({base, base + 1, base + 2});
-    if (!normalIndex.empty()) normalIndex.resize(triangles.size(), {kNoNormal, kNoNormal, kNoNormal});
-}
-
-void MeshData::addQuad(const Vec3& a, const Vec3& b, const Vec3& c, const Vec3& d) {
-    uint32_t base = uint32_t(positions.size());
-    positions.insert(positions.end(), {a, b, c, d});
-    triangles.push_back({base, base + 1, base + 2});
-    triangles.push_back({base, base + 2, base + 3});
-    if (!normalIndex.empty()) normalIndex.resize(triangles.size(), {kNoNormal, kNoNormal, kNoNormal});
-}
-
-void MeshData::append(const MeshData& o, const Transform& xf) {
-    uint32_t base = uint32_t(positions.size());
-    if (!o.normalIndex.empty() || !normalIndex.empty()) {
-        normalIndex.resize(triangles.size(), {kNoNormal, kNoNormal, kNoNormal});
-        const uint32_t nb = uint32_t(normals.size());
-        for (const Vec3& n : o.normals) normals.push_back(xf.vector(n));
-        for (size_t i = 0; i < o.triangles.size(); ++i) {
-            std::array<uint32_t, 3> c{kNoNormal, kNoNormal, kNoNormal};
-            if (i < o.normalIndex.size())
-                for (int k = 0; k < 3; ++k)
-                    if (o.normalIndex[i][k] != kNoNormal) c[k] = o.normalIndex[i][k] + nb;
-            normalIndex.push_back(c);
-        }
-    }
-    for (const Vec3& p : o.positions) positions.push_back(xf.point(p));
-    for (const auto& t : o.triangles) triangles.push_back({t[0] + base, t[1] + base, t[2] + base});
-}
-
-namespace {
-
-Vec3 faceNormal(const MeshData& m, const std::array<uint32_t, 3>& t) {
-    const Vec3 &a = m.positions[t[0]], &b = m.positions[t[1]], &c = m.positions[t[2]];
-    Vec3 n = cross(b - a, c - a);
-    double l = length(n);
-    return l > 0 ? n / l : Vec3();
-}
-
-// A shading normal for a corner of a triangle with (unit) normal fn: n itself when it lies on the
-// triangle's front side, else fn (a corner normal behind its own face would shade it from behind).
-Vec3 frontCorner(const Vec3& n, const Vec3& fn) {
-    double l = length(n);
-    if (!(l > 0) || dot(n, fn) <= 1e-6 * l) return fn;
-    return n / l;
-}
-
-}  // namespace
-
-std::vector<MeshShape::Corners> smoothNormals(const MeshData& m, double creaseAngle) {
-    const size_t nt = m.triangles.size();
-    // Vertices at one position are one vertex (files split vertices at texture seams).
-    std::vector<uint32_t> weld(m.positions.size());
-    {
-        std::vector<uint32_t> order(m.positions.size());
-        for (uint32_t i = 0; i < order.size(); ++i) order[i] = i;
-        auto key = [&](uint32_t i) { const Vec3& p = m.positions[i]; return std::array<double, 3>{p.x, p.y, p.z}; };
-        std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b) { return key(a) < key(b) || (key(a) == key(b) && a < b); });
-        for (size_t k = 0; k < order.size(); ++k)
-            weld[order[k]] = (k > 0 && key(order[k]) == key(order[k - 1])) ? weld[order[k - 1]] : order[k];
-    }
-    // Triangles around each welded vertex (compressed rows).
-    std::vector<uint32_t> start(m.positions.size() + 1, 0), around(3 * nt);
-    for (const auto& t : m.triangles)
-        for (uint32_t v : t) ++start[weld[v] + 1];
-    for (size_t i = 1; i < start.size(); ++i) start[i] += start[i - 1];
-    {
-        std::vector<uint32_t> fill(start.begin(), start.end() - 1);
-        for (uint32_t i = 0; i < nt; ++i)
-            for (uint32_t v : m.triangles[i]) around[fill[weld[v]]++] = i;
-    }
-    std::vector<Vec3> fn(nt);
-    std::vector<std::array<double, 3>> angle(nt);
-    parallelFor(nt, 1 << 14, [&](size_t begin, size_t end) {
-        for (size_t i = begin; i < end; ++i) {
-            const auto& t = m.triangles[i];
-            fn[i] = faceNormal(m, t);
-            for (int k = 0; k < 3; ++k) {
-                Vec3 a = m.positions[t[(k + 1) % 3]] - m.positions[t[k]], b = m.positions[t[(k + 2) % 3]] - m.positions[t[k]];
-                double la = length(a), lb = length(b);
-                angle[i][k] = la > 0 && lb > 0 ? std::acos(clampd(dot(a, b) / (la * lb), -1, 1)) : 0;
-            }
-        }
-    });
-    const double cosCrease = std::cos(creaseAngle);
-    std::vector<MeshShape::Corners> out(nt);
-    parallelFor(nt, 1 << 14, [&](size_t begin, size_t end) {
-        for (size_t i = begin; i < end; ++i) {
-            const auto& t = m.triangles[i];
-            for (int k = 0; k < 3; ++k) {
-                const uint32_t v = weld[t[k]];
-                Vec3 sum;
-                for (uint32_t s = start[v]; s < start[v + 1]; ++s) {
-                    const uint32_t j = around[s];
-                    if (dot(fn[j], fn[i]) < cosCrease) continue;
-                    int corner = 0;  // j's corner at this vertex
-                    while (corner < 2 && weld[m.triangles[j][corner]] != v) ++corner;
-                    sum += fn[j] * angle[j][corner];
-                }
-                out[i][k] = frontCorner(sum, fn[i]);
-            }
-        }
-    });
-    return out;
-}
-
-std::vector<MeshShape::Corners> fileNormals(const MeshData& m) {
-    if (m.normals.empty() || m.normalIndex.size() != m.triangles.size())
-        throw std::runtime_error("the mesh has no vertex normals (OBJ vn)");
-    std::vector<MeshShape::Corners> out(m.triangles.size());
-    for (size_t i = 0; i < m.triangles.size(); ++i) {
-        const Vec3 fn = faceNormal(m, m.triangles[i]);
-        for (int k = 0; k < 3; ++k) {
-            const uint32_t n = m.normalIndex[i][k];
-            out[i][k] = frontCorner(n < m.normals.size() ? m.normals[n] : Vec3(), fn);
-        }
-    }
-    return out;
-}
-
-namespace {
-
-// One chunk of an OBJ file, parsed independently: its positions, and its faces with absolute
-// indices, except relative (negative) ones, which are recorded against the chunk's own vertices
-// until the chunks' vertex offsets are known.
-struct ObjChunk {
-    std::vector<Vec3> positions;
-    std::vector<std::array<uint32_t, 3>> triangles;
-    std::vector<std::pair<size_t, long>> relative;  // (triangle * 3 + corner, chunk-local vertex)
-    std::vector<Vec3> normals;
-    std::vector<std::array<uint32_t, 3>> normalIndex;     // per triangle (kNoNormal: none)
-    std::vector<std::pair<size_t, long>> relativeNormal;  // as `relative`, for normals
-};
-
-const char* skipBlanks(const char* p, const char* end) {
-    while (p < end && (*p == ' ' || *p == '\t')) ++p;
-    return p;
-}
-
-// A number as strtod would read it (leading blanks, optional '+'); 0 without advancing on failure.
-double parseNumber(const char*& p, const char* end) {
-    const char* q = skipBlanks(p, end);
-    if (q < end && *q == '+') ++q;
-    double v = 0;
-#if defined(__cpp_lib_to_chars) && __cpp_lib_to_chars >= 201611L
-    auto r = std::from_chars(q, end, v);
-    if (r.ec == std::errc() || r.ec == std::errc::result_out_of_range) p = r.ptr;
-#else
-    // Without floating-point from_chars (Apple's libc++): strtod on a terminated copy of the token.
-    char buf[64];
-    size_t n = 0;
-    while (q + n < end && n < sizeof buf - 1 && q[n] != ' ' && q[n] != '\t' && q[n] != '\n' && q[n] != '\r') {
-        buf[n] = q[n];
-        ++n;
-    }
-    buf[n] = 0;
-    char* e = buf;
-    v = std::strtod(buf, &e);
-    if (e != buf) p = q + (e - buf);
-    else v = 0;
-#endif
-    return v;
-}
-
-void parseObjChunk(const char* p, const char* end, double scale, ObjChunk& out) {
-    std::vector<long> idx, nidx;
-    auto blank = [](char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; };
-    while (p < end) {
-        p = skipBlanks(p, end);
-        if (p + 1 < end && p[0] == 'v' && (p[1] == ' ' || p[1] == '\t')) {
-            const char* q = p + 2;
-            Vec3 v;
-            v.x = parseNumber(q, end);
-            v.y = parseNumber(q, end);
-            v.z = parseNumber(q, end);
-            out.positions.push_back(v * scale);
-            p = q;
-        } else if (p + 2 < end && p[0] == 'v' && p[1] == 'n' && (p[2] == ' ' || p[2] == '\t')) {
-            const char* q = p + 3;
-            Vec3 n;
-            n.x = parseNumber(q, end);
-            n.y = parseNumber(q, end);
-            n.z = parseNumber(q, end);
-            out.normals.push_back(n);  // a direction: the scale does not apply
-            p = q;
-        } else if (p + 1 < end && p[0] == 'f' && (p[1] == ' ' || p[1] == '\t')) {
-            idx.clear();
-            nidx.clear();
-            const char* q = p + 2;
-            while (true) {
-                q = skipBlanks(q, end);
-                if (q >= end || *q == '\n' || *q == '\r') break;
-                long v = 0;
-                auto r = std::from_chars(q + (*q == '+'), end, v);
-                if (r.ec != std::errc()) break;
-                q = r.ptr;
-                long vn = 0;  // v, v/vt, v//vn or v/vt/vn; 0: no normal
-                if (q < end && *q == '/') {
-                    ++q;
-                    while (q < end && *q != '/' && !blank(*q)) ++q;  // vt
-                    if (q < end && *q == '/') {
-                        ++q;
-                        auto rn = std::from_chars(q + (q < end && *q == '+'), end, vn);
-                        if (rn.ec == std::errc()) q = rn.ptr;
-                        else vn = 0;
-                    }
-                }
-                idx.push_back(v);
-                nidx.push_back(vn);
-                while (q < end && !blank(*q)) ++q;
-            }
-            for (size_t i = 1; i + 1 < idx.size(); ++i) {
-                const size_t c3[3] = {0, i, i + 1};
-                std::array<uint32_t, 3> t{}, tn{};
-                for (int k = 0; k < 3; ++k) {
-                    const long corner = idx[c3[k]], normal = nidx[c3[k]];
-                    if (corner < 0) {
-                        out.relative.push_back({out.triangles.size() * 3 + size_t(k),
-                                                long(out.positions.size()) + corner});
-                    } else {
-                        t[size_t(k)] = uint32_t(corner - 1);
-                    }
-                    tn[size_t(k)] = MeshData::kNoNormal;
-                    if (normal < 0) {
-                        out.relativeNormal.push_back({out.triangles.size() * 3 + size_t(k), long(out.normals.size()) + normal});
-                    } else if (normal > 0) {
-                        tn[size_t(k)] = uint32_t(normal - 1);
-                    }
-                }
-                out.triangles.push_back(t);
-                out.normalIndex.push_back(tn);
-            }
-            p = q;
-        }
-        while (p < end && *p != '\n') ++p;
-        ++p;
-    }
-}
-
-}  // namespace
-
-// Positions, faces and vertex normals (texture coordinates are skipped). Large files are parsed
-// in parallel chunks split at line breaks and joined in file order, so the mesh is exactly the one
-// a sequential reading gives.
-MeshData loadObj(const std::string& path, double scale) {
-    std::ifstream in(path, std::ios::binary | std::ios::ate);
-    if (!in) throw std::runtime_error("cannot open OBJ file: " + path);
-    std::string buf(size_t(in.tellg()), '\0');
-    in.seekg(0);
-    in.read(buf.data(), std::streamsize(buf.size()));
-    if (!in) throw std::runtime_error("cannot read OBJ file: " + path);
-    buf.push_back('\n');
-    const char* begin = buf.data();
-    const char* end = begin + buf.size();
-    const size_t parts = std::clamp<size_t>(buf.size() >> 22, 1, hardwareThreads());  // ≥ 4 MB each
-    std::vector<const char*> cut(parts + 1, end);
-    cut[0] = begin;
-    for (size_t k = 1; k < parts; ++k) {
-        const char* c = std::max(cut[k - 1], begin + buf.size() * k / parts);
-        while (c < end && c[-1] != '\n') ++c;
-        cut[k] = c;
-    }
-    std::vector<ObjChunk> chunks(parts);
-    parallelParts(parts, parts, [&](size_t k, size_t, size_t) { parseObjChunk(cut[k], cut[k + 1], scale, chunks[k]); });
-
-    MeshData m;
-    size_t nv = 0, nt = 0, nn = 0;
-    for (const ObjChunk& c : chunks) { nv += c.positions.size(); nt += c.triangles.size(); nn += c.normals.size(); }
-    m.positions.reserve(nv);
-    m.triangles.reserve(nt);
-    m.normals.reserve(nn);
-    if (nn > 0) m.normalIndex.reserve(nt);
-    for (const ObjChunk& c : chunks) {
-        const long vertexBase = long(m.positions.size()), normalBase = long(m.normals.size());
-        const size_t triBase = m.triangles.size();
-        m.positions.insert(m.positions.end(), c.positions.begin(), c.positions.end());
-        m.triangles.insert(m.triangles.end(), c.triangles.begin(), c.triangles.end());
-        for (auto [slot, local] : c.relative)
-            m.triangles[triBase + slot / 3][slot % 3] = uint32_t(vertexBase + local);
-        if (nn == 0) continue;
-        m.normals.insert(m.normals.end(), c.normals.begin(), c.normals.end());
-        m.normalIndex.insert(m.normalIndex.end(), c.normalIndex.begin(), c.normalIndex.end());
-        for (auto [slot, local] : c.relativeNormal)
-            m.normalIndex[triBase + slot / 3][slot % 3] = uint32_t(normalBase + local);
-    }
-    if (m.triangles.empty()) throw std::runtime_error("OBJ file has no faces: " + path);
-    for (auto& t : m.normalIndex)
-        for (uint32_t& n : t)
-            if (n != MeshData::kNoNormal && n >= m.normals.size()) throw std::runtime_error("OBJ normal index out of range: " + path);
-    return m;
-}
 
 }  // namespace owe
