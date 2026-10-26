@@ -16,10 +16,13 @@ struct TransportStats {
     struct Inconsistency {
         uint32_t boundary = kNone, rayRegion = kNone, boundaryRegion = kNone, previous = kNone;
         Vec3 p;
+        // The segment that met it (enough to trace it again): its origin and direction, the
+        // primitive it left and the one it met.
+        Vec3 origin, direction;
+        uint32_t previousPrimitive = kNone, primitive = kNone;
     } first;
-    void noteInconsistency(uint32_t boundary, uint32_t rayRegion, uint32_t boundaryRegion, uint32_t previous,
-                           const Vec3& p) {
-        if (inconsistencies++ == 0) first = {boundary, rayRegion, boundaryRegion, previous, p};
+    void noteInconsistency(const Inconsistency& at) {
+        if (inconsistencies++ == 0) first = at;
     }
     void add(const TransportStats& o) {
         if (inconsistencies == 0 && o.inconsistencies > 0) first = o.first;

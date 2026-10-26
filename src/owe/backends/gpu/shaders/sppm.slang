@@ -181,7 +181,7 @@ void traceSppmPhoton(inout Wavelengths wl, uint group, inout Rng rng, inout uint
             if (ray.region != G.counts.z) stats.w++;
             break;
         }
-        const Crossing c = meetBoundary(hit, ray.d, ray.region, ray.departed, stats);
+        const Crossing c = meetBoundary(hit, ray, stats);
         if (hit.ambiguousContact) break;
         if (passThrough(hit, c, ray, wl, beta, rng)) {
             if (depth >= 4 * maxDepth) break;

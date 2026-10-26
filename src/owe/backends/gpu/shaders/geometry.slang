@@ -424,19 +424,9 @@ static const int kStack = 64;
 bool hitTriangle(GTriangle tri, float3 o, float3 d, float tmin, float tmax, out float t) {
     t = 0;
     float3 v0 = tri.v0.xyz;
-    float3 e1 = tri.v1.xyz - v0, e2 = tri.v2.xyz - v0;
-    float3 pv = cross(d, e2);
-    float det = dot(e1, pv);
-    if (det == 0) return false;
-    float inv = 1 / det;
-    float3 tv = o - v0;
-    float u = dot(tv, pv) * inv;
-    if (u < 0 || u > 1) return false;
-    float3 qv = cross(tv, e1);
-    float v = dot(d, qv) * inv;
-    if (v < 0 || u + v > 1) return false;
+    if (!lineCrossesTriangle(o, d, v0, tri.v1.xyz, tri.v2.xyz)) return false;
     float3 np = triangleNormal(v0, tri.v1.xyz, tri.v2.xyz);
-    t = -dot(tv, np) / dot(d, np);
+    t = -dot(o - v0, np) / dot(d, np);
     return t > tmin && t < tmax;
 }
 

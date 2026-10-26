@@ -5,22 +5,6 @@
 #include "optics.slang"
 #include "world.slang"
 
-// The first region inconsistency of a pass (as TransportStats::first on the CPU): words 8–15 of
-// g_counters hold a claim flag, the boundary, the ray's region, the boundary's region on the side
-// met, the previous boundary and the camera-relative position (float bits).
-void noteInconsistency(uint boundary, uint rayRegion, uint boundaryRegion, uint previous, float3 p) {
-    uint old;
-    InterlockedCompareExchange(g_counters[8], 0u, 1u, old);
-    if (old != 0) return;
-    g_counters[9] = boundary;
-    g_counters[10] = rayRegion;
-    g_counters[11] = boundaryRegion;
-    g_counters[12] = previous;
-    g_counters[13] = asuint(p.x);
-    g_counters[14] = asuint(p.y);
-    g_counters[15] = asuint(p.z);
-}
-
 // ---------------------------------------------------------------- environment
 
 // Environment map (world.cpp: Environment::mapRGB, sampleMap, mapPdf; owe/core/shared/environment.hpp).
@@ -593,17 +577,38 @@ struct Crossing {
     bool fromFront;
     uint surface;     // the boundary's surface type
 };
-Crossing meetBoundary(SurfaceHit hit, float3 d, inout uint region, uint previous, inout uint4 stats) {
+// The first region inconsistency of a pass (as TransportStats::first on the CPU), in g_counters:
+// word 8 claims it; 9 the boundary, 10 the ray's region, 11 the boundary's region on the side
+// met, 12 the boundary the ray left, 13–15 the camera-relative position (float bits); the
+// segment: 16–18 its origin, 19–21 its direction, 22 the primitive it left, 23 the one it met.
+void noteInconsistency(SurfaceHit hit, PathRay ray, uint boundaryRegion) {
+    uint old;
+    InterlockedCompareExchange(g_counters[8], 0u, 1u, old);
+    if (old != 0) return;
+    g_counters[9] = hit.boundary;
+    g_counters[10] = ray.region;
+    g_counters[11] = boundaryRegion;
+    g_counters[12] = ray.departed;
+    [ForceUnroll] for (int k = 0; k < 3; ++k) {
+        g_counters[13 + k] = asuint(hit.p[k]);
+        g_counters[16 + k] = asuint(ray.o[k]);
+        g_counters[19 + k] = asuint(ray.d[k]);
+    }
+    g_counters[22] = ray.departedPrimitive;
+    g_counters[23] = hit.prim;
+}
+
+Crossing meetBoundary(SurfaceHit hit, inout PathRay ray, inout uint4 stats) {
     GBoundary b = g_boundaries[hit.boundary];
     Crossing c;
-    c.fromFront = dot(d, hit.n) < 0;
+    c.fromFront = dot(ray.d, hit.n) < 0;
     c.inc = c.fromFront ? b.front : b.back;
     c.other = c.fromFront ? b.back : b.front;
     c.surface = g_optics[b.optics].a.x;
-    if (c.inc != region || hit.ambiguousContact) {
+    if (c.inc != ray.region || hit.ambiguousContact) {
         stats.z++;
-        noteInconsistency(hit.boundary, region, c.inc, previous, hit.p);
-        region = c.inc;
+        noteInconsistency(hit, ray, c.inc);
+        ray.region = c.inc;
     }
     return c;
 }
@@ -848,7 +853,7 @@ bool stepPath(inout PathState p, inout Rng rng, inout uint4 stats) {
         return false;
     }
 
-    const Crossing c = meetBoundary(hit, p.ray.d, p.ray.region, p.ray.departed, stats);
+    const Crossing c = meetBoundary(hit, p.ray, stats);
     if (hit.ambiguousContact) return false;
 #ifdef OWE_SPPM
     if (!p.vpDone) p.pathLength += hit.t;

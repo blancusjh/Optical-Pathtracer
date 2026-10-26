@@ -76,23 +76,13 @@ bool MeshShape::intersect(const Ray& r, double tmin, double tmax, LocalHit& h) c
     bvh_.traverse(r, tmin, best, [&](uint32_t i, double& tm) {
         const auto& t = tris_[i];
         const Vec3 &v0 = pos_[t[0]], &v1 = pos_[t[1]], &v2 = pos_[t[2]];
-        Vec3 e1 = v1 - v0, e2 = v2 - v0;
-        Vec3 pv = cross(r.d, e2);
-        double det = dot(e1, pv);
-        if (std::abs(det) < 1e-300) return;
-        double inv = 1 / det;
-        Vec3 tv = r.o - v0;
-        double u = dot(tv, pv) * inv;
-        if (u < 0 || u > 1) return;
-        Vec3 qv = cross(tv, e1);
-        double v = dot(r.d, qv) * inv;
-        if (v < 0 || u + v > 1) return;
-        double tt = dot(e2, qv) * inv;
-        if (tt <= tmin || tt >= tm) return;
+        if (!lineCrossesTriangle(r.o, r.d, v0, v1, v2)) return;
+        const Vec3 n = normalize(triangleNormal(v0, v1, v2)), tv = r.o - v0;
+        const double tt = -dot(tv, n) / dot(r.d, n);
+        if (!(tt > tmin && tt < tm)) return;
         // Near a grazing departure, t can be large even for a tiny plane error.
         // Primitive identity and normal displacement identify the actual self face.
-        if (sameFace(r.departedPrimitive, i) &&
-            std::abs(dot(tv, normalize(cross(e1, e2)))) <= r.departureError) return;
+        if (sameFace(r.departedPrimitive, i) && std::abs(dot(tv, n)) <= r.departureError) return;
         tm = tt;
         found = true;
         h.t = tt;

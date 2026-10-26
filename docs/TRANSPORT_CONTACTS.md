@@ -71,6 +71,13 @@ query state and repeated work:
   call, including planetary sphere behavior. The small `intersectSpawnWorld`
   wrapper permits inlining; its traversal and solver children remain isolated.
 
+Triangles are crossed by the watertight test (Woop, Benthin and Wald 2013,
+`lineCrossesTriangle` in `core/shared/surfaces.hpp`, both backends): each edge's
+side is decided from that edge's own two vertices, so faces sharing an edge agree
+on it and a long sliver is resolved near its far edge. Möller–Trumbore's u + v ≤ 1
+cancels there in float: the Invisible Window panel's fan-triangulated back let
+rays entering a side face micrometres from the rim escape from inside the glass.
+
 Two distinct, simultaneously incident physical interfaces are ambiguous if the
 region does not establish their order. Keep the diagnostic and stop that path.
 A zero-thickness detector readout cannot take precedence over coincident opaque

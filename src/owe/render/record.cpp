@@ -92,8 +92,11 @@ std::string renderMetadataJSON(const Scene& scene, const Renderer& r, const Rend
            << "\", \"ray_region\": \"" << jsonEscape(w.regionLabel(first.rayRegion))
            << "\", \"expected_region\": \"" << jsonEscape(w.regionLabel(first.boundaryRegion))
            << "\", \"previous_boundary\": \"" << jsonEscape(w.boundaryLabel(first.previous))
-           << "\", \"position_m\": [" << std::setprecision(17) << first.p.x << ", " << first.p.y << ", "
-           << first.p.z << "]}" << std::setprecision(6);
+           << "\", \"position_m\": [" << std::setprecision(17) << first.p.x << ", " << first.p.y << ", " << first.p.z
+           << "], \"segment_origin_m\": [" << first.origin.x << ", " << first.origin.y << ", " << first.origin.z
+           << "], \"segment_direction\": [" << first.direction.x << ", " << first.direction.y << ", " << first.direction.z
+           << "], \"previous_primitive\": " << first.previousPrimitive << ", \"primitive\": " << first.primitive << "}"
+           << std::setprecision(6);
     }
     os << "},\n";
     os << "  \"mean_Y\": " << img.meanY() << ",\n";

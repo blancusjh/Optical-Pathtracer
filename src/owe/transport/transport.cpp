@@ -118,15 +118,15 @@ struct Crossing {
     uint32_t inc, other;  // the region the ray must arrive from, and the one beyond
     bool fromFront;
 };
-Crossing meetBoundary(const World& w, const SurfaceHit& hit, const Vec3& d, uint32_t& region, uint32_t previous,
+Crossing meetBoundary(const World& w, const SurfaceHit& hit, const Ray& ray, uint32_t& region, uint32_t previous,
                       TransportStats& st) {
     const Boundary& b = w.boundaries()[hit.boundary];
     Crossing c;
-    c.fromFront = dot(d, hit.n) < 0;
+    c.fromFront = dot(ray.d, hit.n) < 0;
     c.inc = c.fromFront ? b.front : b.back;
     c.other = c.fromFront ? b.back : b.front;
     if (c.inc != region || hit.ambiguousContact) {
-        st.noteInconsistency(hit.boundary, region, c.inc, previous, hit.p);
+        st.noteInconsistency({hit.boundary, region, c.inc, previous, hit.p, ray.o, ray.d, ray.departedPrimitive, hit.prim});
         region = c.inc;
     }
     return c;
@@ -440,7 +440,7 @@ Spec4 Tracer::radiance(Ray ray, uint32_t region, Wavelengths& wl, Rng& rng, Tran
         }
 
         opl += nMed * hit.t;
-        const Crossing c = meetBoundary(world_, hit, ray.d, region, lastBoundary, st);
+        const Crossing c = meetBoundary(world_, hit, ray, region, lastBoundary, st);
         if (hit.ambiguousContact) break;
         const Boundary& b = world_.boundaries()[hit.boundary];
         const SurfaceOptics& o = world_.optics()[b.optics];
@@ -683,7 +683,7 @@ void Tracer::traceParticle(const Detector& det, Wavelengths wl, Rng& rng, Film& 
             break;
         }
         opl += nMed * hit.t;
-        const Crossing c = meetBoundary(w, hit, ray.d, region, lastBoundary, st);
+        const Crossing c = meetBoundary(w, hit, ray, region, lastBoundary, st);
         if (hit.ambiguousContact) break;
         const SurfaceOptics& o = w.optics()[w.boundaries()[hit.boundary].optics];
         lastBoundary = hit.boundary;

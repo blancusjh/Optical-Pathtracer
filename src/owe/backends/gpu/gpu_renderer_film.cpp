@@ -46,10 +46,11 @@ void GpuRenderer::collectStats() {
 void GpuRenderer::readFirstInconsistency(TransportStats& st) const {
     const uint32_t* n = static_cast<const uint32_t*>(counterReadback_.mapped);
     if (n[8] == 0 || st.inconsistencies == 0) return;
-    float p[3];
-    std::memcpy(p, n + 13, sizeof p);
-    st.first = {n[9], n[10], n[11], n[12] == kGpuNone ? kNone : n[12],
-                Vec3(p[0], p[1], p[2]) + gs_.origin};
+    float f[9];  // position, origin, direction
+    std::memcpy(f, n + 13, sizeof f);
+    auto none = [](uint32_t v) { return v == kGpuNone ? kNone : v; };
+    st.first = {n[9], n[10], n[11], none(n[12]), Vec3(f[0], f[1], f[2]) + gs_.origin, Vec3(f[3], f[4], f[5]) + gs_.origin,
+                Vec3(f[6], f[7], f[8]), none(n[22]), none(n[23])};
 }
 
 void GpuRenderer::clearFilm() { zeroBuffers({kFilm}); }

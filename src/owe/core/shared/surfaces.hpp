@@ -269,4 +269,24 @@ OWE_FN Real3 triangleNormal(Real3 v0, Real3 v1, Real3 v2) {
     return la >= lb ? cross(b, c) : cross(a, c);
 }
 
+// Whether the line through o along d crosses triangle v0 v1 v2, edges included: the watertight
+// test of Woop, Benthin and Wald (2013). In a frame sheared so the line runs along an axis, the
+// side of each edge is a 2D cross product of that edge's own two vertices (relative to o), so
+// triangles sharing an edge agree on it, and a long sliver's far edge is resolved as precisely as
+// its own vertices. (Möller–Trumbore's u + v ≤ 1 cancels there: in float, a fan's slivers let rays
+// through micrometres inside a mesh's rim.)
+OWE_FN bool lineCrossesTriangle(Real3 o, Real3 d, Real3 v0, Real3 v1, Real3 v2) {
+    Real dx = abs(d.x), dy = abs(d.y), dz = abs(d.z);
+    int kz = dx > dy ? (dx > dz ? 0 : 2) : (dy > dz ? 1 : 2);
+    int kx = kz == 2 ? 0 : kz + 1, ky = kx == 2 ? 0 : kx + 1;
+    Real sx = d[kx] / d[kz], sy = d[ky] / d[kz];
+    Real3 a = v0 - o, b = v1 - o, c = v2 - o;
+    Real ax = a[kx] - sx * a[kz], ay = a[ky] - sy * a[kz];
+    Real bx = b[kx] - sx * b[kz], by = b[ky] - sy * b[kz];
+    Real cx = c[kx] - sx * c[kz], cy = c[ky] - sy * c[kz];
+    Real u = cx * by - cy * bx, v = ax * cy - ay * cx, w = bx * ay - by * ax;
+    if ((u < 0 || v < 0 || w < 0) && (u > 0 || v > 0 || w > 0)) return false;
+    return u + v + w != 0;  // a triangle seen edge-on is not crossed
+}
+
 OWE_SHARED_END

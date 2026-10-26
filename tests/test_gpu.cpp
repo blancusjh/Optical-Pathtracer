@@ -331,6 +331,60 @@ TEST(gpu_contact_spawn_preserves_distinct_parallel_mesh_face) {
 }
 
 
+TEST(gpu_contact_slivers_keep_rays_entering_beside_a_mesh_rim) {
+    // A glass slab whose flat back is a fan of 150 mm × 0.6 mm slivers from its centre (as the
+    // Invisible Window's panel): a ray entering a side face micrometres from the back must leave
+    // through that back. In float, Möller–Trumbore's u + v ≤ 1 rejected the sliver there and the
+    // ray escaped from inside the glass (the panel's leaks); the watertight test resolves it.
+    const Backend* backend = findBackend("gpu");
+    if (!backend || !backend->available()) return;
+    Scene scene;
+    scene.world.env.skyModel = Environment::Sky::Uniform;
+    scene.world.env.zenith = Spectrum::constant(1);
+    const int n = 512;  // rim vertices per side
+    const double h = .15, depth = .02;
+    std::vector<Vec3> rim;
+    for (int side = 0; side < 4; ++side)
+        for (int k = 0; k < n; ++k) {
+            const double s = -h + 2 * h * k / n;
+            rim.push_back(side == 0 ? Vec3(s, -h, 0) : side == 1 ? Vec3(h, s, 0) : side == 2 ? Vec3(-s, h, 0) : Vec3(-h, -s, 0));
+        }
+    MeshData mesh;
+    const Vec3 up(0, 0, depth);
+    for (size_t k = 0; k < rim.size(); ++k) {
+        const Vec3 a = rim[k], b = rim[(k + 1) % rim.size()];
+        mesh.addTriangle({0, 0, 0}, b, a);           // back: the fan
+        mesh.addTriangle(up, a + up, b + up);        // front
+        mesh.addQuad(a, b, b + up, a + up);          // side
+    }
+    BodyMaterial glass;
+    glass.transparent = true;
+    glass.medium = "PMMA";
+    glass.optics = scene.world.dielectricOptics();
+    buildMesh(scene.world, "fan-slab", mesh, glass, -1, Transform{});
+    // A pinhole eye grazing the side face x = h at 20°, 5 µm above the back.
+    const Vec3 target(h, -.1, 5e-6), dir = normalize(Vec3(-std::sin(radians(20)), 0, -std::cos(radians(20))));
+    auto eye = std::make_unique<IdealObserver>();
+    eye->name = "Eye";
+    eye->position = target - dir * .5;
+    eye->lookAt = target;
+    eye->up = {0, 1, 0};
+    eye->width = eye->height = 16;
+    eye->fovY = radians(5e-4);
+    eye->pupilRadius = 0;
+    scene.detectors.push_back(std::move(eye));
+    scene.build();
+    RenderSettings settings;
+    settings.backend = "gpu";
+    settings.integrator = "path";
+    auto renderer = makeRenderer(scene, 0, settings);
+    renderer->runPass(16);
+    std::fprintf(stderr, "    [fan slab] issues %llu, leaks %llu\n", (unsigned long long)renderer->stats().inconsistencies,
+                 (unsigned long long)renderer->stats().leaks);
+    CHECK(renderer->stats().inconsistencies == 0);
+    CHECK(renderer->stats().leaks == 0);
+}
+
 TEST(gpu_contact_spawn_preserves_nearest_distinct_face_in_one_mesh) {
     const Backend* backend = findBackend("gpu");
     if (!backend || !backend->available()) return;

@@ -166,6 +166,9 @@ void printTransportStats(const Scene& scene, const TransportStats& st) {
                  f.previous == kNone ? "its origin" : scene.world.boundaryLabel(f.previous).c_str(),
                  scene.world.boundaryLabel(f.boundary).c_str(), scene.world.regionLabel(f.boundaryRegion).c_str(), f.p.x, f.p.y,
                  f.p.z);
+    std::fprintf(stderr, "  segment from (%.9g, %.9g, %.9g) along (%.9g, %.9g, %.9g), %.9g m; primitive %u -> %u\n",
+                 f.origin.x, f.origin.y, f.origin.z, f.direction.x, f.direction.y, f.direction.z, length(f.p - f.origin),
+                 f.previousPrimitive, f.primitive);
 }
 
 std::string backendNames() {

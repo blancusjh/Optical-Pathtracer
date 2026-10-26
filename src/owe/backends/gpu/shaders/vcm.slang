@@ -190,7 +190,7 @@ void traceLightVcm(inout Wavelengths wl, uint group, inout Rng rng, inout uint4 
             if (ray.region != G.counts.z) stats.w++;
             return;
         }
-        const Crossing c = meetBoundary(hit, ray.d, ray.region, ray.departed, stats);
+        const Crossing c = meetBoundary(hit, ray, stats);
         segment += hit.t;
         if (hit.ambiguousContact) return;
         if (passThrough(hit, c, ray, wl, beta, rng)) {
@@ -393,7 +393,7 @@ float3 traceCameraVcm(float px, float py, Wavelengths wlIn, uint group, inout Rn
             }
             break;
         }
-        const Crossing c = meetBoundary(hit, ray.d, ray.region, ray.departed, stats);
+        const Crossing c = meetBoundary(hit, ray, stats);
         segment += hit.t;
         if (hit.ambiguousContact) break;
         if (passThrough(hit, c, ray, wl, beta, rng)) {

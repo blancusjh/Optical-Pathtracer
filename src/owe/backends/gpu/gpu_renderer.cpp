@@ -147,8 +147,8 @@ GpuRenderer::GpuRenderer(const Scene& scene, int detectorIndex, const RenderSett
     // same layout).
     for (Binding b : {kVisiblePoints, kSppmState, kFlux, kGridHead, kGridNext, kLevels, kGuide, kLightVertices, kVcmCounters})
         if (!buffers_[b].buffer) buffers_[b] = ctx_->createDeviceBuffer(16);
-    buffers_[kCounters] = ctx_->createDeviceBuffer(16 * sizeof(uint32_t));
-    counterReadback_ = ctx_->createHostBuffer(16 * sizeof(uint32_t), true);
+    buffers_[kCounters] = ctx_->createDeviceBuffer(24 * sizeof(uint32_t));
+    counterReadback_ = ctx_->createHostBuffer(24 * sizeof(uint32_t), true);
     if (rayQuery_) hardware_ = std::make_unique<HardwareScene>(*ctx_, scene.world, gs_, buffers_[kTriangles]);
     allocateImageBuffers();
 }
