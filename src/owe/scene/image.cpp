@@ -81,7 +81,12 @@ bool imageSize(const std::string& path, int& width, int& height) {
 }
 
 std::shared_ptr<const ImageRGB> loadImage(const std::string& path) {
-    auto img = std::make_shared<ImageRGB>();
+    return std::make_shared<const ImageRGB>(decodeImage(path));
+}
+
+ImageRGB decodeImage(const std::string& path) {
+    ImageRGB out;
+    ImageRGB* img = &out;
     img->path = path;
     int n = 0;
     if (stbi_is_hdr(path.c_str())) {
@@ -100,7 +105,7 @@ std::shared_ptr<const ImageRGB> loadImage(const std::string& path) {
         stbi_image_free(data);
     }
     if (img->width <= 0 || img->height <= 0) throw std::runtime_error("empty image " + path);
-    return img;
+    return out;
 }
 
 }  // namespace owe

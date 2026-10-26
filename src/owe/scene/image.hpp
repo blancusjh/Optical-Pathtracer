@@ -35,6 +35,7 @@ struct ImageRGB {
 
 // Loads PNG, JPEG, BMP, TGA or HDR; throws with the reason on failure.
 std::shared_ptr<const ImageRGB> loadImage(const std::string& path);
+ImageRGB decodeImage(const std::string& path);  // the same, as a value (no shared copy)
 // Halves an image in each direction (a 2 × 2 box filter, which keeps its mean; an odd last row or
 // column is averaged with its neighbour).
 void halveImage(ImageRGB& img);

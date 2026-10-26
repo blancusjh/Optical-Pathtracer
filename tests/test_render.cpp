@@ -322,6 +322,44 @@ TEST(display_keeps_the_hue_of_spectral_colours) {
     for (int k = 0; k < 3; ++k) CHECK(inside[k] == copy[k]);  // in-gamut colours are untouched
 }
 
+TEST(image_textures_over_the_budget_are_halved_as_decoded_one_by_one) {
+    // Images are decoded in parallel; each must come out as the sequential decode-and-halve would.
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path();
+    std::string text = "units = m\nworld { sky = uniform(1) }\n";
+    std::vector<std::string> files;
+    for (int i = 0; i < 4; ++i) {
+        const int n = 64 >> (i % 2);  // 64 and 32 texels across
+        std::vector<unsigned char> px;
+        for (int k = 0; k < n * n * 3; ++k) px.push_back(static_cast<unsigned char>((k * 37 + i * 101) % 256));
+        files.push_back((dir / ("owe_test_budget_" + std::to_string(i) + ".png")).string());
+        writeRGB8PNG(files.back(), n, n, px);
+        text += "material m" + std::to_string(i) + " { type = diffuse  texture = image(\"" + files.back() + "\", scale = 1) }\n";
+        text += "body S" + std::to_string(i) + " { type = sheet  size = (1, 1)  position = (" + std::to_string(2 * i) +
+                ", 0, 0)  material = m" + std::to_string(i) + " }\n";
+    }
+    text += "observer Eye { position = (0, 0, 5)  look_at = (0, 0, 0)  up = (0, 1, 0)  fov = 20deg  resolution = (8, 8) }\n";
+    setenv("OWE_TEXTURE_BUDGET_MB", "0.02", 1);  // 20 KB: every image is halved at least once
+    setenv("OWE_TEXTURE_DECODE_MB", "0.03", 1);  // at most two decoded at a time
+    Scene sc = loadSceneFromString(text);
+    unsetenv("OWE_TEXTURE_BUDGET_MB");
+    unsetenv("OWE_TEXTURE_DECODE_MB");
+    size_t checked = 0, bytes = 0;
+    for (const auto& o : sc.world.optics()) {
+        if (!o.texture.image) continue;
+        const ImageRGB& got = *o.texture.image;
+        ImageRGB want = decodeImage(got.path);
+        while (want.width > got.width) halveImage(want);
+        CHECK(want.width == got.width && want.height == got.height);
+        CHECK(want.srgb8 == got.srgb8);
+        bytes += imageBytes(got);
+        ++checked;
+    }
+    CHECK(checked == 4);
+    CHECK(bytes <= size_t(0.02 * 1024 * 1024));
+    for (const std::string& f : files) fs::remove(f);
+}
+
 TEST(image_texture_reflects_its_texels_spectra_on_every_backend) {
     // A four-quadrant sRGB image (red, green, blue, white) on a sheet under a uniform sky of unit radiance: each
     // quadrant's radiance is the texel's reflectance spectrum, r·B_r + g·B_g + b·B_b of the linear

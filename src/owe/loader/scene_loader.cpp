@@ -1,14 +1,18 @@
 // The .owe scene language: loading a document into a Scene, its top-level statements (world,
 // assemblies, render settings) and the scene's texture budget. Materials, bodies and detectors are
 // in loader_materials.cpp, loader_bodies.cpp and loader_detectors.cpp.
+#include <algorithm>
+#include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <functional>
 #include <limits>
+#include <mutex>
 #include <sstream>
 
+#include "owe/core/parallel.hpp"
 #include "owe/core/units.hpp"
 #include "owe/loader/loader.hpp"
 
@@ -156,20 +160,52 @@ void Loader::fitTextureBudget() {
         largest->halvings++;
         total += largest->bytes();
     }
-    // Decode one image at a time and halve it at once: memory holds one image at full size at
-    // most. The images are the loader's own, shared read-only once loaded.
-    for (Plan& p : plans) {
-        ImageRGB& img = const_cast<ImageRGB&>(*p.img);
-        try {
-            std::shared_ptr<const ImageRGB> full = loadImage(img.path);
-            ImageRGB tmp = *full;
-            full.reset();
-            for (int k = 0; k < p.halvings; ++k) halveImage(tmp);
-            img = std::move(tmp);
-        } catch (const std::exception& e) {
-            throw std::runtime_error(img.path + ": " + e.what());
+    // Decode and halve the images in parallel, largest first, while those at full size fit a
+    // memory cap (OWE_TEXTURE_DECODE_MB; one image at a time when it alone exceeds it): decoding
+    // is most of a scene's loading. The images are the loader's own, shared read-only once loaded.
+    double capMb = 4096;
+    if (const char* e = std::getenv("OWE_TEXTURE_DECODE_MB"); e && *e) capMb = std::atof(e);
+    const size_t cap = size_t(std::max(0.0, capMb) * 1024 * 1024);
+    auto fullBytes = [](const Plan& p) {  // the decoder's buffer and the texels it becomes
+        return size_t(p.img->width) * size_t(p.img->height) * (p.img->hdr ? 24 : 7);
+    };
+    std::vector<Plan*> order;
+    for (Plan& p : plans) order.push_back(&p);
+    std::stable_sort(order.begin(), order.end(), [&](const Plan* a, const Plan* b) { return fullBytes(*a) > fullBytes(*b); });
+    std::mutex m;
+    std::condition_variable cv;
+    size_t next = 0, inFlight = 0;
+    bool failed = false;
+    parallelWorkers(std::min<size_t>(hardwareThreads(), order.size()), [&](size_t) {
+        for (;;) {
+            Plan* p;
+            size_t need;
+            {
+                std::unique_lock<std::mutex> lk(m);
+                cv.wait(lk, [&] {
+                    return failed || next >= order.size() || inFlight == 0 || inFlight + fullBytes(*order[next]) <= cap;
+                });
+                if (failed || next >= order.size()) return;
+                p = order[next++];
+                need = fullBytes(*p);
+                inFlight += need;
+            }
+            ImageRGB& img = const_cast<ImageRGB&>(*p->img);
+            try {
+                ImageRGB decoded = decodeImage(img.path);
+                for (int k = 0; k < p->halvings; ++k) halveImage(decoded);
+                img = std::move(decoded);
+            } catch (const std::exception& e) {
+                std::lock_guard<std::mutex> lk(m);
+                failed = true;
+                cv.notify_all();
+                throw std::runtime_error(img.path + ": " + e.what());
+            }
+            std::lock_guard<std::mutex> lk(m);
+            inFlight -= need;
+            cv.notify_all();
         }
-    }
+    });
     if (before > budget) {
         std::fprintf(stderr, "textures: %.0f MB over the %.0f MB budget, now %.0f MB (OWE_TEXTURE_BUDGET_MB):\n",
                      before / 1048576.0, mb, total / 1048576.0);
