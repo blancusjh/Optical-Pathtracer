@@ -17,7 +17,7 @@ float envMapRadiance(float3 dir, float l) {
     float2 uv = envMapUV(dir);
     float3 c = imageBilinear(G.envMap.x, uv.x, uv.y);
     float3 w = max(float3(dot(G.rgbA[0].xyz, c), dot(G.rgbA[1].xyz, c), dot(G.rgbA[2].xyz, c)), 0.0);
-    return G.envParams.y * G.envParams.w * dot(w, rgbBasis(l)) * planck(l, 6504.0) * 1e-13;
+    return G.envParams.y * G.envParams.w * dot(w, rgbBasis(l)) * rgbIlluminantBase(l);
 }
 // Binary search: the last index i in [0, n) with cdf[i] <= a (cdf at scalars[at..at+n]).
 uint cdfIndex(uint at, uint n, float a) {
