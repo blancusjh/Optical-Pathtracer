@@ -6,7 +6,9 @@
       "scene": "scenes/the_lens.owe",
       "arguments": [
         "--spp",
-        "512"
+        "512",
+        "--backend",
+        "gpu"
       ],
       "opt_in": false,
       "rights": "cleared"
@@ -28,7 +30,9 @@
       "scene": "scenes/glass/glass_of_water.owe",
       "arguments": [
         "--spp",
-        "512"
+        "512",
+        "--backend",
+        "gpu"
       ],
       "opt_in": false,
       "rights": "cleared"
@@ -132,7 +136,9 @@
         "--integrator",
         "hybrid",
         "--spp",
-        "256"
+        "256",
+        "--backend",
+        "gpu"
       ],
       "opt_in": false,
       "rights": "cleared"

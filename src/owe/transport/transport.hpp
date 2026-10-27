@@ -1,8 +1,8 @@
-// The reference transport engine (IEEE-754 double). Camera paths, light paths and diagnostic ray
-// walks all use the same intersection, region bookkeeping and interface optics. It defines the
-// transport every backend estimates: the cpu backend runs it on host threads, the gpu backend's
-// kernels are a float32 port of it validated against it, and the lens analyser, the inspector and
-// the loader (a camera's real focus) use its walks directly.
+// The reference transport engine (IEEE-754 double): camera paths and diagnostic ray walks over the
+// same intersection, region bookkeeping and interface optics. The cpu backend runs its path tracer
+// on host threads, the reference the gpu backend's path kernel is checked against; the lens
+// analyser, the inspector and the loader (a camera's real focus) use its walks directly. Light
+// tracing and the bidirectional estimators exist on the GPU only.
 #pragma once
 
 #include <atomic>
@@ -70,10 +70,6 @@ public:
     Tracer(const Scene& scene, int maxDepth = 64, int rrDepth = 6) : scene_(scene), world_(scene.world),
         maxDepth_(maxDepth), rrDepth_(rrDepth) {}
 
-    // Hybrid estimation: paths of the form  eye → D → S⁺ → light  (caustics seen directly;
-    // D non-specular, S specular) are owned by light tracing, every other path by path
-    // tracing. The partition is disjoint and complete, so the summed estimate is unbiased.
-    void setCausticPartition(bool on) { partition_ = on; }
     // Minimum probability of choosing either branch at smooth dielectric interfaces (0 = exact
     // Fresnel probabilities). Unbiased for any value in [0, 0.5); raises ghost-path sampling.
     void setFresnelFloor(double f) { fresnelFloor_ = clamp(f, 0.0, 0.49); }
@@ -82,10 +78,6 @@ public:
     // path's wavelengths. `wl` may have its secondary wavelengths terminated on return.
     Spec4 radiance(Ray ray, uint32_t region, Wavelengths& wl, Rng& rng, TransportStats& st,
                    PathRecord* rec = nullptr) const;
-
-    // Emits one particle (four wavelengths) and splats its XYZ contributions into `film`.
-    void traceParticle(const Detector& det, Wavelengths wl, Rng& rng, Film& film, TransportStats& st,
-                       PathRecord* rec = nullptr) const;
 
     // Follows a single ray through the world and records every event.
     PathRecord walk(Ray ray, uint32_t region, double lambda, WalkMode mode, Rng& rng, int maxEvents = 256) const;
@@ -110,7 +102,6 @@ private:
     const Scene& scene_;
     const World& world_;
     int maxDepth_, rrDepth_;
-    bool partition_ = false;
     double fresnelFloor_ = 0;
 };
 

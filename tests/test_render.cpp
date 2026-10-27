@@ -258,7 +258,6 @@ TEST(registry_lists_the_reference_first_and_names_backends) {
     CHECK(list.front() == &referenceBackend());
     CHECK(referenceBackend().name() == "cpu");
     CHECK(referenceBackend().available());
-    for (const char* integrator : {"path", "light", "hybrid"}) CHECK(referenceBackend().supports(integrator));
     for (const Backend* b : list) {
         CHECK(findBackend(b->name()) == b);
         CHECK(b->supports("path"));  // every backend implements the path integrator
@@ -279,8 +278,8 @@ TEST(registry_lists_the_reference_first_and_names_backends) {
 TEST(registry_adapts_integrators_a_backend_lacks) {
     RenderSettings rs;
     rs.integrator = "hybrid";
-    CHECK(adaptToBackend(rs).empty());  // the reference implements it
-    CHECK(rs.integrator == "hybrid");
+    CHECK(!adaptToBackend(rs).empty());  // the reference implements the path integrator only
+    CHECK(rs.integrator == "path");
     for (const Backend* b : backends()) {
         RenderSettings s;
         s.backend = b->name();
@@ -495,12 +494,13 @@ TEST(environment_map_lights_the_scene_as_its_radiance_says) {
         // samples (escapes and NEE) and the same with a different seed: consistent, and positive.
         const double s1 = meanOf(sunny, b->name(), 512);
         CHECK(s1 > 0);
+        std::fprintf(stderr, "    [%s] white map / uniform sky %.4f\n", b->name().c_str(), a / u);
+        if (!b->supports("light")) continue;
         // Independently, on the ball (light tracing cannot show the sky seen directly): particles drawn
         // from the map's distribution and connected to the eye against the path tracer.
         const double p1 = centreOf(sunny, b->name(), 512, "path", 12), p2 = centreOf(sunny, b->name(), 4096, "light", 12);
         CHECK_NEAR(p2 / p1, 1, 0.02);
-        std::fprintf(stderr, "    [%s] white map / uniform sky %.4f; patchy map on the ball: path %.5g, light %.5g\n",
-                     b->name().c_str(), a / u, p1, p2);
+        std::fprintf(stderr, "    [%s] patchy map on the ball: path %.5g, light %.5g\n", b->name().c_str(), p1, p2);
     }
     fs::remove(white);
     fs::remove(patch);

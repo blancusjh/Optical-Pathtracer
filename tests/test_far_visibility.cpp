@@ -61,7 +61,6 @@ void checkVisibility(const std::string& backend, const char* integrator, bool di
 } // namespace
 
 TEST(backends_far_light_vertices_respect_near_observer_occlusion) {
-    checkVisibility("cpu", "light");
     const Backend* gpu = findBackend("gpu");
     std::string why;
     if (!gpu || !gpu->available(&why)) {
@@ -73,7 +72,6 @@ TEST(backends_far_light_vertices_respect_near_observer_occlusion) {
 }
 
 TEST(backends_far_emitters_respect_near_observer_occlusion) {
-    checkVisibility("cpu", "light", true);
     const Backend* gpu = findBackend("gpu");
     if (gpu && gpu->available() && gpu->supports("light")) checkVisibility("gpu", "light", true);
 }

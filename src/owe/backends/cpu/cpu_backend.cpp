@@ -17,8 +17,7 @@ namespace owe {
 namespace {
 
 // Camera paths are scheduled in 16×16 tiles over the threads; each pixel draws from its own
-// stream (seed, pixel, pass), so the result does not depend on the scheduling. Particles are
-// traced in fixed lanes, merged in lane order.
+// stream (seed, pixel, pass), so the result does not depend on the scheduling.
 class CpuRenderer final : public Renderer {
 public:
     CpuRenderer(const Scene& scene, int detectorIndex, const RenderSettings& settings);
@@ -29,41 +28,28 @@ public:
 
 private:
     void pass(int samplesPerPixel) override;
-    void passPath(int spp);
-    void passLight(int particlesPerPixel);
 
     Tracer tracer_;
-    Film film_;       // camera-path estimates (per-pixel sample counts)
-    Film lightFilm_;  // particle splats (normalised by the particle count)
-    double particles_ = 0;
+    Film film_;  // camera-path estimates (per-pixel sample counts)
     int threads_;
 };
 
 CpuRenderer::CpuRenderer(const Scene& scene, int detectorIndex, const RenderSettings& settings)
-    : Renderer(scene, detectorIndex, settings, {"path", "light", "hybrid"}),
+    : Renderer(scene, detectorIndex, settings, {"path"}),
       tracer_(scene, settings.maxDepth, settings.rrDepth),
       film_(det_->width, det_->height),
-      lightFilm_(det_->width, det_->height),
       threads_(settings.threads > 0 ? settings.threads : int(hardwareThreads())) {
     tracer_.setFresnelFloor(settings.fresnelFloor);
-    tracer_.setCausticPartition(settings.integrator == "hybrid");
 }
 
 bool CpuRenderer::resetObserver() {
     if (!dynamic_cast<const IdealObserver*>(det_)) return false;
     film_ = Film(det_->width, det_->height);
-    lightFilm_ = Film(det_->width, det_->height);
-    particles_ = 0;
     resetProgress();
     return true;
 }
 
 void CpuRenderer::pass(int spp) {
-    if (settings_.integrator != "light") passPath(spp);
-    if (settings_.integrator != "path") passLight(spp);
-}
-
-void CpuRenderer::passPath(int spp) {
     const int W = det_->width, H = det_->height;
     const int tile = 16;
     const int tilesX = (W + tile - 1) / tile, tilesY = (H + tile - 1) / tile;
@@ -107,47 +93,15 @@ void CpuRenderer::passPath(int spp) {
     for (auto& s : stats) stats_.add(s);
 }
 
-void CpuRenderer::passLight(int ppp) {
-    const int W = det_->width, H = det_->height;
-    const uint64_t total = uint64_t(W) * H * uint64_t(ppp);
-    // Fixed lanes make the result independent of the thread count.
-    const int lanes = 16;
-    const uint64_t chunk = 4096;
-    const uint64_t chunks = (total + chunk - 1) / chunk;
-    std::vector<Film> films(lanes, Film(W, H));
-    std::vector<TransportStats> stats(lanes);
-    std::atomic<int> nextLane{0};
-    auto worker = [&](size_t) {
-        for (;;) {
-            int lane = nextLane.fetch_add(1);
-            if (lane >= lanes) break;
-            for (uint64_t c = uint64_t(lane); c < chunks; c += lanes) {
-                Rng rng(hashCombine(settings_.seed ^ 0x5bd1e995ULL, c), uint64_t(passes_));
-                uint64_t end = std::min(total, (c + 1) * chunk);
-                for (uint64_t i = c * chunk; i < end; ++i)
-                    tracer_.traceParticle(*det_, Wavelengths::sample(rng.uniform()), rng, films[lane], stats[lane]);
-            }
-        }
-    };
-    parallelWorkers(size_t(std::min(threads_, lanes)), worker);
-    for (int l = 0; l < lanes; ++l) {
-        lightFilm_.merge(films[l]);
-        stats_.add(stats[l]);
-    }
-    particles_ += double(total);
-}
-
 Image CpuRenderer::resolve() const {
     Image img;
     img.width = film_.width;
     img.height = film_.height;
     img.xyz.assign(film_.xyz.size(), 0.0);
     size_t n = size_t(img.width) * img.height;
-    double lightNorm = particles_ > 0 ? 1.0 / particles_ : 0;
     for (size_t i = 0; i < n; ++i) {
-        double pathNorm = film_.samples[i] > 0 ? 1.0 / film_.samples[i] : 0;
-        for (int c = 0; c < 3; ++c)
-            img.xyz[3 * i + c] = film_.xyz[3 * i + c] * pathNorm + lightFilm_.xyz[3 * i + c] * lightNorm;
+        double norm = film_.samples[i] > 0 ? 1.0 / film_.samples[i] : 0;
+        for (int c = 0; c < 3; ++c) img.xyz[3 * i + c] = film_.xyz[3 * i + c] * norm;
     }
     return img;
 }
@@ -179,7 +133,7 @@ public:
         d.driver = std::to_string(hardwareThreads()) + " hardware threads";
         return {d};
     }
-    std::vector<std::string> integrators() const override { return {"path", "light", "hybrid"}; }
+    std::vector<std::string> integrators() const override { return {"path"}; }
     std::unique_ptr<Renderer> createRenderer(const Scene& scene, int detectorIndex,
                                              const RenderSettings& settings) const override {
         for (const SurfaceOptics& o : scene.world.optics())

@@ -18,10 +18,11 @@ using namespace owe;
 
 namespace {
 
-std::vector<std::string> availableBackends() {
+// The available backends that trace particles (light tracing).
+std::vector<std::string> lightBackends() {
     std::vector<std::string> r;
     for (const Backend* b : backends())
-        if (b->available()) r.push_back(b->name());
+        if (b->available() && b->supports("light")) r.push_back(b->name());
     return r;
 }
 
@@ -113,7 +114,7 @@ TEST(reference_lens_focuses_sunlight_with_its_fresnel_losses) {
         return sum / weight;
     });
     const double expected = sunIrradiance(sc) * Pi * 20.0 * 20.0 * transmitted;
-    for (const std::string& backend : availableBackends()) {
+    for (const std::string& backend : lightBackends()) {
         Image img = renderLight(sc, backend, 400);
         const double power = sensorPower(img, 24, 24);
         std::fprintf(stderr, "    [%s] lens: power %.6g, expected %.6g (T = %.4f), ratio %.4f, concentration %.0f×\n",
@@ -143,7 +144,7 @@ TEST(reference_water_surface_transmits_the_fresnel_share) {
         const double ct = std::sqrt(1 - (1 - ci * ci) / (n * n));
         return ci * (1 - fresnel(1, n, ci)) * (1 - fresnel(n, 1, ct)) * std::exp(-water.absorption.eval(l) * 0.1 / ct);
     });
-    for (const std::string& backend : availableBackends()) {
+    for (const std::string& backend : lightBackends()) {
         Image img = renderLight(sc, backend, 4000);
         const double E = sensorPower(img, 0.2, 0.2) / 0.04;
         std::fprintf(stderr, "    [%s] water: irradiance %.6g, expected %.6g, ratio %.4f\n", backend.c_str(), E, expected,
@@ -166,7 +167,7 @@ TEST(reference_concave_mirror_concentrates_sunlight) {
         render { detector = Focus }
     )");
     const double expected = sunIrradiance(sc) * (Pi * 50 * 50 - 100) * 0.9;
-    for (const std::string& backend : availableBackends()) {
+    for (const std::string& backend : lightBackends()) {
         Image img = renderLight(sc, backend, 2000);
         const double power = sensorPower(img, 10, 10);
         std::fprintf(stderr, "    [%s] mirror: power %.6g, expected %.6g, ratio %.4f, concentration %.0f×\n",
@@ -327,7 +328,8 @@ TEST(reference_ripple_caustics_follow_the_ray_map_jacobian) {
     // Fresnel at the analytic surface and the flat bottom, the sun's 0.53° disc, CIE-weighted
     // wavelengths) and histogrammed; the renderer's particles must land the same.
     const Backend* gpu = findBackend("gpu");
-    const std::string backend = gpu && gpu->available() ? "gpu" : "cpu";
+    if (!gpu || !gpu->available()) return;
+    const std::string backend = "gpu";
     const double a = 0.0005, lambdaW = 0.02, k = 2 * Pi / lambdaW, D = 0.08, s = 0.001;
     char text[1200];
     std::snprintf(text, sizeof text, R"(
@@ -339,7 +341,7 @@ TEST(reference_ripple_caustics_follow_the_ray_map_jacobian) {
         render { detector = Floor }
     )", D, a, lambdaW, -D - s);
     Scene sc = loadSceneFromString(text);
-    Image img = renderLight(sc, backend, backend == "gpu" ? 60000 : 20000);
+    Image img = renderLight(sc, backend, 60000);
     std::vector<double> rendered(160, 0.0);
     for (int x = 0; x < 160; ++x)
         for (int y = 0; y < 4; ++y) rendered[size_t(x)] += img.at(x, y).y / 4;

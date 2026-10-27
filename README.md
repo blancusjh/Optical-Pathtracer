@@ -71,7 +71,7 @@ Medium  →  Region  →  Boundary  →  Body  →  Assembly
 
 The order in which light meets surfaces is never prescribed; it is discovered by ray casting.
 Ghost paths such as S₄ → S₇ → S₄ → S₂ are simply paths. The same reference `Tracer` serves path
-tracing, light tracing, the lens analyser and the inspector.
+tracing, the lens analyser and the inspector.
 
 Where that transport runs is a separate, explicit choice — a **backend**:
 
@@ -147,8 +147,8 @@ with a 0.35 EV dead band). **L** meters again, **+**/**-** change the exposure (
 the automatic modes). A lamp or the sun entering the view saturates; the room around it does not
 darken. Saved images use exactly the exposure the window shows.
 Click a pixel to inspect its light paths. **S** saves PNG, raw PFM and a JSON render record under
-`out/view_<scene>_<detector>`. On a backend without the scene's light or hybrid integrator the
-view uses path tracing (same expected image); on the reference it can use either. Scene changes
+`out/view_<scene>_<detector>`. On a backend without the scene's light or hybrid integrator (the
+reference has the path integrator only) the view uses path tracing (same expected image). Scene changes
 take effect after the current render pass finishes.
 
 ### Explore the scene
@@ -324,7 +324,7 @@ devices and integrators:
 |---|---|---|
 | Where | host threads | Vulkan compute: NVIDIA, AMD, Intel; Apple silicon via MoltenVK |
 | Arithmetic | IEEE-754 double | float32, camera-relative |
-| Integrators | path, light, hybrid | path, light, hybrid |
+| Integrators | path | path, light, hybrid, sppm, bdpt, vcm |
 | Reproducible | bitwise for a seed, any thread count or compiler | bitwise on a given device and driver |
 
 `--backend gpu` runs every integrator as Slang kernels on Vulkan compute. It is a float port of the reference: the same shapes and quadric root
@@ -376,8 +376,9 @@ blocks: 96 × XYZ over 8 runs: 288 tests, Σz²/n = 1.199, max |z| = 4.03, |z|>3
 verdict: consistent (differences are Monte-Carlo noise)
 ```
 
-Every detector of every scene in `scenes/` is consistent, and so are the particle integrators
-(`--integrator light` or `hybrid`; the lens, prism and glass-of-water scenes use hybrid). Particle
+Every detector of every scene in `scenes/` is consistent. The particle integrators
+(`--integrator light` or `hybrid`; the lens, prism and glass-of-water scenes use hybrid) run on the
+GPU only and are compared with the reference's path tracer. Particle
 splats land on pixels from many threads in no fixed order, so the GPU adds them as exact integers
 (each splat's significand in 64-bit fixed-point bins), which keeps particle images bitwise
 reproducible too. Every backend also runs the conformance suite (`tests/test_backends.cpp`), so a
@@ -477,8 +478,7 @@ Correctness is established against analytic limits, never by "looks plausible"
 * **Transport** — Beer–Lambert; an absorbing glass plate with incoherent multiple
   reflections (T = (1−R)²τ / (1 − R²τ²)); white furnace L = Lₑ/(1−ρ); a lossless glass
   sphere is invisible in a uniform field; the n² radiance law under water; irradiance from a
-  Lambertian disk (exact off-axis formula) by path *and* light tracing; path tracing, light
-  tracing and the hybrid agree within 4σ over independent seeds; bitwise reproducibility.
+  Lambertian disk (exact off-axis formula); bitwise reproducibility.
 * **Instruments** — paraxial EFL/BFL equal the thick-lens formulas; a near-axis real ray
   through the lens *body* reaches the paraxial focus to 5e-11 m; the same lens 3 km from the
   origin keeps that precision; spherical aberration and chromatic trends; an achromat
@@ -495,8 +495,9 @@ Correctness is established against analytic limits, never by "looks plausible"
   area; starlight and a lamp; reflected moonlight; a diffuse screen's irradiance readout and its
   equal radiance over the front hemisphere; the telescope image for freely placed eyes; sliver
   triangles lit like their neighbours; bit-exact observer resets; and, for the GPU, block-wise
-  statistical agreement with the reference on a caustic (path, light and hybrid), diffuse
-  screens, a telescope, a physical camera and Saturn at 1.28·10¹² m.
+  statistical agreement with the reference's path tracer on a caustic (path, light and hybrid),
+  light tracing through a pinhole and a lens pupil, diffuse screens, a telescope, a physical
+  camera and Saturn at 1.28·10¹² m.
 
 ## Status
 

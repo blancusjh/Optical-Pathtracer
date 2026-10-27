@@ -42,7 +42,7 @@ implements and which estimates the same image (`adaptToBackend`, which says so).
 |---|---|---|
 | Where | host threads | Vulkan compute: NVIDIA, AMD, Intel; Apple silicon via MoltenVK |
 | Arithmetic | IEEE-754 double | float32, camera-relative (XIV) |
-| Integrators | path, light, hybrid | path, light, hybrid, sppm, bdpt, vcm |
+| Integrators | path | path, light, hybrid, sppm, bdpt, vcm |
 | Mesh shading | flat | flat or smooth normals |
 | Material maps | first roughness | roughness and tint per texture component |
 | Reproducibility | bitwise for a seed, any thread count or compiler | bitwise on a given device and driver |
@@ -299,8 +299,9 @@ order from the same PCG32 streams, so GPU and CPU paths coincide until float rou
 decision differ. Camera paths run one thread per pixel; a pass is split into ~50 ms dispatches
 (no OS watchdog) with each pixel's random stream and compensated sums kept in device memory, so
 the result does not depend on how a pass is split. The light and hybrid integrators add a
-particle kernel (one thread per particle, its own PCG32 stream; the hybrid partition is the
-reference's). Particles splat onto pixels from many threads in no fixed order; float atomics
+particle kernel (one thread per particle, its own PCG32 stream; the hybrid partition gives light
+tracing the paths eye → diffuse → specular⁺ → light). They have no CPU counterpart: their tests compare
+them with the reference's path tracer and with analytic results. Particles splat onto pixels from many threads in no fixed order; float atomics
 would make the image depend on that order, so each splat's 24-bit significand is added as an
 integer into 64-bit fixed-point bins keyed by its exponent (32-bit atomics with carries, which
 every Vulkan device has). These exact bins are converted on the GPU into compensated float
