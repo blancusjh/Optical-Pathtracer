@@ -57,9 +57,10 @@ renders that lack these sidecars. Historical reviewed outputs under `out/scenes/
 remain useful visual evidence, but their native scene hash alone does not prove
 unchanged external assets or executable.
 
-Both invisible-window entries retain unresolved target-photo rights in the
-manifest and historical sidecars. Local diagnostic rendering and review may continue;
-promotion is blocked until source rights are cleared. See [asset credits](ASSET_CREDITS.md). The manifest does not declare any scan image
+Permission for the invisible-window target photograph was confirmed on 26 October
+2026, so both entries are `cleared` in the manifest; their historical sidecars still
+record the earlier `unresolved` status. Their promotion now waits on clean
+diagnostics and review. See [asset credits](ASSET_CREDITS.md). The manifest does not declare any scan image
 visually accepted; a root review and the promotion note provide that decision.
 New README image links should be added only after promotion.
 
@@ -110,9 +111,9 @@ original assets. Setup from the repository root:
    this checker does not certify reconstructed derivatives against an old capture.
 
 The frozen PMMA mesh and product JSON under `models/caustic/` are already included.
-Rendering the invisible window does not require the unidentified target photograph
-or inverse solver. Its unknown target-photo rights remain recorded; the package does
-not redistribute that source image or infer a licence. The tracked Peacock glTF
+Rendering the invisible window does not require the target photograph or inverse
+solver. The package does not redistribute that source image; the permission recorded
+in the asset credits covers the derived renders. The tracked Peacock glTF
 uses the original downloaded scan buffer and images at their recorded relative paths.
 Do not run the historical `assets/curation/*/build_study.py` scripts: those construction
 helpers replace scene fragments and are not an installation procedure.

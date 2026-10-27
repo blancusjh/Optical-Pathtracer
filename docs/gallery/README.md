@@ -26,6 +26,7 @@ promotion criteria. See [current status](../STATUS.md) and the
 | [tea_glass](tea_glass.json) | 1,024 | 1,672 | 1 |
 | [the_lens](the_lens.json) | 512 | 0 | 0 |
 
-Window PNGs are withheld while source permission is pending. Their numeric
-records remain available here. Clean counters alone do not certify a renderer
+Window PNGs are withheld until a capture has clean diagnostics (permission for
+the target photograph was confirmed on 26 October 2026). Their numeric records
+remain available here. Clean counters alone do not certify a renderer
 or a gallery image: visual noise and independent estimator checks also matter.

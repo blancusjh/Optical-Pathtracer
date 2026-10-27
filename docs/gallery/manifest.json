@@ -436,7 +436,7 @@
         "0"
       ],
       "opt_in": true,
-      "rights": "unresolved",
+      "rights": "cleared",
       "review_note": "Review current native image, sampling noise, contacts, and scene provenance before promotion."
     },
     {
@@ -465,7 +465,7 @@
         "0"
       ],
       "opt_in": true,
-      "rights": "unresolved",
+      "rights": "cleared",
       "review_note": "Review current native image, sampling noise, contacts, and scene provenance before promotion."
     }
   ]

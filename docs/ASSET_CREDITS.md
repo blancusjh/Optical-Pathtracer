@@ -73,20 +73,20 @@ they are not a calibrated spectral albedo measurement.
 ## Invisible-window target and frozen product
 
 The target photograph `assets/caustic_panel/cristo-vidriera.jpg` was supplied by
-the user on 6 October 2026. Its photographer, original source, church and licence
-remain unidentified in the local evidence. **Source rights remain unknown.**
-Earlier local captures recorded this unknown status in the manifest and sidecars.
-The Window views are now withheld from the featured gallery, and promotion requires
-cleared source rights. Local diagnostic rendering may continue. No CC0 or public-domain claim is made for the photograph or the
-derived image.
+the user on 6 October 2026. On 26 October 2026 the user confirmed that the project
+has permission to use it as the solver target and to publish renders derived from
+it; the manifest's Window entries are marked `cleared` accordingly. Its photographer,
+original source and church are not recorded here. Captures before that date record
+the earlier `unresolved` status in their sidecars. No CC0 or public-domain claim is
+made for the photograph or the derived image.
 
 The photographed window depicts the Sacred Heart with the banderole “Ecce Cor
 quod tantopere amavit homines”. The supplied photograph truncates the bottom;
 the solver's crop preserves the actual aspect ratio and adds no invented image.
 `models/caustic/sacred_heart_panel.json` records the original photograph SHA-256,
-crop, design wavelength, forward prediction and frozen mesh hash. A photograph
-provided in a conversation establishes input provenance; it does not establish
-redistribution rights.
+crop, design wavelength, forward prediction and frozen mesh hash. The photograph
+itself is not redistributed: it stays in the ignored `assets/` directory, and the
+repository carries only the frozen mesh, its product record and the renders.
 
 The inverse-caustic tool is Dylan Missuwe's `poisson_caustic_design` (MIT), based
 on Yue et al., TOG 2014. Its pinned version and local corrections are in the panel
