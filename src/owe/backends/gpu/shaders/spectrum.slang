@@ -69,11 +69,6 @@ float4 spectrumEval4(uint id, float4 l) {
     }
     return s.abcs.w * r;
 }
-bool spectrumIsZero(uint id) {
-    GSpectrum s = g_spectra[id];
-    return s.info.x == kSpecConstant && (s.abcs.x == 0 || s.abcs.w == 0);
-}
-
 // ---------------------------------------------------------------- refractive index
 
 static const uint kIndexConstant = 0;

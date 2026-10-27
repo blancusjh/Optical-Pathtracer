@@ -108,6 +108,12 @@ private:
     void validateVcmCounts(uint64_t lightPaths) const;
     void sizeLightCache();
     void passVcm(uint32_t iterations);
+    // One VCM pass's steps: the guide kept for a rejected attempt, the push constants, and the
+    // iterations themselves (the cache capacity they needed when it overflowed, else 0).
+    void snapshotVcmGuide();
+    void restoreVcmGuide();
+    PushConstants vcmPush(uint32_t iterations, uint64_t lightPaths);
+    uint64_t runVcmIterations(PushConstants& pc, uint32_t iterations, uint64_t lightPaths);
     void resetVcm();
     void resetSppm();
     void passSppm(uint32_t iterations);

@@ -417,6 +417,28 @@ public:
         images_.push_back(&img);
         return uint32_t(images_.size() - 1);
     }
+    // The environment map (sky model 3): its image, sampling distribution and frame.
+    void environmentMap(const Environment& env) {
+        GGlobals& G = g_.globals;
+        const auto& D = env.mapDist;
+        G.envRecord = imageRecord(*env.map);
+        auto pushAll = [&](const std::vector<double>& v) {
+            uint32_t at = uint32_t(g_.scalars.size());
+            for (double x : v) g_.scalars.push_back(float(x));
+            return at;
+        };
+        G.envMarginal = pushAll(D.marginal);
+        G.envConditional = pushAll(D.conditional);
+        G.envRowWeight = pushAll(D.rowWeight);
+        G.envRotation = float(env.mapRotation);
+        G.envScale = float(env.mapScale);
+        G.envTotal = float(D.marginal.empty() ? 0.0 : D.marginal.back());
+        G.envNorm = float(rgbIlluminantNorm());
+        Vec3 e1, e2;
+        env.mapFrame(e1, e2);
+        set3(G.envE1, e1, float(D.W));
+        set3(G.envE2, e2, float(D.H));
+    }
     void finishImages() {
         const size_t header = 4 * images_.size();
         g_.texels.assign(std::max<size_t>(header, 4), 0);
@@ -649,6 +671,27 @@ void setObserver(GGlobals& G, const IdealObserver& o) {
     G.focusDistance = std::isfinite(o.focusDistance) ? float(o.focusDistance) : -1.0f;
     setGuide(G, o);
 }
+
+// A surface sensor centred at origin: its frame, extent, flips and the aim and focus regions its
+// samples are guided toward.
+void setSensor(GGlobals& G, const SurfaceSensor& s, const Vec3& origin) {
+    G.detectorKind = kDetSensor;
+    const Mat3& R = s.toWorld().R;
+    set3(G.fwd, Vec3(R.m[0][0], R.m[0][1], R.m[0][2]));
+    set3(G.right, Vec3(R.m[1][0], R.m[1][1], R.m[1][2]));
+    set3(G.upv, Vec3(R.m[2][0], R.m[2][1], R.m[2][2]));
+    set3(G.sensorNormal, s.normal(), float(s.aimShare));
+    G.halfX = float(s.halfX);
+    G.halfY = float(s.halfY);
+    G.flipX = s.flipX ? 1 : 0;
+    G.flipY = s.flipY ? 1 : 0;
+    G.hasAim = s.hasAim ? 1 : 0;
+    set3(G.aimCenter, s.aimCenter - origin, float(s.focusShare));
+    set3(G.aimNormal, s.aimNormal);
+    set3(G.focusCenter, s.focusCenter - origin);
+    G.aimRadius = float(s.aimRadius);
+    G.focusRadius = float(s.focusRadius);
+}
 }  // namespace
 
 GpuScene flattenScene(const Scene& scene, int detectorIndex, const RenderSettings& settings) {
@@ -664,22 +707,7 @@ GpuScene flattenScene(const Scene& scene, int detectorIndex, const RenderSetting
         setObserver(G, *o);
     } else if (auto* s = dynamic_cast<const SurfaceSensor*>(&det)) {
         g.origin = s->toWorld().t;
-        G.detectorKind = kDetSensor;
-        const Mat3& R = s->toWorld().R;
-        set3(G.fwd, Vec3(R.m[0][0], R.m[0][1], R.m[0][2]));
-        set3(G.right, Vec3(R.m[1][0], R.m[1][1], R.m[1][2]));
-        set3(G.upv, Vec3(R.m[2][0], R.m[2][1], R.m[2][2]));
-        set3(G.sensorNormal, s->normal(), float(s->aimShare));
-        G.halfX = float(s->halfX);
-        G.halfY = float(s->halfY);
-        G.flipX = s->flipX ? 1 : 0;
-        G.flipY = s->flipY ? 1 : 0;
-        G.hasAim = s->hasAim ? 1 : 0;
-        set3(G.aimCenter, s->aimCenter - g.origin, float(s->focusShare));
-        set3(G.aimNormal, s->aimNormal);
-        set3(G.focusCenter, s->focusCenter - g.origin);
-        G.aimRadius = float(s->aimRadius);
-        G.focusRadius = float(s->focusRadius);
+        setSensor(G, *s, g.origin);
     } else {
         throw std::runtime_error("GPU backend: unsupported detector type");
     }
@@ -694,28 +722,9 @@ GpuScene flattenScene(const Scene& scene, int detectorIndex, const RenderSetting
     ex.optics(g.origin);
     ex.boundaries(g.origin);
     ex.lights();
-    // The environment map, its sampling distribution and the RGB basis (sky model 3).
     G.envLight = w.environmentLight() >= 0 ? uint32_t(w.environmentLight()) : kGpuNone;
-    if (w.env.skyModel == Environment::Sky::Map && w.env.map) {
-        const auto& D = w.env.mapDist;
-        G.envRecord = ex.imageRecord(*w.env.map);
-        auto pushAll = [&](const std::vector<double>& v) {
-            uint32_t at = uint32_t(g.scalars.size());
-            for (double x : v) g.scalars.push_back(float(x));
-            return at;
-        };
-        G.envMarginal = pushAll(D.marginal);
-        G.envConditional = pushAll(D.conditional);
-        G.envRowWeight = pushAll(D.rowWeight);
-        G.envRotation = float(w.env.mapRotation);
-        G.envScale = float(w.env.mapScale);
-        G.envTotal = float(D.marginal.empty() ? 0.0 : D.marginal.back());
-        G.envNorm = float(rgbIlluminantNorm());
-        Vec3 e1, e2;
-        w.env.mapFrame(e1, e2);
-        set3(G.envE1, e1, float(D.W));
-        set3(G.envE2, e2, float(D.H));
-    }
+    if (w.env.skyModel == Environment::Sky::Map && w.env.map) ex.environmentMap(w.env);
+    // The RGB basis of rgb spectra and of the environment map.
     double A[3][3];
     rgbBasisMatrix(A);
     for (int i = 0; i < 3; ++i)

@@ -172,9 +172,125 @@ bool sampleScatter(Interface it, float3 d, float uc, float u1, float u2, uint mo
     return s.weight > 0;
 }
 
+// The samplers of each kind of surface, in the shading frame: wo = −d there, fromFront its side.
+
+bool sampleDielectric(Interface it, Frame frame, float3 d, float3 wo, bool fromFront, float uc, float u1, float u2,
+                      uint mode, inout ScatterSample s) {
+    Optics o = it.optics;
+    float eta = it.nBack / it.nFront;
+    if (o.roughness < kSmoothRoughness || eta == 1) {
+        float ni = fromFront ? it.nFront : it.nBack;
+        float nt = fromFront ? it.nBack : it.nFront;
+        float R = fresnelDielectric(wo.z, eta);
+        s.delta = true;
+        float pR = fresnelBranchProbability(R, it.fresnelFloor);
+        if (uc < pR) {
+            s.wi = frame.toWorld(float3(-wo.x, -wo.y, wo.z));
+            s.weight = R / pR;
+            s.transmitted = false;
+        } else {
+            float3 wt;
+            if (!refractDirection(d, it.ns, ni, nt, wt)) return false;
+            s.wi = wt;
+            s.weight = (1 - R) / (1 - pR) * (mode == kModeRadiance ? sqr(ni / nt) : 1.0);
+            s.transmitted = true;
+        }
+        return true;
+    }
+    LobeSample l;
+    if (!sampleRoughDielectric(ggxAlpha(o.roughness), wo, eta, uc, u1, u2, mode == kModeRadiance, l)) return false;
+    s = fromLobe(frame, l);
+    return true;
+}
+
+// Cosine-weighted; a share of radiance samples aims at the screen the surface faces (sampleAim).
+bool sampleDiffuse(Interface it, Frame frame, bool fromFront, float uc, float u1, float u2, uint mode,
+                   inout ScatterSample s) {
+    Optics o = it.optics;
+    if (!fromFront && o.backAbsorbs != 0) return false;
+    float albedo = it.albedo();
+    if (albedo <= 0) return false;
+    float3 w = sampleCosineHemisphere(u1, u2);
+    if (!fromFront) w.z = -w.z;
+    s.wi = frame.toWorld(w);
+    s.pdf = abs(w.z) * InvPi;
+    s.weight = albedo;
+    float share = fromFront && mode == kModeRadiance ? o.sampleAimNormal.w : 0;
+    if (share > 0) {
+        if (uc < share) {
+            float3 a, b;
+            orthonormalBasis(o.sampleAimNormal.xyz, a, b);
+            float2 disk = sampleUniformDiskConcentric(u1, u2);
+            s.wi = normalize(o.sampleAimCenter.xyz + (a * disk.x + b * disk.y) * o.sampleAimCenter.w - it.p);
+        }
+        float c = dot(s.wi, it.ns);
+        if (c <= 0) return false;
+        s.pdf = (1 - share) * c * InvPi + share * screenAimPdf(it, s.wi, uc < share);
+        s.weight = albedo * c * InvPi / s.pdf;
+    }
+    return s.pdf > 0;
+}
+
+// The straight passage was decided before (the kernels' passStainedGlass, a crossing like a null
+// boundary's): the other branches share the rest, 1 − pS, of the samples.
+bool sampleStainedGlass(Interface it, Frame frame, float3 d, float3 wo, bool fromFront, float uc, float u1, float u2,
+                        inout ScatterSample s) {
+    Optics o = it.optics;
+    float cosI = abs(dot(d, it.n));
+    float4 p = stainedProbs(o, it.tex, cosI);
+    float3 sl = stainedSlab(o, it.tex, cosI, it.lambda, kAirIndex);
+    float x = uc * (1 - p.y);
+    if (x < p.x) {
+        s.wi = frame.toWorld(float3(-wo.x, -wo.y, wo.z));
+        s.weight = sl.x / p.x;
+        s.delta = true;
+        return s.weight > 0;
+    }
+    bool transmit = x < p.x + p.z;
+    float pb = transmit ? p.z : p.w;
+    float value = transmit ? o.sampleAimCenter.z * sl.y : sl.z;
+    if (!(pb > 0) || !(value > 0)) return false;
+    float3 w = sampleCosineHemisphere(u1, u2);
+    if (fromFront == transmit) w.z = -w.z;
+    s.wi = frame.toWorld(w);
+    s.pdf = pb * abs(w.z) * InvPi;
+    s.weight = value / pb;
+    s.transmitted = transmit;
+    return true;
+}
+
+bool sampleMirror(Interface it, Frame frame, float3 wo, bool fromFront, inout ScatterSample s) {
+    if (!fromFront && it.optics.backAbsorbs != 0) return false;
+    float r = spectrumEval(it.optics.reflectance, it.lambda);
+    if (r <= 0) return false;
+    s.wi = frame.toWorld(float3(-wo.x, -wo.y, wo.z));
+    s.weight = r;
+    s.delta = true;
+    return true;
+}
+
+bool sampleConductor(Interface it, Frame frame, float3 wo, bool fromFront, float u1, float u2, inout ScatterSample s) {
+    Optics o = it.optics;
+    if (!fromFront && o.backAbsorbs != 0) return false;
+    float nMed = fromFront ? it.nFront : it.nBack;
+    float2 eta = it.conductorEta(nMed);
+    float3 w = fromFront ? wo : float3(wo.x, wo.y, -wo.z);
+    if (o.roughness < kSmoothRoughness) {
+        float F = fresnelConductor(w.z, eta) * it.albedo();
+        s.wi = frame.toWorld(float3(-wo.x, -wo.y, wo.z));
+        s.weight = F;
+        s.delta = true;
+        return F > 0;
+    }
+    LobeSample l;
+    if (!sampleRoughConductor(ggxAlpha(o.roughness), w, eta, it.albedo(), u1, u2, l)) return false;
+    if (!fromFront) l.wi.z = -l.wi.z;
+    s = fromLobe(frame, l);
+    return true;
+}
+
 // Scattering in the shading frame (ns).
 bool sampleScatterIn(Interface it, float3 d, float uc, float u1, float u2, uint mode, out ScatterSample s) {
-    Optics o = it.optics;
     Frame frame = Frame(it.ns);
     float3 wo = frame.toLocal(-d);
     bool fromFront = wo.z > 0;
@@ -183,110 +299,12 @@ bool sampleScatterIn(Interface it, float3 d, float uc, float u1, float u2, uint 
     s.pdf = 0;
     s.delta = false;
     s.transmitted = false;
-
-    switch (o.type) {
-        case kSurfDielectric: {
-            float eta = it.nBack / it.nFront;
-            if (o.roughness < kSmoothRoughness || eta == 1) {
-                float ni = fromFront ? it.nFront : it.nBack;
-                float nt = fromFront ? it.nBack : it.nFront;
-                float R = fresnelDielectric(wo.z, eta);
-                s.delta = true;
-                float pR = fresnelBranchProbability(R, it.fresnelFloor);
-                if (uc < pR) {
-                    s.wi = frame.toWorld(float3(-wo.x, -wo.y, wo.z));
-                    s.weight = R / pR;
-                    s.transmitted = false;
-                } else {
-                    float3 wt;
-                    if (!refractDirection(d, it.ns, ni, nt, wt)) return false;
-                    s.wi = wt;
-                    s.weight = (1 - R) / (1 - pR) * (mode == kModeRadiance ? sqr(ni / nt) : 1.0);
-                    s.transmitted = true;
-                }
-                return true;
-            }
-            LobeSample l;
-            if (!sampleRoughDielectric(ggxAlpha(o.roughness), wo, eta, uc, u1, u2, mode == kModeRadiance, l)) return false;
-            s = fromLobe(frame, l);
-            return true;
-        }
-        case kSurfDiffuse: {
-            if (!fromFront && o.backAbsorbs != 0) return false;
-            float albedo = it.albedo();
-            if (albedo <= 0) return false;
-            float3 w = sampleCosineHemisphere(u1, u2);
-            if (!fromFront) w.z = -w.z;
-            s.wi = frame.toWorld(w);
-            s.pdf = abs(w.z) * InvPi;
-            s.weight = albedo;
-            float share = fromFront && mode == kModeRadiance ? o.sampleAimNormal.w : 0;
-            if (share > 0) {
-                if (uc < share) {
-                    float3 a, b;
-                    orthonormalBasis(o.sampleAimNormal.xyz, a, b);
-                    float2 disk = sampleUniformDiskConcentric(u1, u2);
-                    s.wi = normalize(o.sampleAimCenter.xyz + (a * disk.x + b * disk.y) * o.sampleAimCenter.w - it.p);
-                }
-                float c = dot(s.wi, it.ns);
-                if (c <= 0) return false;
-                s.pdf = (1 - share) * c * InvPi + share * screenAimPdf(it, s.wi, uc < share);
-                s.weight = albedo * c * InvPi / s.pdf;
-            }
-            return s.pdf > 0;
-        }
-        case kSurfStainedGlass: {
-            // The straight passage was decided before (the kernels' passStainedGlass, a crossing
-            // like a null boundary's): the other branches share the rest, 1 − pS, of the samples.
-            float cosI = abs(dot(d, it.n));
-            float4 p = stainedProbs(o, it.tex, cosI);
-            float3 sl = stainedSlab(o, it.tex, cosI, it.lambda, kAirIndex);
-            float x = uc * (1 - p.y);
-            if (x < p.x) {
-                s.wi = frame.toWorld(float3(-wo.x, -wo.y, wo.z));
-                s.weight = sl.x / p.x;
-                s.delta = true;
-                return s.weight > 0;
-            }
-            bool transmit = x < p.x + p.z;
-            float pb = transmit ? p.z : p.w;
-            float value = transmit ? o.sampleAimCenter.z * sl.y : sl.z;
-            if (!(pb > 0) || !(value > 0)) return false;
-            float3 w = sampleCosineHemisphere(u1, u2);
-            if (fromFront == transmit) w.z = -w.z;
-            s.wi = frame.toWorld(w);
-            s.pdf = pb * abs(w.z) * InvPi;
-            s.weight = value / pb;
-            s.transmitted = transmit;
-            return true;
-        }
-        case kSurfMirror: {
-            if (!fromFront && o.backAbsorbs != 0) return false;
-            float r = spectrumEval(o.reflectance, it.lambda);
-            if (r <= 0) return false;
-            s.wi = frame.toWorld(float3(-wo.x, -wo.y, wo.z));
-            s.weight = r;
-            s.delta = true;
-            return true;
-        }
-        case kSurfConductor: {
-            if (!fromFront && o.backAbsorbs != 0) return false;
-            float nMed = fromFront ? it.nFront : it.nBack;
-            float2 eta = it.conductorEta(nMed);
-            float3 w = fromFront ? wo : float3(wo.x, wo.y, -wo.z);
-            if (o.roughness < kSmoothRoughness) {
-                float F = fresnelConductor(w.z, eta) * it.albedo();
-                s.wi = frame.toWorld(float3(-wo.x, -wo.y, wo.z));
-                s.weight = F;
-                s.delta = true;
-                return F > 0;
-            }
-            LobeSample l;
-            if (!sampleRoughConductor(ggxAlpha(o.roughness), w, eta, it.albedo(), u1, u2, l)) return false;
-            if (!fromFront) l.wi.z = -l.wi.z;
-            s = fromLobe(frame, l);
-            return true;
-        }
+    switch (it.optics.type) {
+        case kSurfDielectric: return sampleDielectric(it, frame, d, wo, fromFront, uc, u1, u2, mode, s);
+        case kSurfDiffuse: return sampleDiffuse(it, frame, fromFront, uc, u1, u2, mode, s);
+        case kSurfStainedGlass: return sampleStainedGlass(it, frame, d, wo, fromFront, uc, u1, u2, s);
+        case kSurfMirror: return sampleMirror(it, frame, wo, fromFront, s);
+        case kSurfConductor: return sampleConductor(it, frame, wo, fromFront, u1, u2, s);
         default: return false;
     }
 }

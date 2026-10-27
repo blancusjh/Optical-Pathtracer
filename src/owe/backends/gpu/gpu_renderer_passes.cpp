@@ -93,122 +93,137 @@ void GpuRenderer::sizeLightCache() {
 
 uint32_t GpuRenderer::vcmGroups() const { return uint32_t(std::clamp(settings_.vcmWavelengthGroups, 1, 8)); }
 
-void GpuRenderer::passVcm(uint32_t iterations) {
-    if (vcmSizePending_) sizeLightCache();
-    const uint64_t lightPaths = vcmLightPaths();
-    validateVcmCounts(lightPaths);
-    // A pass is a transaction. A rejected attempt must not teach the guide,
-    // advance the radius/wavelength/RNG schedule, or contribute to either
-    // accepted film or its statistics.
-    auto guideToTransfer = [](VkCommandBuffer cmd) {
-        // The guide may have been filled/restored by transfer or learned by compute.
-        // Both sources must be visible to the snapshot/restore copy.
-        memoryBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
-                      VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                      VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT);
-    };
+// The guide may have been filled or restored by transfer, or learned by compute: both sources
+// must be visible to the snapshot/restore copy.
+static void guideToTransfer(VkCommandBuffer cmd) {
+    memoryBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+                  VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                  VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT);
+}
+
+void GpuRenderer::snapshotVcmGuide() {
     ctx_->submit(
         [&](VkCommandBuffer cmd) {
             guideToTransfer(cmd);
             copyBuffer(cmd, buffers_[kGuide], vcmGuideBackup_, buffers_[kGuide].size);
         },
         "vcm guide snapshot");
-    auto restoreGuide = [&] {
-        ctx_->submit(
-            [&](VkCommandBuffer cmd) {
-                guideToTransfer(cmd);
-                copyBuffer(cmd, vcmGuideBackup_, buffers_[kGuide], buffers_[kGuide].size);
-                transferToCompute(cmd);
-            },
-            "vcm guide restore");
-    };
-    // The merging radius at a point: `photonRadius` pixel footprints at its
-    // distance from the eye, shrinking over iterations as r_i = r_1 i^((α−1)/2)
-    // (Georgiev et al.).
-    const double pixelAngle = dynamic_cast<const IdealObserver*>(det_)->pixelAngle();
+}
+
+void GpuRenderer::restoreVcmGuide() {
+    ctx_->submit(
+        [&](VkCommandBuffer cmd) {
+            guideToTransfer(cmd);
+            copyBuffer(cmd, vcmGuideBackup_, buffers_[kGuide], buffers_[kGuide].size);
+            transferToCompute(cmd);
+        },
+        "vcm guide restore");
+}
+
+PushConstants GpuRenderer::vcmPush(uint32_t iterations, uint64_t lightPaths) {
     PushConstants pc = push(iterations);
     pc.flags |= (settings_.diagnosticVcmMask & 0xFFu) << 8;
     pc.flags |= vcmGroups() << 24;
     pc.lightPathsPerGroup = uint32_t(lightPaths / vcmGroups());
+    pc.gridMask = gridSize_ - 1;
+    pc.cacheCapacity = cacheCapacity_ / vcmGroups();
+    return pc;
+}
+
+// The pass's iterations: per iteration, the light subpaths fill the cache, the cached vertices
+// enter the merging grid, then the camera paths. Returns 0, or the cache capacity needed when it
+// overflowed (the attempt is then abandoned).
+uint64_t GpuRenderer::runVcmIterations(PushConstants& pc, uint32_t iterations, uint64_t lightPaths) {
+    // The merging radius at a point: `photonRadius` pixel footprints at its distance from the
+    // eye, shrinking over iterations as r_i = r_1 i^((α−1)/2) (Georgiev et al.).
+    const double pixelAngle = dynamic_cast<const IdealObserver*>(det_)->pixelAngle();
+    for (uint32_t it = 0; it < iterations; ++it) {
+        const uint64_t iteration = uint64_t(iterations_) + it;
+        pc.pass = uint32_t(iteration);
+        pc.sampleBase = it;
+        pc.wavelengthRotation = wavelengthRotation(iteration);
+        const double shrink = std::pow(double(iteration + 1), (settings_.photonAlpha - 1) / 2);
+        pc.mergeRadiusPerMetre = merging_ ? float(settings_.photonRadius * pixelAngle * shrink) : 0.0f;
+        pc.mergeRadiusFloor = 1e-9f;
+        // The iteration's start: the cache emptied, the hash cleared, the guide's CDF from what it
+        // has learnt. No persistent host state advances until the pass succeeds.
+        auto begin = [&](VkCommandBuffer cmd) {
+            vkCmdFillBuffer(cmd, buffers_[kVcmCounters].buffer, 0, 4 * sizeof(uint32_t), 0);
+            vkCmdFillBuffer(cmd, buffers_[kVcmCounters].buffer, 16, 12 * sizeof(uint32_t), 0);
+            if (merging_) vkCmdFillBuffer(cmd, buffers_[kGridHead].buffer, 0, VK_WHOLE_SIZE, 0xFFFFFFFFu);
+            transferToCompute(cmd);
+            sppmGuide_->dispatch(cmd, &pc, 1, 1);
+            computeBarrier(cmd);
+        };
+        auto finish = [&](VkCommandBuffer cmd) {
+            if (merging_) {
+                vcmGrid_->dispatch(cmd, &pc, groups(cacheCapacity_, kParticleGroup), 1);
+                computeBarrier(cmd);
+            }
+            vcmCamera_->dispatch(cmd, &pc, groups(W_, kPathGroup), groups(H_, kPathGroup));
+            computeBarrier(cmd, true);
+            copyBuffer(cmd, buffers_[kVcmCounters], vcmCounterReadback_, vcmCounterReadback_.size);
+        };
+        const bool emits = gs_.emittedPower > 0;
+        if (!emits || lightPaths <= particleChunk_) {
+            // One submission: small images spend more on submissions than on paths.
+            ctx_->submit(
+                [&](VkCommandBuffer cmd) {
+                    begin(cmd);
+                    if (emits) {
+                        PushConstants lp = pc;
+                        lp.sampleBase = lp.baseHi = 0;
+                        lp.sampleCount = uint32_t(lightPaths);
+                        vcmLight_->dispatch(cmd, &lp, groups(lightPaths, kParticleGroup), 1);
+                        computeBarrier(cmd);
+                    }
+                    finish(cmd);
+                },
+                "vcm iteration");
+        } else {
+            ctx_->submit(begin, "vcm begin");
+            dispatchChunked(*vcmLight_, pc, lightPaths, false);
+            ctx_->submit(finish, "vcm grid/camera/counters");
+        }
+        const uint32_t* offered = static_cast<const uint32_t*>(vcmCounterReadback_.mapped);
+        if (offered[1] > 0) {
+            uint32_t largestGroup = 0;
+            for (uint32_t g = 0; g < vcmGroups(); ++g) largestGroup = std::max(largestGroup, offered[4 + g]);
+            return uint64_t(largestGroup) * vcmGroups();
+        }
+    }
+    return 0;
+}
+
+// A pass is a transaction: a rejected attempt (the light vertex cache overflowed) must not teach
+// the guide, advance the radius/wavelength/RNG schedule, or contribute to the accepted film or its
+// statistics. It is replayed with a larger cache.
+void GpuRenderer::passVcm(uint32_t iterations) {
+    if (vcmSizePending_) sizeLightCache();
+    const uint64_t lightPaths = vcmLightPaths();
+    validateVcmCounts(lightPaths);
+    snapshotVcmGuide();
     try {
         for (uint32_t attempt = 0;; ++attempt) {
             zeroBuffers({kCounters, kSplat, kVcmCounters});
-            pc.gridMask = gridSize_ - 1;
-            pc.cacheCapacity = cacheCapacity_ / vcmGroups();
-            uint64_t requiredCapacity = 0;
-            for (uint32_t it = 0; it < iterations; ++it) {
-                const uint64_t iteration = uint64_t(iterations_) + it;
-                pc.pass = uint32_t(iteration);
-                pc.sampleBase = it;
-                pc.wavelengthRotation = wavelengthRotation(iteration);
-                const double shrink = std::pow(double(iteration + 1), (settings_.photonAlpha - 1) / 2);
-                pc.mergeRadiusPerMetre = merging_ ? float(settings_.photonRadius * pixelAngle * shrink) : 0.0f;
-                pc.mergeRadiusFloor = 1e-9f;
-                // The iteration's start: the cache emptied, the hash cleared, the
-                // guide's CDF from what it has learnt. No persistent host state
-                // advances until the pass succeeds.
-                auto begin = [&](VkCommandBuffer cmd) {
-                    vkCmdFillBuffer(cmd, buffers_[kVcmCounters].buffer, 0, 4 * sizeof(uint32_t), 0);
-                    vkCmdFillBuffer(cmd, buffers_[kVcmCounters].buffer, 16, 12 * sizeof(uint32_t), 0);
-                    if (merging_) vkCmdFillBuffer(cmd, buffers_[kGridHead].buffer, 0, VK_WHOLE_SIZE, 0xFFFFFFFFu);
-                    transferToCompute(cmd);
-                    sppmGuide_->dispatch(cmd, &pc, 1, 1);
-                    computeBarrier(cmd);
-                };
-                auto finish = [&](VkCommandBuffer cmd) {
-                    if (merging_) {
-                        vcmGrid_->dispatch(cmd, &pc, groups(cacheCapacity_, kParticleGroup), 1);
-                        computeBarrier(cmd);
-                    }
-                    vcmCamera_->dispatch(cmd, &pc, groups(W_, kPathGroup), groups(H_, kPathGroup));
-                    computeBarrier(cmd, true);
-                    copyBuffer(cmd, buffers_[kVcmCounters], vcmCounterReadback_, vcmCounterReadback_.size);
-                };
-                const bool emits = gs_.emittedPower > 0;
-                if (!emits || lightPaths <= particleChunk_) {
-                    // One submission: small images spend more on submissions than on paths.
-                    ctx_->submit(
-                        [&](VkCommandBuffer cmd) {
-                            begin(cmd);
-                            if (emits) {
-                                PushConstants lp = pc;
-                                lp.sampleBase = lp.baseHi = 0;
-                                lp.sampleCount = uint32_t(lightPaths);
-                                vcmLight_->dispatch(cmd, &lp, groups(lightPaths, kParticleGroup), 1);
-                                computeBarrier(cmd);
-                            }
-                            finish(cmd);
-                        },
-                        "vcm iteration");
-                } else {
-                    ctx_->submit(begin, "vcm begin");
-                    dispatchChunked(*vcmLight_, pc, lightPaths, false);
-                    ctx_->submit(finish, "vcm grid/camera/counters");
-                }
-                const uint32_t* offered = static_cast<const uint32_t*>(vcmCounterReadback_.mapped);
-                if (offered[1] > 0) {
-                    uint32_t largestGroup = 0;
-                    for (uint32_t g = 0; g < vcmGroups(); ++g) largestGroup = std::max(largestGroup, offered[4 + g]);
-                    requiredCapacity = uint64_t(largestGroup) * vcmGroups();
-                    break;
-                }
-            }
-            if (requiredCapacity == 0) break;
+            PushConstants pc = vcmPush(iterations, lightPaths);
+            const uint64_t required = runVcmIterations(pc, iterations, lightPaths);
+            if (required == 0) break;
             if (attempt >= 7)
                 throw std::runtime_error("vcm: light vertex cache still overflowing "
                                          "after eight attempts; pass rejected");
-            const uint64_t grown = std::max<uint64_t>(requiredCapacity, uint64_t(cacheCapacity_) + (uint64_t(cacheCapacity_) + 1) / 2);
+            const uint64_t grown = std::max<uint64_t>(required, uint64_t(cacheCapacity_) + (uint64_t(cacheCapacity_) + 1) / 2);
             std::fprintf(stderr,
                          "vcm: light vertex cache (%u vertices) overflowed; "
                          "replaying pass with %llu vertices\n",
                          cacheCapacity_, static_cast<unsigned long long>(grown));
             allocateLightCache(grown);
             bindAll();
-            restoreGuide();
+            restoreVcmGuide();
         }
         accumulateFilm(true, true);
     } catch (...) {
-        restoreGuide();
+        restoreVcmGuide();
         throw;
     }
     particleCount_ += double(lightPaths) * iterations;

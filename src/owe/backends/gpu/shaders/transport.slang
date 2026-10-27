@@ -3,7 +3,7 @@
 #pragma once
 #include "owe/core/shared/environment.hpp"
 #include "optics.slang"
-#include "world.slang"
+#include "contact.slang"
 
 // ---------------------------------------------------------------- environment
 
@@ -164,6 +164,8 @@ struct HitInterface {
     Interface it;
     uint front, back;
 };
+// The region on the side of hit that direction w leaves into.
+uint regionToward(HitInterface hi, SurfaceHit hit, float3 w) { return dot(w, hit.n) > 0 ? hi.front : hi.back; }
 
 HitInterface makeInterface(SurfaceHit hit, float lambda) {
     GBoundary b = g_boundaries[hit.boundary];
@@ -375,10 +377,8 @@ float4 walkTransmittance(float3 o, uint region, float3 dir, float dist, Waveleng
         pendingContact = intersectContactNeighborhood(o, dir, window, departed, region, scale, normal, departedPrimitive, false, contact);
         if (!pendingContact) certifiedAdvance = window;
         if (pendingContact) {
-            GBoundary boundary = g_boundaries[contact.boundary];
-            uint incident = dot(dir, contact.n) < 0 ? boundary.front : boundary.back;
-            if (incident != region || contact.ambiguousContact ||
-                !isPassableType(g_optics[boundary.optics].a.x)) return 0;
+            if (incidentRegion(contact, dir) != region || contact.ambiguousContact ||
+                !isPassableBoundary(contact.boundary)) return 0;
         }
     }
     if (!pendingContact && !explicitEndpoint) {
@@ -428,8 +428,7 @@ float4 walkTransmittance(float3 o, uint region, float3 dir, float dist, Waveleng
             return Tr;
         }
         GBoundary b = g_boundaries[h.boundary];
-        uint incident = dot(dir, h.n) < 0 ? b.front : b.back;
-        if (incident != region || h.ambiguousContact) return 0;
+        if (incidentRegion(h, dir) != region || h.ambiguousContact) return 0;
         if (g_optics[b.optics].a.x == kSurfStainedGlass) {
             float pS;
             Tr *= stainedStraight(h, dir, wl, pS);
@@ -481,7 +480,7 @@ float4 connectionTransmittance(Endpoint source, Endpoint target, Wavelengths wl)
     SurfaceHit neighbor;
     if (intersectContactNeighborhood(source.p, -direction, source.error, source.boundary, source.region,
                                      source.scale, source.normal, source.primitive, true, neighbor)) {
-        if (neighbor.ambiguousContact || !isPassableType(g_optics[g_boundaries[neighbor.boundary].optics].a.x)) return 0;
+        if (neighbor.ambiguousContact || !isPassableBoundary(neighbor.boundary)) return 0;
     }
     uint arrival;
     float4 tr = transmittanceSpawn(target, direction, distance, wl, arrival, source);
@@ -699,7 +698,7 @@ ShadowRay prepareDirect(SurfaceHit hit, HitInterface base, float3 d, Wavelengths
     float pdfScatter;
     float4 f = evalScatterSpectral(base, wl, d, ls.wi, kModeRadiance, pdfScatter);
     if (isZero(f)) return sr;
-    sr.start = endpoint(hit, dot(ls.wi, hit.n) > 0 ? base.front : base.back);
+    sr.start = endpoint(hit, regionToward(base, hit, ls.wi));
     sr.d = ls.wi;
     sr.dist = ls.dist;
     sr.light = ls.endpoint;
@@ -791,6 +790,74 @@ void noteScatter(inout PathState p, bool delta) {
     ++p.scatterEvents;
 }
 
+// Does emission e leave its boundary's front face (front) or its back?
+bool emitsFrom(GEmission e, bool front) { return (front ? e.front : e.back) != 0; }
+
+// A scattering event in medium med at x: next-event estimation from there, then a new direction
+// from the phase function. False when the path ends.
+bool scatterInMedium(inout PathState p, uint med, float3 x, int depth, inout Rng rng) {
+    const float g = g_media[med].g.x;
+    p.mediumScattered = true;
+    ShadowRay shadow = prepareDirectMedium(x, p.ray.d, g, p.wl, rng, p.ray.region, p.beta, p.ray.scale);
+    float2 u = draw2(rng);
+    float3 wi;
+    p.prevPdf = sampleHg(-p.ray.d, g, u.x, u.y, wi);
+    p.specular = false;
+    p.prevP = x;
+    noteScatter(p, false);
+    p.ray.leaveVolume(x, wi);
+    bool alive = depth < globals().limits.y || survives(min(1.0, maxValue(p.beta)), p.beta, rng);
+    p.L += traceShadow(shadow, p.wl);
+    return alive;
+}
+
+// The sky and the sun met leaving the world, weighted against next-event estimation unless the
+// last scatter was specular.
+float4 pathSkyMet(PathState p) {
+    GGlobals G = globals();
+    float4 sky, sun;
+    [ForceUnroll] for (int i = 0; i < NW; ++i) {
+        sky[i] = envSky(p.ray.d, p.wl.lambda[i]);
+        sun[i] = envSun(p.ray.d, p.wl.lambda[i]);
+    }
+    float w = (p.specular || isZero(sun)) ? 1.0 : powerHeuristic(p.prevPdf, sunPdf());
+    // An environment map is also a light for next-event estimation: MIS.
+    float wSky = 1;
+    if (G.envMap.w != kGpuNone && !p.specular) wSky = powerHeuristic(p.prevPdf, g_lights[G.envMap.w].pdf * envMapPdf(p.ray.d));
+    return p.beta * (sky * wSky + sun * w);
+}
+
+// Emission met at hit, weighted against next-event estimation unless the last scatter was specular.
+float4 pathEmissionMet(PathState p, SurfaceHit hit, Crossing c) {
+    GBoundary b = g_boundaries[hit.boundary];
+    if (b.emission == kGpuNone) return 0;
+    GEmission e = g_emissions[b.emission];
+    if (!emitsFrom(e, c.fromFront)) return 0;
+    float w = 1;
+    if (!p.specular) {
+        float pl = lightPdf(p.prevP, hit);
+        if (pl > 0) w = powerHeuristic(p.prevPdf, pl);
+    }
+    return p.beta * p.wl.eval(e.radiance) * w;
+}
+
+#ifdef OWE_SPPM
+// The first non-specular surface reached through specular events only: the visible point.
+void recordVisiblePoint(inout PathState p, SurfaceHit hit, HitInterface hi) {
+    p.vpDone = true;
+    p.vpP = float4(hit.p, asfloat(hit.boundary));
+    // Flags: valid; secondaries terminated; spectrally free (the eye sees the point directly, so
+    // its throughput is the same at every wavelength and it can take a photon of any λ); smooth
+    // (a shading normal, packed in vpTex.w).
+    const bool free = p.scatterEvents == 0 && !p.chromatic;
+    const bool smooth = hi.it.smooth();
+    p.vpN = float4(hit.n, asfloat(1u | (p.wl.secondaryTerminated() ? 2u : 0u) | (free ? 4u : 0u) | (smooth ? 8u : 0u)));
+    p.vpD = float4(p.ray.d, 0);
+    p.vpBeta = p.beta * p.weight;
+    p.vpTex = float4(hi.it.tex, asfloat(smooth ? octEncode(hi.it.ns) : 0u));
+}
+#endif
+
 // Advances a camera path by one segment: one iteration of Tracer::radiance's loop, with the same
 // random-number order. False when the path has ended (p.L then holds its radiance).
 // stats: paths, segments, inconsistencies, leaks.
@@ -814,20 +881,7 @@ bool stepPath(inout PathState p, inout Rng rng, inout uint4 stats) {
         if (p.vpDone) return false;  // light scattered in a medium on the way belongs to the photons
 #endif
         if (depth >= maxDepth) return false;
-        float3 x = p.ray.o + p.ray.d * t;
-        float g = g_media[med].g.x;
-        p.mediumScattered = true;
-        ShadowRay shadow = prepareDirectMedium(x, p.ray.d, g, p.wl, rng, p.ray.region, p.beta, p.ray.scale);
-        float2 u = draw2(rng);
-        float3 wi;
-        p.prevPdf = sampleHg(-p.ray.d, g, u.x, u.y, wi);
-        p.specular = false;
-        p.prevP = x;
-        noteScatter(p, false);
-        p.ray.leaveVolume(x, wi);
-        bool alive = depth < rrDepth || survives(min(1.0, maxValue(p.beta)), p.beta, rng);
-        p.L += traceShadow(shadow, p.wl);
-        return alive;
+        return scatterInMedium(p, med, p.ray.o + p.ray.d * t, depth, rng);
     }
 #ifdef OWE_SPPM
     if (mediumAbsorbs(med) && !mediumScatters(med)) p.chromatic = true;
@@ -837,16 +891,7 @@ bool stepPath(inout PathState p, inout Rng rng, inout uint4 stats) {
         partition && p.nonDeltaEvents == 1 && p.firstIsNonDelta && p.deltaSinceNonDelta >= 1;
     if (!found) {
         if (p.ray.region == ambient && !ownedByLightTracing && counts) {
-            float4 sky, sun;
-            [ForceUnroll] for (int i = 0; i < NW; ++i) {
-                sky[i] = envSky(p.ray.d, p.wl.lambda[i]);
-                sun[i] = envSun(p.ray.d, p.wl.lambda[i]);
-            }
-            float w = (p.specular || isZero(sun)) ? 1.0 : powerHeuristic(p.prevPdf, sunPdf());
-            // An environment map is also a light for next-event estimation: MIS.
-            float wSky = 1;
-            if (G.envMap.w != kGpuNone && !p.specular) wSky = powerHeuristic(p.prevPdf, g_lights[G.envMap.w].pdf * envMapPdf(p.ray.d));
-            p.L += p.beta * (sky * wSky + sun * w);
+            p.L += pathSkyMet(p);
         } else if (p.ray.region != ambient) {
             stats.w++;
         }
@@ -859,19 +904,7 @@ bool stepPath(inout PathState p, inout Rng rng, inout uint4 stats) {
     if (!p.vpDone) p.pathLength += hit.t;
 #endif
 
-    // Emission.
-    GBoundary b = g_boundaries[hit.boundary];
-    if (b.emission != kGpuNone) {
-        GEmission e = g_emissions[b.emission];
-        if (((c.fromFront && e.front != 0) || (!c.fromFront && e.back != 0)) && !ownedByLightTracing && counts) {
-            float w = 1;
-            if (!p.specular) {
-                float pl = lightPdf(p.prevP, hit);
-                if (pl > 0) w = powerHeuristic(p.prevPdf, pl);
-            }
-            p.L += p.beta * p.wl.eval(e.radiance) * w;
-        }
-    }
+    if (!ownedByLightTracing && counts) p.L += pathEmissionMet(p, hit, c);
 
     if (passThrough(hit, c, p.ray, p.wl, p.beta, rng)) return depth < 4 * maxDepth;
 #ifdef OWE_SPPM
@@ -883,19 +916,7 @@ bool stepPath(inout PathState p, inout Rng rng, inout uint4 stats) {
     HitInterface hi = makeInterface(hit, p.wl.hero());
     terminateIfDispersive(hi, p.wl, p.beta);
 #ifdef OWE_SPPM
-    if (!hi.it.optics.isDelta() && p.nonDeltaEvents == 0) {
-        p.vpDone = true;
-        p.vpP = float4(hit.p, asfloat(hit.boundary));
-        // Flags: valid; secondaries terminated; spectrally free (the eye sees the point directly, so
-        // its throughput is the same at every wavelength and it can take a photon of any λ); smooth
-        // (a shading normal, packed in vpTex.w).
-        const bool free = p.scatterEvents == 0 && !p.chromatic;
-        const bool smooth = hi.it.smooth();
-        p.vpN = float4(hit.n, asfloat(1u | (p.wl.secondaryTerminated() ? 2u : 0u) | (free ? 4u : 0u) | (smooth ? 8u : 0u)));
-        p.vpD = float4(p.ray.d, 0);
-        p.vpBeta = p.beta * p.weight;
-        p.vpTex = float4(hi.it.tex, asfloat(smooth ? octEncode(hi.it.ns) : 0u));
-    }
+    if (!hi.it.optics.isDelta() && p.nonDeltaEvents == 0) recordVisiblePoint(p, hit, hi);
 #endif
     ShadowRay shadow = (ShadowRay)0;
     if (!hi.it.optics.isDelta() && counts) shadow = prepareDirect(hit, hi, p.ray.d, p.wl, rng, p.beta);

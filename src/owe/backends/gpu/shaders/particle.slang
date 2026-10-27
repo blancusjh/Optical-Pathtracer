@@ -129,7 +129,7 @@ void connectVertex(SurfaceHit hit, bool surface, HitInterface base, float3 d, fl
         f = evalScatterSpectral(base, wl, d, k.dir, kModeImportance, pdf);
         if (isZero(f)) return;
         cosX = scatterCosine(base.it, -d, k.dir, kModeImportance);
-        startRegion = dot(k.dir, hit.n) > 0 ? base.front : base.back;
+        startRegion = regionToward(base, hit, k.dir);
     }
     Endpoint start = surface ? endpoint(hit, startRegion) : endpoint(hit.p, startRegion, hit.scale);
     float4 Tr = connectionTransmittance(start, observerEnd(k.q), wl);
@@ -204,6 +204,120 @@ struct Emitted {
 // Samples an emission: a light (area emitter, sun) or the sky, by power. With connectToObserver, an
 // area emitter's own point is also connected to a virtual observer (the emitter seen directly), in
 // the random-number order of Tracer::traceParticle. False when nothing is emitted.
+// A point of the disc of radius R that light from beyond the world leaves from, in its plane and
+// relative to its centre; pdfA its density. Sun photons are guided where the map has learnt.
+bool sampleEmissionDisc(bool sun, float R, inout Rng rng, inout Emitted e, out float2 q, out float pdfA) {
+    pdfA = 1 / (Pi * R * R);
+#ifdef OWE_PHOTON_GUIDE
+    if (sun && guideTotal() > 0) {
+        const bool guided = rng.uniform() < kGuideShare;
+        float2 v = draw2(rng);
+        if (guided) {
+            uint c = guideSample(v.x);
+            q = float2(float(c % kGuideRes) + v.y, float(c / kGuideRes) + rng.uniform()) * (2 * R / float(kGuideRes)) - R;
+        } else {
+            q = sampleUniformDiskConcentric(v.x, v.y) * R;
+        }
+        uint cell;
+        pdfA = sunDiscPdf(q, R, cell);
+        if (!(pdfA > 0)) return false;
+        if (!guided) e.guideCell = cell;  // the uniform share teaches the map
+        return true;
+    }
+#endif
+    float2 v = draw2(rng);
+    q = sampleUniformDiskConcentric(v.x, v.y) * R;
+#ifdef OWE_PHOTON_GUIDE
+    uint cell;
+    sunDiscPdf(q, R, cell);
+    if (sun) e.guideCell = cell;  // before the map has learnt anything every sun photon teaches it
+#endif
+    return true;
+}
+
+// Distant emission (sky dome or sun): a direction, then a point of a disc covering the world.
+// sel: the probability of choosing this emitter.
+bool emitDistant(Wavelengths wl, bool fromSky, float sel, inout Rng rng, inout Emitted e) {
+    GGlobals G = globals();
+    const float R = emitterRadius();
+    float3 toward;  // direction from which the light arrives
+    float pdfDir;
+    float4 Le;
+    float2 u = draw2(rng);
+    if (fromSky) {
+        if (G.sky.x == 3) {
+            if (!sampleEnvMap(u.x, u.y, toward, pdfDir)) return false;
+        } else {
+            toward = sampleUniformSphere(u.x, u.y);
+            pdfDir = 1 / (4 * Pi);
+        }
+        [ForceUnroll] for (int i = 0; i < NW; ++i) Le[i] = envSky(toward, wl.lambda[i]);
+        e.directPdfW = skyDirectPdf(toward);
+    } else {
+        toward = sampleSunDirection(u.x, u.y);
+        pdfDir = 1 / G.misc.x;
+        Le = wl.eval(G.sun.y);
+        e.directPdfW = sunPdf();
+    }
+    const float3 dir = -toward;
+    float3 a1, a2;
+    orthonormalBasis(dir, a1, a2);
+    float2 q;
+    float pdfA;
+    if (!sampleEmissionDisc(!fromSky, R, rng, e, q, pdfA)) return false;
+    e.ray = pathRay(G.emit.yzw - dir * (1.01 * R) + a1 * q.x + a2 * q.y, dir, G.counts.z, 0);
+    e.ray.scale = maxAbsComponent(e.ray.o);
+    e.emissionPdfW = sel * pdfDir * pdfA;
+    e.beta = Le / e.emissionPdfW;
+    e.distant = true;
+    return true;
+}
+
+// The area emitter's own point p (normal n) seen directly by a virtual observer (path tracing owns
+// this under the partition).
+void areaEmitterToObserver(GBoundary b, uint boundary, GEmission em, float4 Le, float3 p, float3 n, uint primitive,
+                           float sel, float pdfA, Wavelengths wl, inout Rng rng) {
+    ObserverLink k;
+    if (!linkObserver(p, rng, k)) return;
+    float cosL = dot(n, k.dir);
+    if (!((cosL > 0 && em.front != 0) || (cosL < 0 && em.back != 0))) return;
+    Endpoint start = endpoint(p, cosL > 0 ? b.front : b.back, b.scale, boundary, n, primitive);
+    float4 Tr = connectionTransmittance(start, observerEnd(k.q), wl);
+    if (!isZero(Tr)) deposit(k.px, k.py, Le * Tr * (abs(cosL) * k.factor / (sel * pdfA)), wl);
+}
+
+// Emission from area light li: a point of it, a side, then a cosine-distributed direction.
+bool emitFromArea(Wavelengths wl, uint li, float sel, bool connectToObserver, inout Rng rng, inout Emitted e) {
+    GLight L = g_lights[li];
+    GBoundary b = g_boundaries[L.boundary];
+    GEmission em = g_emissions[b.emission];
+    float4 Le = wl.eval(em.radiance);
+    float3 u = draw3(rng);
+    uint sampledPrimitive;
+    if (!sampleArea(b, u.x, u.y, u.z, e.pL, e.nL, sampledPrimitive)) return false;
+    float3 p = xfPoint(b.toWorld, e.pL), n = normalize(xfVector(b.toWorld, e.nL));
+    const float pdfA = 1 / b.area;
+    if (connectToObserver) areaEmitterToObserver(b, L.boundary, em, Le, p, n, sampledPrimitive, sel, pdfA, wl, rng);
+    float sidePdf = 1;
+    bool front = em.front != 0;
+    if (em.front != 0 && em.back != 0) {
+        front = rng.uniform() < 0.5;
+        sidePdf = 0.5;
+    }
+    float2 c = draw2(rng);
+    float3 dir = Frame(front ? n : -n).toWorld(sampleCosineHemisphere(c.x, c.y));
+    e.ray = pathRay(p, dir, front ? b.front : b.back, b.scale);
+    e.ray.departed = L.boundary;
+    e.ray.departedPrimitive = sampledPrimitive;
+    e.ray.normal = n;
+    // β = Le·cos / (sel · pdfA · sidePdf · cos/π)
+    e.beta = Le * (Pi / (sel * pdfA * sidePdf));
+    e.usedCos = abs(dot(n, dir));
+    e.emissionPdfW = sel * pdfA * sidePdf * e.usedCos * InvPi;
+    e.light = li;
+    return true;
+}
+
 bool emitParticle(Wavelengths wl, inout Rng rng, bool connectToObserver, out Emitted e) {
     GGlobals G = globals();
     const float pSky = G.emit.x;
@@ -221,101 +335,9 @@ bool emitParticle(Wavelengths wl, inout Rng rng, bool connectToObserver, out Emi
     if (!fromSky && li == envLight) fromSky = true;
     const float pSkyPhoton = pSky + (envLight != kGpuNone ? (1 - pSky) * g_lights[envLight].pdf : 0.0);
     if (fromSky || L.kind == 1) {
-        // Distant emission (sky dome or sun): pick a direction, then a point of a disc covering the world.
-        const float R = emitterRadius();
-        float3 toward;  // direction from which the light arrives
-        float pdfDir, sel;
-        float4 Le;
-        float2 u = draw2(rng);
-        if (fromSky) {
-            if (G.sky.x == 3) {
-                if (!sampleEnvMap(u.x, u.y, toward, pdfDir)) return false;
-            } else {
-                toward = sampleUniformSphere(u.x, u.y);
-                pdfDir = 1 / (4 * Pi);
-            }
-            [ForceUnroll] for (int i = 0; i < NW; ++i) Le[i] = envSky(toward, wl.lambda[i]);
-            sel = pSkyPhoton;
-            e.directPdfW = skyDirectPdf(toward);
-        } else {
-            toward = sampleSunDirection(u.x, u.y);
-            pdfDir = 1 / G.misc.x;
-            Le = wl.eval(G.sun.y);
-            sel = (1 - pSky) * L.pdf;
-            e.directPdfW = sunPdf();
-        }
-        const float3 dir = -toward;
-        float3 a1, a2;
-        orthonormalBasis(dir, a1, a2);
-        float2 q;  // position in the disc's plane, relative to its centre
-        float pdfA = 1 / (Pi * R * R);
-#ifdef OWE_PHOTON_GUIDE
-        if (!fromSky && guideTotal() > 0) {
-            const bool guided = rng.uniform() < kGuideShare;
-            float2 v = draw2(rng);
-            if (guided) {
-                uint c = guideSample(v.x);
-                q = float2(float(c % kGuideRes) + v.y, float(c / kGuideRes) + rng.uniform()) * (2 * R / float(kGuideRes)) - R;
-            } else {
-                q = sampleUniformDiskConcentric(v.x, v.y) * R;
-            }
-            uint cell;
-            pdfA = sunDiscPdf(q, R, cell);
-            if (!(pdfA > 0)) return false;
-            if (!guided) e.guideCell = cell;  // the uniform share teaches the map
-        } else
-#endif
-        {
-            float2 v = draw2(rng);
-            q = sampleUniformDiskConcentric(v.x, v.y) * R;
-#ifdef OWE_PHOTON_GUIDE
-            uint cell;
-            sunDiscPdf(q, R, cell);
-            if (!fromSky) e.guideCell = cell;  // before the map has learnt anything every sun photon teaches it
-#endif
-        }
-        e.ray = pathRay(G.emit.yzw - dir * (1.01 * R) + a1 * q.x + a2 * q.y, dir, G.counts.z, 0);
-        e.ray.scale = maxAbsComponent(e.ray.o);
-        e.emissionPdfW = sel * pdfDir * pdfA;
-        e.beta = Le / e.emissionPdfW;
-        e.distant = true;
-    } else {
-        const float sel = (1 - pSky) * L.pdf;
-        GBoundary b = g_boundaries[L.boundary];
-        GEmission em = g_emissions[b.emission];
-        float4 Le = wl.eval(em.radiance);
-        float3 u = draw3(rng);
-        uint sampledPrimitive;
-        if (!sampleArea(b, u.x, u.y, u.z, e.pL, e.nL, sampledPrimitive)) return false;
-        float3 p = xfPoint(b.toWorld, e.pL), n = normalize(xfVector(b.toWorld, e.nL));
-        const float pdfA = 1 / b.area;
-        // Emitter seen directly by a virtual observer (path tracing owns this under the partition).
-        ObserverLink k;
-        if (connectToObserver && linkObserver(p, rng, k)) {
-            float cosL = dot(n, k.dir);
-            if ((cosL > 0 && em.front != 0) || (cosL < 0 && em.back != 0)) {
-                Endpoint start = endpoint(p, cosL > 0 ? b.front : b.back, b.scale, L.boundary, n, sampledPrimitive);
-                float4 Tr = connectionTransmittance(start, observerEnd(k.q), wl);
-                if (!isZero(Tr)) deposit(k.px, k.py, Le * Tr * (abs(cosL) * k.factor / (sel * pdfA)), wl);
-            }
-        }
-        float sidePdf = 1;
-        bool front = em.front != 0;
-        if (em.front != 0 && em.back != 0) {
-            front = rng.uniform() < 0.5;
-            sidePdf = 0.5;
-        }
-        float2 c = draw2(rng);
-        float3 dir = Frame(front ? n : -n).toWorld(sampleCosineHemisphere(c.x, c.y));
-        e.ray = pathRay(p, dir, front ? b.front : b.back, b.scale);
-        e.ray.departed = L.boundary;
-        e.ray.departedPrimitive = sampledPrimitive;
-        e.ray.normal = n;
-        // β = Le·cos / (sel · pdfA · sidePdf · cos/π)
-        e.beta = Le * (Pi / (sel * pdfA * sidePdf));
-        e.usedCos = abs(dot(n, dir));
-        e.emissionPdfW = sel * pdfA * sidePdf * e.usedCos * InvPi;
-        e.light = li;
+        if (!emitDistant(wl, fromSky, fromSky ? pSkyPhoton : (1 - pSky) * L.pdf, rng, e)) return false;
+    } else if (!emitFromArea(wl, li, (1 - pSky) * L.pdf, connectToObserver, rng, e)) {
+        return false;
     }
     e.beta = maskTerminated(wl, e.beta);
     return !isZero(e.beta);

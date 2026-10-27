@@ -570,7 +570,7 @@ bool meshUvFrame(uint slot, out float3 dpdu, out float3 dpdv) {
 
 // Boundaries a shadow ray crosses (null) or is attenuated by (stained glass) rather than stopped.
 bool isPassableType(uint type) { return type == kSurfNull || type == kSurfStainedGlass; }
-bool isNullBoundary(uint boundary) { return isPassableType(g_optics[g_boundaries[boundary].optics].a.x); }
+bool isPassableBoundary(uint boundary) { return isPassableType(g_optics[g_boundaries[boundary].optics].a.x); }
 
 // Any hit on matter (a triangle whose boundary is not null) in (tmin, tmax); no ordering, first
 // found wins. sawNull reports crossing a null boundary's triangle.
@@ -590,7 +590,7 @@ bool occludedMesh(GBoundary b, float3 o, float3 d, float tmin, float tmax, inout
                 GTriangle tri = g_triangles[na + i];
                 float tt;
                 if (!hitTriangle(tri, o, d, tmin, tmax, tt)) continue;
-                if (!isNullBoundary(tri.owner)) return true;
+                if (!isPassableBoundary(tri.owner)) return true;
                 sawNull = true;
             }
         } else {

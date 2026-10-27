@@ -5,6 +5,13 @@ physical interface. A glass surface can touch a support, a detector can have an
 opaque cover, and two sides of a thin layer can lie closer than a conventional
 ray epsilon. Suppressing all nearby intersections changes the measured light.
 
+On the GPU the whole rule lives in `backends/gpu/shaders/contact.slang`: a ray leaving an
+anchor in region R meets next the nearest crossing met from R's side. Near the anchor the
+region decides (`contactAccepted`) and every candidate is examined in its own frame
+(`intersectContactNeighborhood`); beyond, the ordinary traversal runs; a far hit met from
+another region is found again where float is exact (`resolveFarHit`). `world.slang` keeps only
+the closest-hit and occlusion traversals.
+
 ## Departure from a surface
 
 Spawned rays retain the exact surface anchor, incident region, geometric normal
@@ -84,7 +91,7 @@ leaves a face at a concave fold and grazes the next face can start behind that f
 never cross it, and arrive inside the mesh. The Peacock lamp's 48 × 12 filament tori do
 this on their hole side: light leaving a facet at 5° meets the next one, folded by 7.5°,
 60 µm later and 0.07 µm above its plane. When a spawned ray's hit is a mesh face entered
-from the wrong side, `intersectSpawnWorld` walks that owner again in its native frame
+from the wrong side, `resolveFarHit` walks that owner again in its native frame
 over the whole segment (`intersectOwnerNative`), where the coordinates are small, and
 keeps an earlier crossing consistent with the ray's region. The re-walk runs only on a
 mismatch. The CPU resolves the same segment in double precision and needs no repair.
@@ -94,7 +101,7 @@ region does not establish their order and the order would decide the region.
 Keep the diagnostic and stop that path. On the GPU, a tie in which neither
 interface changes the ray's region (touching opaque faces, sheets with air on
 both sides) is ordered by stable boundary ID instead (`contactOutcome` in
-`world.slang`): the Invisible Window's shutter, vestibule and lintel seams and the
+`contact.slang`): the Invisible Window's shutter, vestibule and lintel seams and the
 Peacock lamp's bulb stems resting on their ferrule plates. A tie between an opaque
 face and a glass face, or two glasses, still stops. The CPU keeps the stricter rule.
 A zero-thickness detector readout cannot take precedence over coincident opaque
@@ -120,7 +127,7 @@ excluding the destination face. A coincident ambiguous interface retains the
 contact failure even when its boundary matches the endpoint.
 
 GPU departure filtering and finite endpoint exclusion share `sameMeshFace` in
-`world.slang`. It recognizes the same original triangle across sampling and BVH
+`contact.slang`. It recognizes the same original triangle across sampling and BVH
 record slots, or adjacent triangles with an exact shared edge, coplanarity and
 matching orientation. Both records must belong to the same boundary. Distinct
 parallel layers and reversed facets remain separate faces; no distance tolerance

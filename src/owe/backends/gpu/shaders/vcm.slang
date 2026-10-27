@@ -147,37 +147,112 @@ void noteUseful(uint cell) {
     if (cell != kGpuNone) InterlockedAdd(g_guide[cell], 1u);
 }
 
-// The MIS quantities after a scattering sample s at the vertex (SmallVCM's update on sampling).
-void updateVcmMis(HitInterface hi, SurfaceHit hit, float3 d, ScatterSample s, inout float dVCM, inout float dVC,
-                  inout float dVM) {
-    const float cosOut = abs(dot(hit.n, s.wi));
-    if (s.delta) {
-        dVCM = 0;
-        dVC *= cosOut;
-        dVM *= cosOut;
-        return;
+// A subpath's MIS quantities (Georgiev's recursive dVCM, dVC, dVM), carried from vertex to vertex.
+struct VcmMis {
+    float dVCM, dVC, dVM;
+
+    // Arriving at a vertex `dist` from the last one, at |cos| cosIn (SmallVCM's update on hitting
+    // a surface).
+    [mutating] void arrive(float dist, float cosIn) {
+        dVCM *= dist * dist;
+        dVCM /= cosIn;
+        dVC /= cosIn;
+        dVM /= cosIn;
     }
-    float pdfRev;
-    evalScatter(hi.it, -s.wi, -d, kModeRadiance, pdfRev);
-    const float eta = etaAt(hit.p);
-    dVC = cosOut / s.pdf * (dVC * pdfRev + dVCM + eta);
-    dVM = cosOut / s.pdf * (dVM * pdfRev + dVCM * (eta > 0 ? 1 / eta : 0.0) + 1);
-    dVCM = 1 / s.pdf;
-}
+    // After a scattering sample s at the vertex (SmallVCM's update on sampling).
+    [mutating] void scatter(HitInterface hi, SurfaceHit hit, float3 d, ScatterSample s) {
+        const float cosOut = abs(dot(hit.n, s.wi));
+        if (s.delta) {
+            dVCM = 0;
+            dVC *= cosOut;
+            dVM *= cosOut;
+            return;
+        }
+        float pdfRev;
+        evalScatter(hi.it, -s.wi, -d, kModeRadiance, pdfRev);
+        const float eta = etaAt(hit.p);
+        dVC = cosOut / s.pdf * (dVC * pdfRev + dVCM + eta);
+        dVM = cosOut / s.pdf * (dVM * pdfRev + dVCM * (eta > 0 ? 1 / eta : 0.0) + 1);
+        dVCM = 1 / s.pdf;
+    }
+};
 
 // ---------------------------------------------------------------- light subpaths
+
+// The MIS quantities arriving at a light subpath's first vertex, before its cosine: next-event
+// estimation would have chosen the emitter point from there, its pdf (solid angle) times the
+// emitter's cosine being the area pdf times the distance².
+VcmMis firstLightVertexMis(Emitted em, SurfaceHit hit) {
+    VcmMis mis;
+    mis.dVC = em.usedCos / em.emissionPdfW;
+    if (em.distant) {
+        mis.dVCM = em.directPdfW / em.emissionPdfW;
+    } else {
+        GBoundary lb = g_boundaries[g_lights[em.light].boundary];
+        float directPdfW = g_lights[em.light].pdf * pdfFrom(lb, xfPoint(lb.toLocal, hit.p), em.pL, em.nL);
+        mis.dVCM = directPdfW * em.usedCos / em.emissionPdfW;
+    }
+    mis.dVM = mis.dVC * invEtaAt(hit.p);
+    return mis;
+}
+
+// Into the group's cache (in a counting pass, only counted; counted: this path offered one already).
+void cacheLightVertex(SurfaceHit hit, HitInterface hi, float3 d, float4 beta, VcmMis mis, Wavelengths wl,
+                      uint group, uint guideCell, inout bool counted) {
+    uint slot;
+    InterlockedAdd(g_vcmCounters[0], 1u);
+    InterlockedAdd(g_vcmCounters[4 + group], 1u, slot);
+    if (counting()) {
+        if (!counted) InterlockedAdd(g_vcmCounters[2], 1u);  // nothing stored, nothing splatted
+        counted = true;
+    } else if (slot < cacheCapacity()) {
+        LightVertex v;
+        const bool smooth = hi.it.smooth();
+        v.p = float4(hit.p, asfloat(hit.boundary));
+        v.n = float4(hit.n, asfloat(smooth ? octEncode(hi.it.ns) : 0u));
+        v.d = float4(d, asfloat(cacheFlags((wl.secondaryTerminated() ? kLvTerminated : 0u) |
+                                          (smooth ? kLvSmooth : 0u), hit.prim)));
+        v.beta = beta;
+        v.tex = float4(hi.it.tex, mis.dVCM);
+        v.mis = float4(mis.dVC, mis.dVM, asfloat(guideCell), asfloat(group));
+        g_lightVertices[group * cacheCapacity() + slot] = v;
+    } else {
+        InterlockedAdd(g_vcmCounters[1], 1u);
+    }
+}
+
+// To the eye (light tracing, t = 1): only to the pixels of this path's group this iteration (their
+// camera paths share its wavelengths), scaled by G: each pixel takes 1/G of the light paths.
+void lightVertexToEye(SurfaceHit hit, HitInterface hi, float3 d, float4 beta, VcmMis mis, Wavelengths wl,
+                      uint group, uint guideCell, inout Rng rng) {
+    ObserverLink k;
+    if (counting() || !linkObserver(hit.p, rng, k) || skip(16) ||
+        pixelGroup(uint(k.py) * pc.width + uint(k.px)) != group) return;
+    float pdfFwd;
+    float4 f = evalScatterSpectral(hi, wl, d, k.dir, kModeImportance, pdfFwd);
+    if (isZero(f)) return;
+    float pdfRev;
+    evalScatter(hi.it, -k.dir, -d, kModeRadiance, pdfRev);
+    const float cameraPdfA = k.factor * abs(dot(hit.n, k.dir));
+    const float wLight = cameraPdfA / lightPaths() * (etaAt(hit.p) + mis.dVCM + mis.dVC * pdfRev);
+    const float w = 1 / (wLight + 1);
+    float4 Tr = connectionTransmittance(endpoint(hit, regionToward(hi, hit, k.dir)), observerEnd(k.q), wl);
+    if (isZero(Tr)) return;
+    deposit(k.px, k.py, beta * f * Tr * (scatterCosine(hi.it, -d, k.dir, kModeImportance) * k.factor * w *
+                                         float(vcmGroups())), wl);
+    noteUseful(guideCell);
+}
 
 // Traces one light subpath: caches its non-specular vertices and connects each to the eye.
 void traceLightVcm(inout Wavelengths wl, uint group, inout Rng rng, inout uint4 stats) {
     GGlobals G = globals();
     const int maxDepth = G.limits.x, rrDepth = G.limits.y;
-    const float NL = lightPaths();
     stats.x++;
     Emitted em;
     if (!emitParticle(wl, rng, false, em) || !(em.emissionPdfW > 0)) return;
     PathRay ray = em.ray;
     float4 beta = em.beta;
-    float dVCM = 0, dVC = em.usedCos / em.emissionPdfW, dVM = 0;
+    VcmMis mis = (VcmMis)0;
     float segment = 0;  // distance since the last scattering vertex (null boundaries do not scatter)
     bool first = true, counted = false;
 
@@ -199,80 +274,21 @@ void traceLightVcm(inout Wavelengths wl, uint group, inout Rng rng, inout uint4 
         }
         if (c.surface == kSurfDetector || c.surface == kSurfAbsorber) return;
         const float3 d = ray.d;
-        // The MIS quantities arrive at this vertex (SmallVCM's update on hitting a surface).
-        const float cosIn = abs(dot(hit.n, d));
-        if (first) {
-            if (em.distant) {
-                dVCM = em.directPdfW / em.emissionPdfW;
-            } else {
-                // Next-event estimation would have chosen the emitter point from here: its pdf
-                // (solid angle) times the emitter's cosine is the area pdf times the distance².
-                GBoundary lb = g_boundaries[g_lights[em.light].boundary];
-                float directPdfW = g_lights[em.light].pdf * pdfFrom(lb, xfPoint(lb.toLocal, hit.p), em.pL, em.nL);
-                dVCM = directPdfW * em.usedCos / em.emissionPdfW;
-            }
-            dVM = dVC * invEtaAt(hit.p);
-            first = false;
-        } else {
-            dVCM *= segment * segment;
-        }
+        if (first) mis = firstLightVertexMis(em, hit);
+        mis.arrive(first ? 1 : segment, abs(dot(hit.n, d)));
+        first = false;
         segment = 0;
-        dVCM /= cosIn;
-        dVC /= cosIn;
-        dVM /= cosIn;
 
         HitInterface hi = makeInterface(hit, wl.hero());
         if (!hi.it.optics.isDelta()) {
-            // Into the cache.
-            uint slot;
-            InterlockedAdd(g_vcmCounters[0], 1u);
-            InterlockedAdd(g_vcmCounters[4 + group], 1u, slot);
-            if (counting()) {
-                if (!counted) InterlockedAdd(g_vcmCounters[2], 1u);  // nothing stored, nothing splatted
-                counted = true;
-            } else if (slot < cacheCapacity()) {
-                LightVertex v;
-                const bool smooth = hi.it.smooth();
-                v.p = float4(hit.p, asfloat(hit.boundary));
-                v.n = float4(hit.n, asfloat(smooth ? octEncode(hi.it.ns) : 0u));
-                v.d = float4(d, asfloat(cacheFlags((wl.secondaryTerminated() ? kLvTerminated : 0u) |
-                                                  (smooth ? kLvSmooth : 0u), hit.prim)));
-                v.beta = beta;
-                v.tex = float4(hi.it.tex, dVCM);
-                v.mis = float4(dVC, dVM, asfloat(em.guideCell), asfloat(group));
-                g_lightVertices[group * cacheCapacity() + slot] = v;
-            } else {
-                InterlockedAdd(g_vcmCounters[1], 1u);
-            }
-            // To the eye (light tracing, t = 1): only to the pixels of this path's group this
-            // iteration (their camera paths share its wavelengths), scaled by G: each pixel takes
-            // 1/G of the light paths.
-            ObserverLink k;
-            if (!counting() && linkObserver(hit.p, rng, k) && !skip(16) &&
-                pixelGroup(uint(k.py) * pc.width + uint(k.px)) == group) {
-                float pdfFwd;
-                float4 f = evalScatterSpectral(hi, wl, d, k.dir, kModeImportance, pdfFwd);
-                if (!isZero(f)) {
-                    float pdfRev;
-                    evalScatter(hi.it, -k.dir, -d, kModeRadiance, pdfRev);
-                    const float cameraPdfA = k.factor * abs(dot(hit.n, k.dir));
-                    const float wLight = cameraPdfA / NL * (etaAt(hit.p) + dVCM + dVC * pdfRev);
-                    const float w = 1 / (wLight + 1);
-                    Endpoint start = endpoint(hit, dot(k.dir, hit.n) > 0 ? hi.front : hi.back);
-                    float4 Tr = connectionTransmittance(start, observerEnd(k.q), wl);
-                    if (!isZero(Tr)) {
-                        deposit(k.px, k.py, beta * f * Tr * (scatterCosine(hi.it, -d, k.dir, kModeImportance) * k.factor * w *
-                                                             float(vcmGroups())), wl);
-                        noteUseful(em.guideCell);
-                    }
-                }
-            }
+            cacheLightVertex(hit, hi, d, beta, mis, wl, group, em.guideCell, counted);
+            lightVertexToEye(hit, hi, d, beta, mis, wl, group, em.guideCell, rng);
         }
         if (depth >= maxDepth) return;
         terminateIfDispersive(hi, wl, beta);
         ScatterSample s;
         if (!scatterAtSurface(hit, c, hi, ray, wl, beta, rng, kModeImportance, s)) return;
-        updateVcmMis(hi, hit, d, s, dVCM, dVC, dVM);
+        mis.scatter(hi, hit, d, s);
         if (depth >= rrDepth && s.weight < 1 && !survives(s.weight, beta, rng)) return;
     }
 }
@@ -341,11 +357,166 @@ float4 evalCameraVcm(HitInterface hi, Wavelengths wl, float4 diffuseF, float3 d,
     return evalScatterSpectral(hi, wl, d, wi, kModeRadiance, pdfFwd);
 }
 
+// A camera vertex: what every strategy at it shares.
+struct CameraVertex {
+    SurfaceHit hit;
+    HitInterface hi;
+    float3 d;         // the direction the path arrived along
+    float4 beta;      // the path's throughput arriving
+    float4 diffuseF;  // its diffuse response (cameraDiffuseResponse), or 0
+    float eta;        // η at the vertex
+    VcmMis mis;
+};
+
+// The sky and the sun at infinity, met along dir: seen directly, or (after vertex prevP) weighted
+// against next-event estimation and the light subpaths that leave them.
+float3 cameraSkyMet(float3 dir, Wavelengths wl, float4 beta, VcmMis mis, float3 prevP, bool afterVertex,
+                    bool nonDelta, CameraCie cie) {
+    float4 sky, sun;
+    [ForceUnroll] for (int i = 0; i < NW; ++i) {
+        sky[i] = envSky(dir, wl.lambda[i]);
+        sun[i] = envSun(dir, wl.lambda[i]);
+    }
+    float wSky = 1, wSun = 1;
+    if (afterVertex) {
+        wSky = 1 / (1 + skyDirectPdf(dir) * mis.dVCM + skyEmissionPdf(dir) * mis.dVC);
+        wSun = 1 / (1 + sunPdf() * mis.dVCM + sunEmissionPdf(prevP, dir) * mis.dVC);
+        if (skip(1) || (skip(32) && nonDelta)) wSky = wSun = 0;
+    }
+    return cie.toXYZ(wl, beta * (sky * wSky + sun * wSun), globals().misc.y);
+}
+
+// Emission met at hit (s = 0): seen directly, or (after vertex prevP, dist back) weighted against
+// next-event estimation and the light subpaths that leave it.
+float3 cameraEmissionMet(SurfaceHit hit, Crossing c, Wavelengths wl, float4 beta, VcmMis mis, float3 prevP,
+                         float dist, float cosIn, bool afterVertex, CameraCie cie) {
+    GBoundary b = g_boundaries[hit.boundary];
+    if (b.emission == kGpuNone) return 0;
+    GEmission e = g_emissions[b.emission];
+    if (!emitsFrom(e, c.fromFront)) return 0;
+    float w = 1;
+    if (afterVertex && b.light != kGpuNone) {
+        const float directPdfA = lightPdf(prevP, hit) * cosIn / (dist * dist);
+        const float emissionPdfW = areaEmissionPdf(b, b.light, cosIn);
+        w = 1 / (1 + directPdfA * mis.dVCM + emissionPdfW * mis.dVC);
+    }
+    return cie.toXYZ(wl, beta * wl.eval(e.radiance) * w, globals().misc.y);
+}
+
+// Next-event estimation (s = 1).
+float3 cameraNextEvent(CameraVertex x, Wavelengths wl, CameraCie cie, inout Rng rng) {
+    LightSample ls;
+    if (!sampleLightFrom(x.hit.p, wl, rng, ls) || isZero(ls.Le) || !(ls.pdf > 0) || skip(2)) return 0;
+    float pdfFwd;
+    const float4 f = evalCameraVcm(x.hi, wl, x.diffuseF, x.d, ls.wi, pdfFwd);
+    if (isZero(f)) return 0;
+    float pdfRev;
+    evalScatter(x.hi.it, -ls.wi, -x.d, kModeRadiance, pdfRev);
+    const float cosToLight = abs(dot(x.hit.n, ls.wi));
+    const float wLight = pdfFwd / ls.pdf;
+    const float wCamera = lightEmissionPdf(ls, x.hit.p) * cosToLight / (ls.pdf * ls.cosAtLight) *
+                          (x.eta + x.mis.dVCM + x.mis.dVC * pdfRev);
+    const float w = 1 / (wLight + 1 + wCamera);
+    const uint startRegion = regionToward(x.hi, x.hit, ls.wi);
+    const float4 Tr = isinf(ls.dist) ? shadowTransmittance(endpoint(x.hit, startRegion), ls.wi, ls.dist, wl)
+                                     : connectionTransmittance(ls.endpoint, surfaceEnd(x.hit, startRegion), wl);
+    if (isZero(Tr)) return 0;
+    return cie.toXYZ(wl, x.beta * f * ls.Le * Tr * (scatterCosine(x.hi.it, -x.d, ls.wi, kModeRadiance) * w / ls.pdf),
+                     globals().misc.y);
+}
+
+// A connection to one light vertex y drawn uniformly from the group's cache of M (s, t ≥ 2).
+float3 cameraConnect(CameraVertex x, Wavelengths wl, CameraCie cie, uint group, uint M, inout Rng rng) {
+    if (M == 0 || skip(4)) return 0;
+    const float NL = lightPaths();
+    const LightVertex y = g_lightVertices[group * cacheCapacity() + min(uint(rng.uniform() * float(M)), M - 1)];
+    const float3 dv = y.p.xyz - x.hit.p;
+    const float dist2 = dot(dv, dv);
+    if (!(dist2 > 0)) return 0;
+    const float3 dir = dv / sqrt(dist2);
+    const float3 dLight = y.d.xyz;
+    const bool lightTerminated = (asuint(y.d.w) & kLvTerminated) != 0;
+    Wavelengths wj = wl;
+    if (lightTerminated) wj.terminateSecondary();
+    float pdfCamFwd, pdfLightFwd;
+    const float4 fc = evalCameraVcm(x.hi, wj, x.diffuseF, x.d, dir, pdfCamFwd);
+    HitInterface hl = lightVertexInterface(y, wj.lambda.x);
+    const float4 fl = evalScatterSpectral(hl, wj, dLight, -dir, kModeImportance, pdfLightFwd);
+    if (isZero(fc * fl)) return 0;
+    float pdfCamRev, pdfLightRev;
+    evalScatter(x.hi.it, -dir, -x.d, kModeRadiance, pdfCamRev);
+    evalScatter(hl.it, dir, -dLight, kModeRadiance, pdfLightRev);
+    const float cosX = abs(dot(x.hit.n, dir)), cosY = abs(dot(y.n.xyz, dir));
+    const float camPdfA = pdfCamFwd * cosY / dist2, lightPdfA = pdfLightFwd * cosX / dist2;
+    const float wLight = camPdfA * (etaAt(y.p.xyz) + y.tex.w + y.mis.x * pdfLightRev);
+    const float wCamera = lightPdfA * (x.eta + x.mis.dVCM + x.mis.dVC * pdfCamRev);
+    const float w = 1 / (wLight + 1 + wCamera);
+    GBoundary lb = g_boundaries[asuint(y.p.w)];
+    const Endpoint lightEnd = endpoint(y.p.xyz, dot(-dir, y.n.xyz) > 0 ? lb.front : lb.back,
+                                       cachedSurfaceScale(lb, y.p.xyz), asuint(y.p.w), y.n.xyz,
+                                       cachedPrimitive(asuint(y.d.w)));
+    const float4 Tr = connectionTransmittance(lightEnd, surfaceEnd(x.hit, regionToward(x.hi, x.hit, dir)), wj);
+    if (isZero(Tr)) return 0;
+    const float g = scatterCosine(x.hi.it, -x.d, dir, kModeRadiance) * scatterCosine(hl.it, -dLight, -dir, kModeImportance) / dist2;
+    noteUseful(asuint(y.mis.z));
+    return joinedXYZ(cie, wl, lightTerminated, x.beta * fc * y.beta * fl * Tr * (g * w * float(M) / NL));
+}
+
+// Merging with the group's light vertices within the merging radius of the vertex (vcm).
+float3 cameraMerge(CameraVertex x, Wavelengths wl, CameraCie cie, uint group) {
+    if (!merging() || skip(8)) return 0;
+    float3 L = 0;
+    const float3 p = x.hit.p;
+    const float r = mergeRadius(p), r2 = r * r;
+    const float invEta = 1 / x.eta;
+    // The levels light vertices within reach live on: their radii span those at the
+    // nearest and farthest distance from the eye in reach (almost always one level).
+    const float dx = length(p);
+    const int levelLo = gridLevel(mergeRadius(p * (max(dx - r, 0.0) / max(dx, 1e-30))));
+    const int levelHi = gridLevel(mergeRadius(p * ((dx + r) / max(dx, 1e-30))));
+    for (int level = levelLo; level <= levelHi; ++level) {
+        const float size = cellSize(level);
+        const int3 base = cellOf(p - 0.5 * size, size);
+        for (int c8 = 0; c8 < 8; ++c8) {
+            const int3 cell = base + int3(c8 & 1, (c8 >> 1) & 1, (c8 >> 2) & 1);
+            for (uint i = g_gridHead[gridHash(cell, level)]; i != kGpuNone; i = g_gridNext[i]) {
+                const float4 vp = g_lightVertices[i].p;
+                const float3 dp = vp.xyz - p;
+                if (dot(dp, dp) > r2) continue;
+                if (gridLevel(mergeRadius(vp.xyz)) != level || any(cellOf(vp.xyz, size) != cell)) continue;
+                LightVertex y = g_lightVertices[i];
+                if (abs(dot(dp, x.hit.n)) > 0.25 * r || dot(y.n.xyz, x.hit.n) < 0.5) continue;
+                if (asuint(y.mis.w) != group) continue;  // other wavelengths
+                const float3 wi = -y.d.xyz;
+                const bool lightTerminated = (asuint(y.d.w) & kLvTerminated) != 0;
+                Wavelengths wj = wl;
+                if (lightTerminated) wj.terminateSecondary();
+                float pdfFwd;
+                const float4 fc = evalCameraVcm(x.hi, wj, x.diffuseF, x.d, wi, pdfFwd);
+                if (isZero(fc)) continue;
+                float pdfRev;
+                evalScatter(x.hi.it, -wi, -x.d, kModeRadiance, pdfRev);
+                const float wLight = y.tex.w * invEta + y.mis.y * pdfFwd;
+                const float wCamera = x.mis.dVCM * invEta + x.mis.dVM * pdfRev;
+                const float w = 1 / (wLight + 1 + wCamera);
+                // A shading normal: the camera's cosine over the density per geometric area.
+                float gather = 1;
+                if (x.hi.it.smooth()) {
+                    const float cn = abs(dot(wi, x.hit.n));
+                    gather = cn > 0 ? abs(dot(wi, x.hi.it.ns)) / cn : 0.0;
+                }
+                L += joinedXYZ(cie, wl, lightTerminated, x.beta * fc * y.beta * (gather * w * invEta));
+                noteUseful(asuint(y.mis.z));
+            }
+        }
+    }
+    return L;
+}
+
 // Traces one camera path from pixel (px, py); returns its contribution (XYZ, with the camera's weight).
 float3 traceCameraVcm(float px, float py, Wavelengths wlIn, uint group, inout Rng rng, inout uint4 stats) {
     GGlobals G = globals();
     const int maxDepth = G.limits.x, rrDepth = G.limits.y;
-    const float NL = lightPaths();
     Wavelengths wl = wlIn;
     float3 o, d0;
     float weight;
@@ -357,7 +528,7 @@ float3 traceCameraVcm(float px, float py, Wavelengths wlIn, uint group, inout Rn
     if (!(cosCam > 0)) return 0;
     const CameraCie cie = CameraCie.at(wl);
     const float cameraPdfW = 1 / (pixelArea * cosCam * cosCam * cosCam);
-    float dVCM = NL / cameraPdfW, dVC = 0, dVM = 0;
+    VcmMis mis = {lightPaths() / cameraPdfW, 0, 0};
     float4 beta = maskTerminated(wl, float4(weight));
     PathRay ray = pathRay(o, d0, G.det.x, 0);
     float3 L = 0;
@@ -373,24 +544,8 @@ float3 traceCameraVcm(float px, float py, Wavelengths wlIn, uint group, inout Rn
         stats.y++;
         if (!attenuate(mediumOf(ray.region), found ? hit.t : infinity(), wl, beta)) break;
         if (!found) {
-            if (ray.region == G.counts.z) {
-                // The sky and the sun at infinity: seen directly, or weighted against next-event
-                // estimation and the light subpaths that leave them.
-                float4 sky, sun;
-                [ForceUnroll] for (int i = 0; i < NW; ++i) {
-                    sky[i] = envSky(ray.d, wl.lambda[i]);
-                    sun[i] = envSun(ray.d, wl.lambda[i]);
-                }
-                float wSky = 1, wSun = 1;
-                if (pathLength > 0) {
-                    wSky = 1 / (1 + skyDirectPdf(ray.d) * dVCM + skyEmissionPdf(ray.d) * dVC);
-                    wSun = 1 / (1 + sunPdf() * dVCM + sunEmissionPdf(prevP, ray.d) * dVC);
-                    if (skip(1) || (skip(32) && nonDelta)) wSky = wSun = 0;
-                }
-                L += cie.toXYZ(wl, beta * (sky * wSky + sun * wSun), G.misc.y);
-            } else {
-                stats.w++;
-            }
+            if (ray.region == G.counts.z) L += cameraSkyMet(ray.d, wl, beta, mis, prevP, pathLength > 0, nonDelta, cie);
+            else stats.w++;
             break;
         }
         const Crossing c = meetBoundary(hit, ray, stats);
@@ -403,27 +558,11 @@ float3 traceCameraVcm(float px, float py, Wavelengths wlIn, uint group, inout Rn
         const float3 d = ray.d;
         const float cosIn = abs(dot(hit.n, d));
         const float dist = segment;
-        dVCM *= dist * dist;
-        dVCM /= cosIn;
-        dVC /= cosIn;
-        dVM /= cosIn;
+        mis.arrive(dist, cosIn);
         segment = 0;
         ++pathLength;
 
-        // Emission met (s = 0).
-        GBoundary b = g_boundaries[hit.boundary];
-        if (b.emission != kGpuNone) {
-            GEmission e = g_emissions[b.emission];
-            if ((c.fromFront && e.front != 0) || (!c.fromFront && e.back != 0)) {
-                float w = 1;
-                if (pathLength > 1 && b.light != kGpuNone) {
-                    const float directPdfA = lightPdf(prevP, hit) * cosIn / (dist * dist);
-                    const float emissionPdfW = areaEmissionPdf(b, b.light, cosIn);
-                    w = 1 / (1 + directPdfA * dVCM + emissionPdfW * dVC);
-                }
-                L += cie.toXYZ(wl, beta * wl.eval(e.radiance) * w, G.misc.y);
-            }
-        }
+        L += cameraEmissionMet(hit, c, wl, beta, mis, prevP, dist, cosIn, pathLength > 1, cie);
         if (c.surface == kSurfAbsorber || c.surface == kSurfDetector) break;
         if (depth >= maxDepth) break;
 
@@ -431,118 +570,22 @@ float3 traceCameraVcm(float px, float py, Wavelengths wlIn, uint group, inout Rn
         terminateIfDispersive(hi, wl, beta);
         if (!hi.it.optics.isDelta()) {
             nonDelta = true;
-            const float etaX = etaAt(hit.p);
-            const float4 diffuseF = cameraDiffuseResponse(hi, wl);
-            // Next-event estimation (s = 1).
-            LightSample ls;
-            if (sampleLightFrom(hit.p, wl, rng, ls) && !isZero(ls.Le) && ls.pdf > 0 && !skip(2)) {
-                float pdfFwd;
-                const float4 f = evalCameraVcm(hi, wl, diffuseF, d, ls.wi, pdfFwd);
-                if (!isZero(f)) {
-                    float pdfRev;
-                    evalScatter(hi.it, -ls.wi, -d, kModeRadiance, pdfRev);
-                    const float cosToLight = abs(dot(hit.n, ls.wi));
-                    const float wLight = pdfFwd / ls.pdf;
-                    const float wCamera = lightEmissionPdf(ls, hit.p) * cosToLight / (ls.pdf * ls.cosAtLight) *
-                                          (etaX + dVCM + dVC * pdfRev);
-                    const float w = 1 / (wLight + 1 + wCamera);
-                    const uint startRegion = dot(ls.wi, hit.n) > 0 ? hi.front : hi.back;
-                    const float4 Tr = isinf(ls.dist) ? shadowTransmittance(endpoint(hit, startRegion), ls.wi, ls.dist, wl)
-                                                     : connectionTransmittance(ls.endpoint, surfaceEnd(hit, startRegion), wl);
-                    if (!isZero(Tr))
-                        L += cie.toXYZ(wl, beta * f * ls.Le * Tr * (scatterCosine(hi.it, -d, ls.wi, kModeRadiance) * w / ls.pdf),
-                                       G.misc.y);
-                }
-            }
-            // Connection to a light vertex (s, t ≥ 2), drawn uniformly from the cache.
-            if (M > 0 && !skip(4)) {
-                const uint k = group * cacheCapacity() + min(uint(rng.uniform() * float(M)), M - 1);
-                LightVertex v = g_lightVertices[k];
-                float3 dv = v.p.xyz - hit.p;
-                float dist2 = dot(dv, dv);
-                if (dist2 > 0) {
-                    const float3 dir = dv / sqrt(dist2);
-                    const float3 dLight = v.d.xyz;
-                    const bool lightTerminated = (asuint(v.d.w) & kLvTerminated) != 0;
-                    Wavelengths wj = wl;
-                    if (lightTerminated) wj.terminateSecondary();
-                    float pdfCamFwd, pdfLightFwd;
-                    const float4 fc = evalCameraVcm(hi, wj, diffuseF, d, dir, pdfCamFwd);
-                    HitInterface hl = lightVertexInterface(v, wj.lambda.x);
-                    const float4 fl = evalScatterSpectral(hl, wj, dLight, -dir, kModeImportance, pdfLightFwd);
-                    if (!isZero(fc * fl)) {
-                        float pdfCamRev, pdfLightRev;
-                        evalScatter(hi.it, -dir, -d, kModeRadiance, pdfCamRev);
-                        evalScatter(hl.it, dir, -dLight, kModeRadiance, pdfLightRev);
-                        const float cosX = abs(dot(hit.n, dir)), cosY = abs(dot(v.n.xyz, dir));
-                        const float camPdfA = pdfCamFwd * cosY / dist2, lightPdfA = pdfLightFwd * cosX / dist2;
-                        const float wLight = camPdfA * (etaAt(v.p.xyz) + v.tex.w + v.mis.x * pdfLightRev);
-                        const float wCamera = lightPdfA * (etaX + dVCM + dVC * pdfCamRev);
-                        const float w = 1 / (wLight + 1 + wCamera);
-                        GBoundary lb = g_boundaries[asuint(v.p.w)];
-                        const Endpoint lightEnd = endpoint(v.p.xyz, dot(-dir, v.n.xyz) > 0 ? lb.front : lb.back,
-                                                           cachedSurfaceScale(lb, v.p.xyz), asuint(v.p.w), v.n.xyz,
-                                                           cachedPrimitive(asuint(v.d.w)));
-                        const float4 Tr = connectionTransmittance(lightEnd, surfaceEnd(hit, dot(dir, hit.n) > 0 ? hi.front : hi.back), wj);
-                        if (!isZero(Tr)) {
-                            const float g = scatterCosine(hi.it, -d, dir, kModeRadiance) * scatterCosine(hl.it, -dLight, -dir, kModeImportance) / dist2;
-                            L += joinedXYZ(cie, wl, lightTerminated, beta * fc * v.beta * fl * Tr * (g * w * float(M) / NL));
-                            noteUseful(asuint(v.mis.z));
-                        }
-                    }
-                }
-            }
-            // Merging with the light vertices about this point (vcm).
-            if (merging() && !skip(8)) {
-                const float r = mergeRadius(hit.p), r2 = r * r;
-                const float invEta = 1 / etaX;
-                // The levels light vertices within reach live on: their radii span those at the
-                // nearest and farthest distance from the eye in reach (almost always one level).
-                const float dx = length(hit.p);
-                const int levelLo = gridLevel(mergeRadius(hit.p * (max(dx - r, 0.0) / max(dx, 1e-30))));
-                const int levelHi = gridLevel(mergeRadius(hit.p * ((dx + r) / max(dx, 1e-30))));
-                for (int level = levelLo; level <= levelHi; ++level) {
-                    const float size = cellSize(level);
-                    const int3 base = cellOf(hit.p - 0.5 * size, size);
-                    for (int c8 = 0; c8 < 8; ++c8) {
-                        const int3 cell = base + int3(c8 & 1, (c8 >> 1) & 1, (c8 >> 2) & 1);
-                        for (uint i = g_gridHead[gridHash(cell, level)]; i != kGpuNone; i = g_gridNext[i]) {
-                            const float4 vp = g_lightVertices[i].p;
-                            const float3 dp = vp.xyz - hit.p;
-                            if (dot(dp, dp) > r2) continue;
-                            if (gridLevel(mergeRadius(vp.xyz)) != level || any(cellOf(vp.xyz, size) != cell)) continue;
-                            LightVertex v = g_lightVertices[i];
-                            if (abs(dot(dp, hit.n)) > 0.25 * r || dot(v.n.xyz, hit.n) < 0.5) continue;
-                            if (asuint(v.mis.w) != group) continue;  // other wavelengths
-                            const float3 wi = -v.d.xyz;
-                            const bool lightTerminated = (asuint(v.d.w) & kLvTerminated) != 0;
-                            Wavelengths wj = wl;
-                            if (lightTerminated) wj.terminateSecondary();
-                            float pdfFwd;
-                            const float4 fc = evalCameraVcm(hi, wj, diffuseF, d, wi, pdfFwd);
-                            if (isZero(fc)) continue;
-                            float pdfRev;
-                            evalScatter(hi.it, -wi, -d, kModeRadiance, pdfRev);
-                            const float wLight = v.tex.w * invEta + v.mis.y * pdfFwd;
-                            const float wCamera = dVCM * invEta + dVM * pdfRev;
-                            const float w = 1 / (wLight + 1 + wCamera);
-                            // A shading normal: the camera's cosine over the density per geometric area.
-                            float gather = 1;
-                            if (hi.it.smooth()) {
-                                const float cn = abs(dot(wi, hit.n));
-                                gather = cn > 0 ? abs(dot(wi, hi.it.ns)) / cn : 0.0;
-                            }
-                            L += joinedXYZ(cie, wl, lightTerminated, beta * fc * v.beta * (gather * w * invEta));
-                            noteUseful(asuint(v.mis.z));
-                        }
-                    }
-                }
-            }
+            CameraVertex x;
+            x.hit = hit;
+            x.hi = hi;
+            x.d = d;
+            x.beta = beta;
+            x.diffuseF = cameraDiffuseResponse(hi, wl);
+            x.eta = etaAt(hit.p);
+            x.mis = mis;
+            L += cameraNextEvent(x, wl, cie, rng);
+            L += cameraConnect(x, wl, cie, group, M, rng);
+            L += cameraMerge(x, wl, cie, group);
         }
 
         ScatterSample s;
         if (!scatterAtSurface(hit, c, hi, ray, wl, beta, rng, kModeRadiance, s)) break;
-        updateVcmMis(hi, hit, d, s, dVCM, dVC, dVM);
+        mis.scatter(hi, hit, d, s);
         prevP = hit.p;
         if (depth >= rrDepth && !survives(min(1.0, maxValue(beta)), beta, rng)) break;
     }
