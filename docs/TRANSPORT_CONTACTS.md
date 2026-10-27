@@ -90,7 +90,13 @@ keeps an earlier crossing consistent with the ray's region. The re-walk runs onl
 mismatch. The CPU resolves the same segment in double precision and needs no repair.
 
 Two distinct, simultaneously incident physical interfaces are ambiguous if the
-region does not establish their order. Keep the diagnostic and stop that path.
+region does not establish their order and the order would decide the region.
+Keep the diagnostic and stop that path. On the GPU, a tie in which neither
+interface changes the ray's region (touching opaque faces, sheets with air on
+both sides) is ordered by stable boundary ID instead (`contactOutcome` in
+`world.slang`): the Invisible Window's shutter, vestibule and lintel seams and the
+Peacock lamp's bulb stems resting on their ferrule plates. A tie between an opaque
+face and a glass face, or two glasses, still stops. The CPU keeps the stricter rule.
 A zero-thickness detector readout cannot take precedence over coincident opaque
 matter. Real scene overlaps need scene repairs: the observatory cabinet shelves,
 for example, originally overlapped their stiles and duplicated back faces with

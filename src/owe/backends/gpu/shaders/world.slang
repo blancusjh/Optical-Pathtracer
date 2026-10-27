@@ -380,6 +380,17 @@ bool contactAccepted(uint bi, LocalHit lh, float3 d, Endpoint departure, bool fo
     return incident == departure.region;
 }
 
+// The region a ray in `region` is in after meeting boundary bi: the far side's if it can pass into
+// it, else unchanged (opaque matter, or a sheet with the same region on both sides); kGpuNone if the
+// ray meets the boundary from another region.
+uint contactOutcome(uint bi, float3 n, float3 d, uint region) {
+    GBoundary b = g_boundaries[bi];
+    bool entering = dot(d, xfVector(b.toWorld, n)) < 0;
+    if ((entering ? b.front : b.back) != region) return kGpuNone;
+    uint type = g_optics[b.optics].a.x;
+    return type == kSurfDielectric || isPassableType(type) ? (entering ? b.back : b.front) : region;
+}
+
 void considerContact(uint bi, LocalHit lh, float3 d, Endpoint departure, bool forwardOnly,
                      inout bool found, inout uint bestB, inout LocalHit bestLocal, inout bool ambiguous) {
     if (!contactAccepted(bi, lh, d, departure, forwardOnly)) return;
@@ -392,7 +403,13 @@ void considerContact(uint bi, LocalHit lh, float3 d, Endpoint departure, bool fo
     if (tie && readout != previousReadout) {
         if (readout) return;
         ambiguous = false;
-    } else if (tie && bi != bestB) ambiguous = true;
+    } else if (tie && bi != bestB) {
+        // Two interfaces met at once are ordered by stable ID when either leaves the ray in the same
+        // region (touching opaque faces, sheets with air on both sides); otherwise the order would
+        // decide the region, and the path stops as ambiguous.
+        uint outcome = contactOutcome(bi, lh.n, d, departure.region);
+        if (outcome == kGpuNone || outcome != contactOutcome(bestB, bestLocal.n, d, departure.region)) ambiguous = true;
+    }
     // Order candidates by distance, then physical matter before readout, then stable ID.
     // Repeated roots on one boundary keep the nearer root even inside the tie window.
     bool replace = !found;

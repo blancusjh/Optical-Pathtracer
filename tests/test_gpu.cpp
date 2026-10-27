@@ -385,6 +385,53 @@ TEST(gpu_contact_slivers_keep_rays_entering_beside_a_mesh_rim) {
     CHECK(renderer->stats().leaks == 0);
 }
 
+TEST(gpu_contact_ties_stop_only_where_the_order_decides_the_region) {
+    // Two boxes sharing their top plane over an overlap, seen from above through a passable sheet
+    // 0.5 µm higher: each ray leaves the sheet and meets both tops at once within its contact window.
+    // Two opaque tops leave the ray in air whichever is first (the Invisible Window's shutter and
+    // lintel seams), so the tie is ordered and no path stops. An opaque top tied with a glass top
+    // decides whether the ray enters the glass, and still stops as ambiguous.
+    const Backend* backend = findBackend("gpu");
+    if (!backend || !backend->available()) return;
+    auto render = [](bool glassSecond) {
+        Scene scene;
+        scene.world.env.skyModel = Environment::Sky::Uniform;
+        scene.world.env.zenith = Spectrum::constant(1);
+        BodyMaterial matte;
+        matte.optics = scene.world.anonymousOptics(SurfaceType::Diffuse);
+        BodyMaterial second = matte;
+        if (glassSecond) {
+            second.transparent = true;
+            second.medium = "PMMA";
+            second.optics = scene.world.dielectricOptics();
+        }
+        buildBox(scene.world, "left", {.2, .1, .1}, matte, -1, Transform::translate({-.05, 0, -.05}));
+        buildBox(scene.world, "right", {.2, .1, .1}, second, -1, Transform::translate({.05, 0, -.05}));
+        buildSheet(scene.world, "veil", .2, .2, scene.world.nullOptics(), -1, -1, Transform::translate({0, 0, 5e-7}));
+        auto eye = std::make_unique<IdealObserver>();
+        eye->name = "Eye";
+        eye->position = {0, 0, .5};
+        eye->lookAt = {0, 0, 0};
+        eye->up = {0, 1, 0};
+        eye->width = eye->height = 16;
+        eye->fovY = radians(5);
+        eye->pupilRadius = 0;
+        scene.detectors.push_back(std::move(eye));
+        scene.build();
+        RenderSettings settings;
+        settings.backend = "gpu";
+        settings.integrator = "path";
+        auto renderer = makeRenderer(scene, 0, settings);
+        renderer->runPass(4);
+        return renderer->stats().inconsistencies;
+    };
+    const auto opaque = render(false), glass = render(true);
+    std::fprintf(stderr, "    [coplanar tops] opaque-opaque issues %llu, opaque-glass %llu\n", (unsigned long long)opaque,
+                 (unsigned long long)glass);
+    CHECK(opaque == 0);
+    CHECK(glass > 0);
+}
+
 TEST(gpu_contact_rays_grazing_a_concave_fold_meet_its_far_face) {
     // A mirror block whose top folds up by 7.5° (as a torus mesh's hole side): a ray reflected off
     // the flat half micrometres before the fold rises at 0.06° less than the fold and meets the far
