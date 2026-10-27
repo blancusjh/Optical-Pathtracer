@@ -1,7 +1,7 @@
 {
   "engine": "optical-world-engine 0.1.0",
   "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
-  "scene": {"path": "scenes/the_peacock_lamp.owe", "fnv1a64": "056e69c67cc6642c", "edits": []},
+  "scene": {"path": "scenes/the_peacock_lamp.owe", "fnv1a64": "6cd2b50c4b59c1fb", "edits": []},
   "detector": {"name": "Room", "description": "ideal observer 'Room' 960x600, fovY=40 deg, pupil diameter=3 mm, focus=1.350000 m, pixel filter gaussian(0.4)", "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ", "pixel_response": "square * gaussian(sigma 0.400000 px)"},
   "observer_pose": {"position_m": [-0.28000000000000003, -0.71999999999999997, 1.3600000000000001], "look_at_m": [0.050000000000000003, 0.44, 1.3600000000000001], "up": [0, 0, 1], "fov_deg": 40, "pupil_radius_m": 0.0015, "focus_distance_m": 1.3500000000000001, "width": 960, "height": 600},
   "integrator": "vcm",
@@ -11,8 +11,8 @@
   "passes": 1,
   "max_depth": 16,
   "display": {"exposure_ev": 12.115, "auto_exposure": false, "auto_gain_ev": 0, "white_balance_kelvin": 3000, "tone": "agx"},
-  "render_seconds": 905.054,
-  "statistics": {"paths": 589824000, "segments": 3649587388, "region_inconsistencies": 3643940, "leaks": 0, "first_inconsistency": {"boundary": "Lead2B.side", "ray_region": "ambient[air]"}},
-  "mean_Y": 1.29353e-05,
+  "render_seconds": 1415.4,
+  "statistics": {"paths": 589824000, "segments": 4015278880, "region_inconsistencies": 276, "leaks": 0, "first_inconsistency": {"boundary": "Lead2A.side", "ray_region": "ambient[air]", "expected_region": "Lead2A.interior[opaque]", "previous_boundary": "Lead2A.top", "position_m": [0.50469723463058469, 0.58692017078399661, 1.5117710834741593], "segment_origin_m": [0.50469347953796384, 0.58692183971405032, 1.5117718434333802], "segment_direction": [0.90138065814971924, -0.39337357878684998, -0.18102525174617767], "previous_primitive": 0, "primitive": 0}},
+  "mean_Y": 1.40878e-05,
   "world": {"media": [{"name": "air", "index": "ciddor-air", "n_d": 1.00028}, {"name": "opaque", "index": "constant(1)", "n_d": 1}], "regions": 28, "boundaries": 55, "bodies": 43, "assemblies": 2}
 }

@@ -11,8 +11,8 @@
   "passes": 1,
   "max_depth": 10,
   "display": {"exposure_ev": -15, "auto_exposure": false, "auto_gain_ev": 0, "white_balance_kelvin": 5800, "tone": "agx"},
-  "render_seconds": 1782.62,
-  "statistics": {"paths": 1253376000, "segments": 6646668483, "region_inconsistencies": 243, "leaks": 34, "first_inconsistency": {"boundary": "Heliostat.face", "ray_region": "Panel.interior[PMMA]"}},
-  "mean_Y": 1372.24,
+  "render_seconds": 1559.86,
+  "statistics": {"paths": 1253376000, "segments": 6646665101, "region_inconsistencies": 26, "leaks": 0, "first_inconsistency": {"boundary": "ShutterAbove.surface", "ray_region": "ambient[air]", "expected_region": "ShutterAbove.interior[opaque]", "previous_boundary": "Check.pixels", "position_m": [-0.00099997520446776234, 0.098667259216308589, 2.000000035762787], "segment_origin_m": [1.2256164669990539, -0.039739553928375249, 1.154738897830248], "segment_direction": [-0.81989502906799316, 0.092513896524906158, 0.56498950719833374], "previous_primitive": 0, "primitive": 214}},
+  "mean_Y": 1372.25,
   "world": {"media": [{"name": "air", "index": "ciddor-air", "n_d": 1.00028}, {"name": "opaque", "index": "constant(1)", "n_d": 1}, {"name": "PMMA", "index": "sellmeier(B1=1.1819 C1=0.011313)", "n_d": 1.49062}], "regions": 29, "boundaries": 34, "bodies": 30, "assemblies": 0}
 }

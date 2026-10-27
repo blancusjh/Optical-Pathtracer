@@ -21,14 +21,17 @@ every pixel.
 | **The Kunstkammer** — daylight reaches the mounted armour and casts its silhouette across plaster; steel, carved wood and red cloth remain distinct. | **The Peacock Lamp** — real carbon filaments illuminate opalescent glass, bronze and an antique binding. |
 | ![Gregorian Beside](docs/gallery/gregorian_beside.png) | ![Gregorian Eyepiece](docs/gallery/gregorian_eyepiece.png) |
 | **The Gregorian** — candlelit telescope, stand and the real Moon beyond its window. | **Through the eyepiece** — an erect lunar image emerges through the unchanged two-mirror, two-lens prescription. |
-| ![Gregorian Naked](docs/gallery/gregorian_naked.png) | |
-| **The unaided Moon** — true angular scale at the same 38° field and display settings as the eyepiece view. | |
+| ![Gregorian Naked](docs/gallery/gregorian_naked.png) | ![Peacock Lamp Shade](docs/gallery/peacock_lamp_shade.png) |
+| **The unaided Moon** — true angular scale at the same 38° field and display settings as the eyepiece view. | **The shade** — peacock eyes and feather glass lit from within by the three filaments. |
+| ![Invisible Window Wall](docs/gallery/invisible_window_wall.png) | |
+| **The invisible window** — a clear PMMA panel, shaped by inverse caustic design, projects a lancet window onto the wall in sunlight. | |
 
-These historical captures are previews: all five have nonzero transport diagnostics,
-and Kunstkammer still shows isolated bright noise. They are not validated reference
-images; new gallery promotion requires zero leaks and at most one region inconsistency per million paths. Window Room and Wall are withheld from this
-featured gallery until a capture has clean transport diagnostics. Historical images
-and native diagnostics remain available for investigation.
+The two Peacock views and the invisible window's wall were captured on 26 October 2026 and
+meet the promotion criteria: zero leaks and at most one region inconsistency per million
+paths (4.7e-7, 4.0e-7 and 2.1e-8). The Peacock views keep a few dozen isolated bright pixels
+on the shade. The Kunstkammer and Gregorian views are earlier previews with nonzero transport
+diagnostics, and the Kunstkammer shows isolated bright noise; they are not validated reference
+images. The window's room view is withheld: its capture recorded one leak.
 See [current status](docs/STATUS.md), [capture records](benchmarks/results/20261010_gallery.json)
 and [asset credits](docs/ASSET_CREDITS.md).
 

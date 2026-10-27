@@ -22,12 +22,10 @@
       "--passes",
       "1",
       "--threads",
-      "0",
-      "--device",
-      "1"
+      "0"
     ],
     "assets": {
-      "scenes/the_peacock_lamp.owe": "0ad28c7fd945415d64d85afcf2a1fc5e9e4237a2dc4b16c26482a7213293b0c5",
+      "scenes/the_peacock_lamp.owe": "96234475892cf95c6cb869f0abcf843e14820c0dff10173370d9c9728029e1ca",
       "models/crafted/the_peacock_lamp.gltf": "98a2704e7af02b8b3b71a2ed2b7dfd58762d84a188aa16db4c25777c2a61d512",
       "assets/sketchfab/peacock_table_lamp/textures/Filament_Material_emissive.png": "02f8d54a3c18183e35633a0049eb4bfce0117f8f2ca9ad129e80ee9d483f2f8b",
       "assets/sketchfab/peacock_table_lamp/textures/Filament_Material_baseColor.png": "ef1dbeb27ff5f23e1c6cc3dab41c2698026c7ca6b440804666417a2374e6eed9",
@@ -70,11 +68,11 @@
       "assets/polyhaven/oak_veneer_01/fumed.jpg": "249b0e8d1ede50f448356b94480e2301d3c0be8eb3f999ae59a7f5356d3882e4"
     },
     "code": {
-      "binary_sha256": "281347b390f6bfc1fa215f72fc94469fab184283780ec109721cf56f9e8ea243",
+      "binary_sha256": "23b8cda2783848e44a191850a9ff53d5a4c360f8af824ff095c266663050a075",
       "source_scope": "capture_workspace",
       "source_description": "source_sha256 hashes the current workspace sources, build definition, runner and suite manifest; it is not the executable's build provenance",
-      "source_sha256": "b10d3905930a5ad8b0b564d038d675a435ed41569bf45c29a3f505d254e4dff8",
-      "git_head": "07092cfbd50f2558a07be0bd783e2c3f4485eabe"
+      "source_sha256": "6e3b42691c8c8bef71970b098f435ebe750f717afe575b5b90802e3c00f78b2a",
+      "git_head": "58c2565930810cf3e9ddb323c5ae365b61457e4d"
     },
     "host": {
       "platform": "Linux-7.2.7-arch1-1-x86_64-with-glibc2.44",
@@ -95,15 +93,14 @@
         ]
       },
       "environment": {
-        "CUDA_PATH": "/opt/cuda",
-        "OWE_GPU_RAY_QUERY": "1"
+        "CUDA_PATH": "/opt/cuda"
       }
     },
-    "gallery_tool_sha256": "2c1f6b5f0084010883f5ad194ed83e034dd915dcaee96335fdb9c4d508d16fd2",
+    "gallery_tool_sha256": "c042c0fa71a9b506a8a8b6f0eda4040e89d04e6adf5eb2c5944164cdd4c243f0",
     "entry_sha256": "5ff60457686ff06cc960bb59a646d03754ae369b0cde4e38a9831cfeaca0b651"
   },
   "command": [
-    "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/out/contact_performance_fix_20261009/owe_wrapper_candidate",
+    "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/build/owe",
     "render",
     "scenes/the_peacock_lamp.owe",
     "--detector",
@@ -124,24 +121,22 @@
     "1",
     "--threads",
     "0",
-    "--device",
-    "1",
     "--out",
-    "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/out/gallery/final_review_20261010_v1/peacock_lamp_room"
+    "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/out/gallery/20261026_ties/peacock_lamp_room"
   ],
   "validation_limitations": [],
-  "wall_seconds": 928.9261313339957,
-  "render_seconds": 905.054,
+  "wall_seconds": 1426.5757320249977,
+  "render_seconds": 1415.4,
   "review": {
-    "note": "Opened native 960x600 image and received an independent visual review. Complete shade, finial, base and book fit; amber/teal glass pattern, bronze highlights, tabletop and wall illumination read clearly. Dark body detail and fine wall grain remain visible limitations. VCM512, depth16, seed17, one pass; finite raw RGB. Native diagnostics:3643940 region inconsistencies,0 leaks, retained prominently as unresolved; this is visual gallery acceptance, not clean production conformance. No denoising or retouching.",
-    "utc": "2026-10-10T06:11:41.346622+00:00"
+    "note": "Opened the native 960x600 image. Complete shade, finial, base and binding fit; the amber and teal glass, bronze highlights and the binding (now shaded with correctly transformed glTF normals) read well, with warm falloff on the plaster and the table edge sinking into shadow. About 39 isolated bright pixels remain on the shade (rare high-weight VCM paths), visible on close inspection. VCM 512 spp, depth 16, seed 17; 276 region inconsistencies in 5.9e8 paths (4.7e-7 per path) and 0 leaks, with the lead-in wires clear of the filaments. No denoising or retouching.",
+    "utc": "2026-10-27T04:33:00.812730+00:00"
   },
   "artifacts": {
-    ".png": "0d3bd03b7c986d35addec410e564c481ff4bfbfab74fd37a345c6f1bcae22183",
-    ".json": "2895b10908e42351c5075c88c8890350b107bcc8385cb67ef0fd4103ba4e3ae1",
-    ".pfm": "4cd67567a95469f6c8dd707c27513bd12c75fabb36c9a12ef421d80ca299ba19",
-    ".stdout.log": "e668f4e23c0b7221977a98391bc2e3af21a8cff05eb500285ce1c271b52ab801",
-    ".stderr.log": "d1a307159dcebbd40fde4ae709ef54fd59a88248409ee088f3d670c9b1725bb6"
+    ".png": "79fe498f61a1f6d67b3855296a267167c41364aee70a052d884e74c12306fef0",
+    ".json": "2642d0159a08709dfb4bf5022fcadce472e978cdc0e3763a994bd7959843880e",
+    ".pfm": "e9d82242ce2ba181f2a3abd20faa7be959bf8d1a1e148a8006bac7b641c02d57",
+    ".stdout.log": "5d2eab2e401e671036b548cf99f77acaacccb8867e12faa1acab8dcb578787ea",
+    ".stderr.log": "ee5c7a68c3fc45ea270c8dc2c32c7d661bb3166892dd26cfb8da380f8a0e3a9b"
   },
   "source_rights": "cleared"
 }
