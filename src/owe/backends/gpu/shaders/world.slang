@@ -618,6 +618,22 @@ bool intersectContactNeighborhood(float3 o, float3 d, float window, uint departe
 
 #endif
 
+// The nearest accepted crossing of one mesh owner within window of a spawn anchor, walked in
+// the owner's native frame (whose coordinates are small) instead of the world's.
+[noinline]
+bool intersectOwnerNative(uint owner, float3 o, float3 d, float window, uint departed, uint region, float scale,
+                          float3 departingNormal, uint departedPrimitive, bool forwardOnly, out SurfaceHit hit) {
+    hit = (SurfaceHit)0;
+    bool found = false, ambiguous = false;
+    uint bestB = 0;
+    LocalHit bestLocal = (LocalHit)0;
+    contactMesh(g_boundaries[owner], o, d, window, departed, region, contactError(o, scale),
+                contactRayError(o, d, scale, departingNormal), departingNormal, departedPrimitive, forwardOnly,
+                found, bestB, bestLocal, ambiguous, owner);
+    if (found) fillContactHit(bestB, bestLocal, o, d, ambiguous, hit);
+    return found;
+}
+
 // Invoked with the surface anchor, outgoing side's region, and the departing boundary only.
 // Its opposite face and every distinct contacting boundary remain eligible.
 bool intersectSpawnWorld(float3 o, float3 d, float tmax, uint departed, uint region,
@@ -639,6 +655,21 @@ bool intersectSpawnWorld(float3 o, float3 d, float tmax, uint departed, uint reg
     }
     GBoundary b = g_boundaries[hit.boundary];
     uint incident = dot(d, hit.n) < 0 ? b.front : b.back;
+    // Past the spawn offset the traversal starts from a world point rounded to the world's float
+    // spacing, which can lie behind a face the ray only grazes (a concave fold of the face it
+    // left), so the ray arrives inside that mesh. Its own frame resolves the whole segment.
+    if (incident != region && departed != kGpuNone && b.shape == kShapeMesh) {
+        SurfaceHit native;
+        if (intersectOwnerNative(hit.boundary, o, d, hit.t, departed, region, scale, normal, departedPrimitive,
+                                 forwardOnly, native)) {
+            GBoundary nb = g_boundaries[native.boundary];
+            if ((dot(d, native.n) < 0 ? nb.front : nb.back) == region && native.t < hit.t) {
+                hit = native;
+                b = nb;
+                incident = region;
+            }
+        }
+    }
     if (incident != region || g_optics[b.optics].a.x == kSurfDetector) {
         SurfaceHit ordered;
         // A raw primary hit may select the entering opaque neighbor before the glass exit.

@@ -78,6 +78,17 @@ on it and a long sliver is resolved near its far edge. Möller–Trumbore's u + 
 cancels there in float: the Invisible Window panel's fan-triangulated back let
 rays entering a side face micrometres from the rim escape from inside the glass.
 
+Past the spawn offset, the GPU's ordinary traversal starts from a world point rounded
+to the world's float spacing (relative to the eye: about 0.1 µm at 1–2 m). A ray that
+leaves a face at a concave fold and grazes the next face can start behind that face,
+never cross it, and arrive inside the mesh. The Peacock lamp's 48 × 12 filament tori do
+this on their hole side: light leaving a facet at 5° meets the next one, folded by 7.5°,
+60 µm later and 0.07 µm above its plane. When a spawned ray's hit is a mesh face entered
+from the wrong side, `intersectSpawnWorld` walks that owner again in its native frame
+over the whole segment (`intersectOwnerNative`), where the coordinates are small, and
+keeps an earlier crossing consistent with the ray's region. The re-walk runs only on a
+mismatch. The CPU resolves the same segment in double precision and needs no repair.
+
 Two distinct, simultaneously incident physical interfaces are ambiguous if the
 region does not establish their order. Keep the diagnostic and stop that path.
 A zero-thickness detector readout cannot take precedence over coincident opaque

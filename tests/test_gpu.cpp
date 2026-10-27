@@ -385,6 +385,62 @@ TEST(gpu_contact_slivers_keep_rays_entering_beside_a_mesh_rim) {
     CHECK(renderer->stats().leaks == 0);
 }
 
+TEST(gpu_contact_rays_grazing_a_concave_fold_meet_its_far_face) {
+    // A mirror block whose top folds up by 7.5° (as a torus mesh's hole side): a ray reflected off
+    // the flat half micrometres before the fold rises at 0.06° less than the fold and meets the far
+    // half tens of micrometres later, a few hundredths of a micrometre above its plane at the end of
+    // the spawn offset. World coordinates 3 m from the eye round to 0.1 µm, so the ordinary
+    // traversal started behind that face and the ray ran on inside the block (the Peacock filaments'
+    // inconsistencies); the block's own frame resolves the whole segment.
+    const Backend* backend = findBackend("gpu");
+    if (!backend || !backend->available()) return;
+    Scene scene;
+    scene.world.env.skyModel = Environment::Sky::Uniform;
+    scene.world.env.zenith = Spectrum::constant(1);
+    const double L = 1e-3, H = 1e-3, W = 1e-3, fold = radians(7.5);
+    const Vec3 profile[5] = {{-L, 0, -H}, {L, 0, -H}, {L, 0, L * std::tan(fold)}, {0, 0, 0}, {-L, 0, 0}};
+    MeshData mesh;
+    const Vec3 side(0, W, 0);
+    for (int k = 0; k < 5; ++k) {
+        const Vec3 a = profile[k], b = profile[(k + 1) % 5];
+        mesh.addQuad(a - side, b - side, b + side, a + side);
+    }
+    for (const Vec3& s : {side * -1.0, side})
+        for (int k = 1; k < 4; ++k) mesh.addTriangle(profile[0] + s, profile[k] + s, profile[k + 1] + s);
+    orientOutward(mesh);
+    SurfaceOptics mirror;
+    mirror.type = SurfaceType::Mirror;
+    mirror.reflectance = Spectrum::constant(1);
+    BodyMaterial block;
+    block.optics = scene.world.addOptics(mirror);
+    // Tilted so that every coordinate of a point seen from 3 m is large (the GPU's world frame is
+    // relative to the eye, and its rounding then reaches the fold's normal from every axis).
+    const Transform xf = Transform::translate({.5, .6, 1.5}) * Transform::rotate(normalize(Vec3(1, -2, 3)), radians(50));
+    buildMesh(scene.world, "folded-mirror", mesh, block, -1, xf);
+    // A pinhole eye whose image spans the 2 µm of the flat half before the fold.
+    const double rise = fold - radians(.06), distance = 3;
+    const Vec3 target = xf.point({-1e-6, 0, 0}), dir = xf.vector({std::cos(rise), 0, -std::sin(rise)});
+    auto eye = std::make_unique<IdealObserver>();
+    eye->name = "Eye";
+    eye->position = target - dir * distance;
+    eye->lookAt = target;
+    eye->up = xf.vector({0, 0, 1});
+    eye->width = eye->height = 16;
+    eye->fovY = 2e-6 * std::sin(rise) / distance;
+    eye->pupilRadius = 0;
+    scene.detectors.push_back(std::move(eye));
+    scene.build();
+    RenderSettings settings;
+    settings.backend = "gpu";
+    settings.integrator = "path";
+    auto renderer = makeRenderer(scene, 0, settings);
+    renderer->runPass(16);
+    std::fprintf(stderr, "    [concave fold] issues %llu, leaks %llu\n", (unsigned long long)renderer->stats().inconsistencies,
+                 (unsigned long long)renderer->stats().leaks);
+    CHECK(renderer->stats().inconsistencies == 0);
+    CHECK(renderer->stats().leaks == 0);
+}
+
 TEST(gpu_contact_spawn_preserves_nearest_distinct_face_in_one_mesh) {
     const Backend* backend = findBackend("gpu");
     if (!backend || !backend->available()) return;
