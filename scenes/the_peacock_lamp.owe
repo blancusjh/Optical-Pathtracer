@@ -6,7 +6,7 @@
 # CC0 environment: Poly Haven round_wooden_table_01 (Ulan Cabanilla), wood_floor,
 # oak_veneer_01, white_plaster_02. CC0 binding: Varldskulturmuseerna.
 # Original full-resolution colour and OpenGL normal/roughness maps retained.
-# All three filaments sit clear of their opaque ferrules; total124.407lm.
+# All three filaments sit clear of their opaque ferrules and lead-in wires; total124.407lm.
 # THE PEACOCK LAMP — a study, c. 1905. Light is the subject, furniture its quiet frame.
 # References: Joseph Wright of Derby, A Philosopher Lecturing on the Orrery (1766);
 # Georges de La Tour, The Magdalen with the Smoking Flame (c. 1635–37);
@@ -144,12 +144,15 @@ assembly Lamp { position = (0.18, 0.22, 1.0050213933)  rotate = (0, 0, 193deg)
         body CarbonLoop2 { type = torus radius = 2mm tube_radius = .08mm segments = 48 tube_segments = 12 position = (-.1116871913,-.0758024910,.5067357504) material = Carbon emission = blackbody(2100K,142.034216) }
         body CarbonLoop3 { type = torus radius = 2mm tube_radius = .08mm segments = 48 tube_segments = 12 position = (.1259230368,-.0308393817,.5062568622) material = Carbon emission = blackbody(2100K,142.034216) }
 
-body Lead1A { type = cylinder radius = .05mm height = 0.018357559751 position = (0.0106666667,0.1210000000,0.5090000000) axis = (0.0000000000,0.0160000000,0.0090000000) material = Ferrule }
-body Lead1B { type = cylinder radius = .05mm height = 0.018357559751 position = (0.0146666667,0.1210000000,0.5090000000) axis = (0.0000000000,0.0160000000,0.0090000000) material = Ferrule }
-body Lead2A { type = cylinder radius = .05mm height = 0.041858722249 position = (-0.0920000000,-0.0400000000,0.5067357504) axis = (-0.0216871913,-0.0358024910,0.0000000000) material = Ferrule }
-body Lead2B { type = cylinder radius = .05mm height = 0.041858722249 position = (-0.0880000000,-0.0400000000,0.5067357504) axis = (-0.0216871913,-0.0358024910,0.0000000000) material = Ferrule }
-body Lead3A { type = cylinder radius = .05mm height = 0.041307495765 position = (0.0980000000,-0.0630000000,0.5062568622) axis = (0.0259230368,0.0321606183,0.0000000000) material = Ferrule }
-body Lead3B { type = cylinder radius = .05mm height = 0.041307495765 position = (0.1020000000,-0.0630000000,0.5062568622) axis = (0.0259230368,0.0321606183,0.0000000000) material = Ferrule }
+# Lead-in wires: position = base, axis = direction only (normalised), height = length.
+# Each stops 30um short of its loop: whole end disc clear of tube and 48x12 mesh. Lead2A and
+# Lead3B, chords of their loops, stop before the near crossing. Emitters never start in a wire.
+body Lead1A { type = cylinder radius = .05mm height = 0.018047179 position = (0.0106666667,0.1210000000,0.5090000000) axis = (0.0000000000,0.0160000000,0.0090000000) material = Ferrule }
+body Lead1B { type = cylinder radius = .05mm height = 0.018047179 position = (0.0146666667,0.1210000000,0.5090000000) axis = (0.0000000000,0.0160000000,0.0090000000) material = Ferrule }
+body Lead2A { type = cylinder radius = .05mm height = 0.039520824 position = (-0.0920000000,-0.0400000000,0.5067357504) axis = (-0.0216871913,-0.0358024910,0.0000000000) material = Ferrule }
+body Lead2B { type = cylinder radius = .05mm height = 0.041593242 position = (-0.0880000000,-0.0400000000,0.5067357504) axis = (-0.0216871913,-0.0358024910,0.0000000000) material = Ferrule }
+body Lead3A { type = cylinder radius = .05mm height = 0.041085917 position = (0.0980000000,-0.0630000000,0.5062568622) axis = (0.0259230368,0.0321606183,0.0000000000) material = Ferrule }
+body Lead3B { type = cylinder radius = .05mm height = 0.038575667 position = (0.1020000000,-0.0630000000,0.5062568622) axis = (0.0259230368,0.0321606183,0.0000000000) material = Ferrule }
 }
 }
 
