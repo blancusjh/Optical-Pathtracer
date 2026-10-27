@@ -47,96 +47,105 @@ std::string hexColor(const double rgb[3]) {
     return buf;
 }
 
-}  // namespace
-
-void writePathsSVG(const std::string& path, const World& world, const std::vector<PathRecord>& paths,
-                   const ViewPlane& plane, const SvgOptions& opt) {
-    Vec3 u = normalize(plane.u), v = normalize(plane.v);
-    auto proj = [&](const Vec3& p) { return Vec2{dot(p - plane.origin, u), dot(p - plane.origin, v)}; };
+// The view plane of an SVG drawing: its projection, the extent drawn (a0..a1 along u, b0..b1 along
+// v) and the drawing's size.
+struct SvgView {
+    Vec3 origin, u, v;
     double a0 = Inf, a1 = -Inf, b0 = Inf, b1 = -Inf;
-    auto grow = [&](const Vec2& q) {
+    double W = 0, H = 0;
+
+    Vec2 proj(const Vec3& p) const { return Vec2{dot(p - origin, u), dot(p - origin, v)}; }
+    void grow(const Vec2& q) {
         a0 = std::min(a0, q.x); a1 = std::max(a1, q.x);
         b0 = std::min(b0, q.y); b1 = std::max(b1, q.y);
-    };
+    }
+    double sx(double a) const { return (a - a0) / (a1 - a0) * W; }
+    double sy(double b) const { return H - (b - b0) / (b1 - b0) * H; }
+};
+
+// The extent: the given bounds, or the paths' (else the world's) with a margin and a minimum height.
+SvgView svgView(const World& world, const std::vector<PathRecord>& paths, const ViewPlane& plane, const SvgOptions& opt) {
+    SvgView view;
+    view.origin = plane.origin;
+    view.u = normalize(plane.u);
+    view.v = normalize(plane.v);
+    double &a0 = view.a0, &a1 = view.a1, &b0 = view.b0, &b1 = view.b1;
     if (opt.bounds.size() == 4) {
         a0 = opt.bounds[0]; b0 = opt.bounds[1]; a1 = opt.bounds[2]; b1 = opt.bounds[3];
     } else {
         for (const auto& r : paths)
-            for (const auto& vx : r.v) grow(proj(vx.p));
+            for (const auto& vx : r.v) view.grow(view.proj(vx.p));
         if (!(a1 > a0) || !(b1 > b0) || paths.empty()) {
             AABB wb = world.bounds();
-            for (int i = 0; i < 8; ++i)
-                grow(proj(wb.corner(i)));
+            for (int i = 0; i < 8; ++i) view.grow(view.proj(wb.corner(i)));
         }
         double ea = (a1 - a0) * opt.margin + 1e-9, eb = (b1 - b0) * opt.margin + 1e-9;
         double ext = std::max(a1 - a0, b1 - b0);
         if (b1 - b0 < 0.05 * ext) { double c = 0.5 * (b0 + b1); b0 = c - 0.025 * ext; b1 = c + 0.025 * ext; }
         a0 -= ea; a1 += ea; b0 -= eb; b1 += eb;
     }
-    double W = opt.width;
-    double H = std::max(80.0, W * (b1 - b0) / (a1 - a0));
-    auto sx = [&](double a) { return (a - a0) / (a1 - a0) * W; };
-    auto sy = [&](double b) { return H - (b - b0) / (b1 - b0) * H; };
+    view.W = opt.width;
+    view.H = std::max(80.0, view.W * (b1 - b0) / (a1 - a0));
+    return view;
+}
 
-    std::ofstream out(path);
-    if (!out) throw std::runtime_error("cannot write " + path);
-    out << "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" << W << "\" height=\"" << H << "\" viewBox=\"0 0 " << W
-        << " " << H << "\">\n";
-    out << "<rect width=\"100%\" height=\"100%\" fill=\"#fbfaf7\"/>\n";
-
-    if (opt.drawSection) {
-        // Slice the world with the view plane by casting dense lines within it.
-        out << "<g opacity=\"0.9\">\n";
-        std::map<std::string, std::vector<Vec2>> pts;
-        int L = opt.sectionLines;
-        for (int pass = 0; pass < 2; ++pass)
-            for (int i = 0; i < L; ++i) {
-                double f = (i + 0.5) / L;
-                Vec3 o, d;
-                double len;
-                if (pass == 0) {
-                    o = plane.origin + u * a0 + v * (b0 + f * (b1 - b0));
-                    d = u;
-                    len = a1 - a0;
-                } else {
-                    o = plane.origin + v * b0 + u * (a0 + f * (a1 - a0));
-                    d = v;
-                    len = b1 - b0;
-                }
-                double travelled = 0;
-                for (int k = 0; k < 64; ++k) {
-                    SurfaceHit h;
-                    if (!world.intersect(Ray{o, d}, len - travelled, h)) break;
-                    travelled += h.t;
-                    const Boundary& bd = world.boundaries()[h.boundary];
-                    pts[opticsColor(world.optics()[bd.optics].type)].push_back(proj(h.p));
-                    o = h.p + d * surfaceEpsilon(h.p) * 4;
-                }
+// The world sliced by the view plane: dense lines cast within it, their hits dotted by optics kind.
+void writeSection(std::ostream& out, const World& world, const SvgView& view, int lines) {
+    out << "<g opacity=\"0.9\">\n";
+    std::map<std::string, std::vector<Vec2>> pts;
+    for (int pass = 0; pass < 2; ++pass)
+        for (int i = 0; i < lines; ++i) {
+            double f = (i + 0.5) / lines;
+            Vec3 o, d;
+            double len;
+            if (pass == 0) {
+                o = view.origin + view.u * view.a0 + view.v * (view.b0 + f * (view.b1 - view.b0));
+                d = view.u;
+                len = view.a1 - view.a0;
+            } else {
+                o = view.origin + view.v * view.b0 + view.u * (view.a0 + f * (view.a1 - view.a0));
+                d = view.v;
+                len = view.b1 - view.b0;
             }
-        double r = std::max(0.6, W / 1400.0);
-        for (auto& [color, list] : pts) {
-            out << "<g fill=\"" << color << "\">";
-            for (auto& q : list) out << "<circle cx=\"" << sx(q.x) << "\" cy=\"" << sy(q.y) << "\" r=\"" << r << "\"/>";
-            out << "</g>\n";
+            double travelled = 0;
+            for (int k = 0; k < 64; ++k) {
+                SurfaceHit h;
+                if (!world.intersect(Ray{o, d}, len - travelled, h)) break;
+                travelled += h.t;
+                const Boundary& bd = world.boundaries()[h.boundary];
+                pts[opticsColor(world.optics()[bd.optics].type)].push_back(view.proj(h.p));
+                o = h.p + d * surfaceEpsilon(h.p) * 4;
+            }
         }
+    double r = std::max(0.6, view.W / 1400.0);
+    for (auto& [color, list] : pts) {
+        out << "<g fill=\"" << color << "\">";
+        for (auto& q : list) out << "<circle cx=\"" << view.sx(q.x) << "\" cy=\"" << view.sy(q.y) << "\" r=\"" << r << "\"/>";
         out << "</g>\n";
     }
+    out << "</g>\n";
+}
 
-    out << "<g fill=\"none\" stroke-linejoin=\"round\" stroke-width=\"" << opt.strokeWidth << "\" stroke-opacity=\"0.75\">\n";
+// Each path as a polyline in its hero wavelength's colour.
+void writePaths(std::ostream& out, const std::vector<PathRecord>& paths, const SvgView& view, double strokeWidth) {
+    out << "<g fill=\"none\" stroke-linejoin=\"round\" stroke-width=\"" << strokeWidth << "\" stroke-opacity=\"0.75\">\n";
     for (const auto& r : paths) {
         if (r.v.size() < 2) continue;
         double rgb[3];
         wavelengthToRGB(r.lambda, rgb);
         out << "<polyline stroke=\"" << hexColor(rgb) << "\" points=\"";
         for (const auto& vx : r.v) {
-            Vec2 q = proj(vx.p);
-            out << sx(q.x) << "," << sy(q.y) << " ";
+            Vec2 q = view.proj(vx.p);
+            out << view.sx(q.x) << "," << view.sy(q.y) << " ";
         }
         out << "\"/>\n";
     }
     out << "</g>\n";
-    // Scale bar.
-    double span = a1 - a0;
+}
+
+// A scale bar of a power of ten near a quarter of the width, and the title.
+void writeScaleBar(std::ostream& out, const SvgView& view, const std::string& title) {
+    const double span = view.a1 - view.a0, W = view.W, H = view.H;
     double bar = std::pow(10.0, std::floor(std::log10(span * 0.25)));
     out << "<g font-family=\"sans-serif\" font-size=\"13\" fill=\"#333\">";
     out << "<line x1=\"20\" y1=\"" << H - 18 << "\" x2=\"" << 20 + bar / span * W << "\" y2=\"" << H - 18
@@ -146,8 +155,24 @@ void writePathsSVG(const std::string& path, const World& world, const std::vecto
     else if (bar >= 1e-3) std::snprintf(lab, sizeof lab, "%g mm", bar * 1e3);
     else std::snprintf(lab, sizeof lab, "%g µm", bar * 1e6);
     out << "<text x=\"20\" y=\"" << H - 24 << "\">" << lab << "</text>";
-    if (!opt.title.empty()) out << "<text x=\"20\" y=\"22\" font-size=\"16\">" << opt.title << "</text>";
-    out << "</g>\n</svg>\n";
+    if (!title.empty()) out << "<text x=\"20\" y=\"22\" font-size=\"16\">" << title << "</text>";
+    out << "</g>\n";
+}
+
+}  // namespace
+
+void writePathsSVG(const std::string& path, const World& world, const std::vector<PathRecord>& paths,
+                   const ViewPlane& plane, const SvgOptions& opt) {
+    const SvgView view = svgView(world, paths, plane, opt);
+    std::ofstream out(path);
+    if (!out) throw std::runtime_error("cannot write " + path);
+    out << "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" << view.W << "\" height=\"" << view.H
+        << "\" viewBox=\"0 0 " << view.W << " " << view.H << "\">\n";
+    out << "<rect width=\"100%\" height=\"100%\" fill=\"#fbfaf7\"/>\n";
+    if (opt.drawSection) writeSection(out, world, view, opt.sectionLines);
+    writePaths(out, paths, view, opt.strokeWidth);
+    writeScaleBar(out, view, opt.title);
+    out << "</svg>\n";
 }
 
 std::string pathSignature(const World& w, const PathRecord& r, size_t upTo) {

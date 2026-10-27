@@ -93,6 +93,15 @@ public:
     Interface makeInterface(const SurfaceHit& hit, double lambda) const;
 
 private:
+    // One camera path of radiance() in flight, and the steps of its loop (each false when the path ends).
+    struct CameraPath;
+    bool scatterInMedium(const Medium& med, double nMed, double t, int depth, Wavelengths& wl, Rng& rng,
+                         CameraPath& path) const;
+    void skyMet(const Wavelengths& wl, double nMed, CameraPath& path) const;
+    void emissionMet(const SurfaceHit& hit, bool fromFront, const Wavelengths& wl, CameraPath& path) const;
+    bool scatterAtSurface(const SurfaceHit& hit, const SurfaceOptics& o, uint32_t other, int depth, Wavelengths& wl,
+                          Rng& rng, CameraPath& path) const;
+
     // surface: the hit's interface at the hero wavelength (null for medium scattering).
     Spec4 directLighting(const SurfaceHit& hit, const Interface* surface, const Vec3& d, const Wavelengths& wl, Rng& rng,
                          std::string* source, double g, uint32_t region) const;

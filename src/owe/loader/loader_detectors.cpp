@@ -10,56 +10,61 @@ Transform cameraPlacement(const Vec3& position, const Vec3& lookAt, const Vec3& 
     return Transform::translate(position) * Transform::alignZ(-f, up);
 }
 
-int addPhysicalCamera(Scene& scene, const std::string& name, const Prescription& lensIn, const CameraParams& c,
-                      const Transform& placement, int parentAssembly) {
+namespace {
+// Resizes the physical aperture stop so that the entrance pupil gives EFL / (2N). The entrance
+// pupil scales linearly with the stop, paraxially. Lenses without a stop get an iris 2 mm in front
+// of their first surface.
+void setFNumber(Prescription& lens, double fNumber, const IndexFn& index) {
+    int stop = stopIndex(lens);
+    if (stop < 0) {
+        PrescriptionSurface iris;
+        iris.label = "IRIS";
+        iris.t = 2e-3;
+        iris.stop = true;
+        iris.sd = lens.surfaces[0].sd;
+        lens.surfaces.insert(lens.surfaces.begin(), iris);
+        stop = 0;
+    }
+    Paraxial p0 = paraxialAnalysis(atInfinity(lens), lens.wavelength, index);
+    double target = std::abs(p0.efl) / (2 * fNumber);
+    lens.surfaces[size_t(stop)].sd *= target / p0.entrancePupilRadius;
+}
+
+// Focus like a real camera: at the plane of least blur for this aperture (traced with real rays
+// through the lens bodies), not at the paraxial image. The correction is the on-axis best-focus
+// shift measured for a distant object.
+double realFocusShift(const Prescription& lens) {
+    LensReport rep = analyzeLens(atInfinity(lens), {0}, {lens.wavelength}, 6);
+    if (!rep.spots.empty() && rep.spots[0].arrived >= 3 && !std::isinf(rep.paraxial.imageDistance))
+        return rep.spots[0].bestFocusZ - rep.paraxial.imageDistance;
+    return 0;
+}
+
+// Depth of field from thin-lens relations with a circle of confusion of 1/1500 of the diagonal.
+std::string depthOfFieldNote(const Prescription& lens, double focusDistance, double halfDiag, const IndexFn& index) {
+    Paraxial pi = paraxialAnalysis(atInfinity(lens), lens.wavelength, index);
+    double f = std::abs(pi.efl), N = pi.fNumber, coc = 2 * halfDiag / 1500;
+    double Hf = f * f / (N * coc) + f;
+    char buf[512];
+    double s = focusDistance;
+    if (std::isinf(s)) {
+        std::snprintf(buf, sizeof buf, "EFL %.1f mm, f/%.2f, focus infinity; sharp beyond %.2f m (hyperfocal)", f * 1e3, N, Hf);
+    } else {
+        double nearD = s * (Hf - f) / (Hf + s - 2 * f);
+        double farD = s < Hf ? s * (Hf - f) / (Hf - s) : Inf;
+        char far[32] = "infinity";
+        if (!std::isinf(farD)) std::snprintf(far, sizeof far, "%.3f m", farD);
+        std::snprintf(buf, sizeof buf, "EFL %.1f mm, f/%.2f, focus %.3f m; depth of field %.3f m to %s (CoC %.0f µm)",
+                      f * 1e3, N, s, nearD, far, coc * 1e6);
+    }
+    return buf;
+}
+
+// The sensor at zSensor in camera assembly cam, facing the lens; its samples aim at the rear of the
+// lens, most of them at the exit pupil. Returns the detector's index.
+int addCameraSensor(Scene& scene, const std::string& name, const CameraParams& c, int cam, double zSensor,
+                    const BuiltInstrument& bi, const Paraxial& px, double halfDiag) {
     World& w = scene.world;
-    Prescription lens = lensIn;
-    lens.objectDistance = c.focusDistance;
-    IndexFn index = catalogIndex();
-    if (c.fNumber > 0) {
-        // Resize the physical aperture stop so that the entrance pupil gives EFL / (2N). The
-        // entrance pupil scales linearly with the stop, paraxially. Lenses without a stop get
-        // an iris 2 mm in front of their first surface.
-        int stop = stopIndex(lens);
-        if (stop < 0) {
-            PrescriptionSurface iris;
-            iris.label = "IRIS";
-            iris.t = 2e-3;
-            iris.stop = true;
-            iris.sd = lens.surfaces[0].sd;
-            lens.surfaces.insert(lens.surfaces.begin(), iris);
-            stop = 0;
-        }
-        Paraxial p0 = paraxialAnalysis(atInfinity(lens), lens.wavelength, index);
-        double target = std::abs(p0.efl) / (2 * c.fNumber);
-        lens.surfaces[size_t(stop)].sd *= target / p0.entrancePupilRadius;
-    }
-    Paraxial px = paraxialAnalysis(lens, lens.wavelength, index);
-    if (px.afocal || std::isinf(px.imageDistance) || px.imageDistance <= 0)
-        throw std::runtime_error("camera '" + name + "': lens does not form a real image for the requested focus");
-    // The housing must enclose both the lens and the sensor; mounts close the gap between them.
-    const double maxR = maxSemiDiameter(lens);
-    double halfDiag = 0.5 * std::sqrt(sqr(c.sensorWidth) + sqr(c.sensorHeight));
-    double tubeR = c.housing ? std::max(maxR * 1.08 + 1e-3, halfDiag * 1.05) : 0.0;
-    int cam = w.addAssembly(name, parentAssembly, placement);
-    BuiltInstrument bi = buildPrescription(w, lens, name + ".lens", cam, Transform{}, tubeR, index);
-    // Focus like a real camera: at the plane of least blur for this aperture (traced with real
-    // rays through the lens bodies), not at the paraxial image. The correction is the on-axis
-    // best-focus shift measured for a distant object.
-    double focusShift = 0;
-    if (c.realFocus) {
-        LensReport rep = analyzeLens(atInfinity(lens), {0}, {lens.wavelength}, 6);
-        if (!rep.spots.empty() && rep.spots[0].arrived >= 3 && !std::isinf(rep.paraxial.imageDistance))
-            focusShift = rep.spots[0].bestFocusZ - rep.paraxial.imageDistance;
-    }
-    double zSensor = bi.lastVertexZ + px.imageDistance + focusShift + c.sensorShift;
-    if (c.housing) {
-        uint32_t black = w.absorberOptics();
-        double zFront = -1e-3;
-        buildTube(w, name + ".housing", tubeR, zFront - 0.02 * maxR, zSensor + 2e-3, cam, Transform{}, black);
-        buildStop(w, name + ".back", 0, tubeR, cam, Transform::translate({0, 0, zSensor + 2e-3}));
-        w.bodies().back().kind = "housing";
-    }
     // Sensor surface facing the lens: rotated π about y, so sensor x = −x_cam, y = y_cam, normal −z.
     // The lens inverts the image; reading rows bottom-up (flipY) yields an upright, unmirrored picture.
     int sensorBody = w.addBody(name + ".sensor", "sensor", cam, Transform::translate({0, 0, zSensor}));
@@ -95,25 +100,37 @@ int addPhysicalCamera(Scene& scene, const std::string& name, const Prescription&
     }
     scene.detectors.push_back(std::move(det));
     w.bodies()[sensorBody].params["z"] = zSensor;
-    {
-        // Depth of field from thin-lens relations with a circle of confusion of 1/1500 of the diagonal.
-        Paraxial pi = paraxialAnalysis(atInfinity(lens), lens.wavelength, index);
-        double f = std::abs(pi.efl), N = pi.fNumber, coc = 2 * halfDiag / 1500;
-        double Hf = f * f / (N * coc) + f;
-        char buf[512];
-        double s = c.focusDistance;
-        if (std::isinf(s)) {
-            std::snprintf(buf, sizeof buf, "EFL %.1f mm, f/%.2f, focus infinity; sharp beyond %.2f m (hyperfocal)", f * 1e3, N, Hf);
-        } else {
-            double nearD = s * (Hf - f) / (Hf + s - 2 * f);
-            double farD = s < Hf ? s * (Hf - f) / (Hf - s) : Inf;
-            char far[32] = "infinity";
-            if (!std::isinf(farD)) std::snprintf(far, sizeof far, "%.3f m", farD);
-            std::snprintf(buf, sizeof buf, "EFL %.1f mm, f/%.2f, focus %.3f m; depth of field %.3f m to %s (CoC %.0f µm)",
-                          f * 1e3, N, s, nearD, far, coc * 1e6);
-        }
-        scene.notes[name] = buf;
+    return detIndex;
+}
+}  // namespace
+
+int addPhysicalCamera(Scene& scene, const std::string& name, const Prescription& lensIn, const CameraParams& c,
+                      const Transform& placement, int parentAssembly) {
+    World& w = scene.world;
+    Prescription lens = lensIn;
+    lens.objectDistance = c.focusDistance;
+    IndexFn index = catalogIndex();
+    if (c.fNumber > 0) setFNumber(lens, c.fNumber, index);
+    Paraxial px = paraxialAnalysis(lens, lens.wavelength, index);
+    if (px.afocal || std::isinf(px.imageDistance) || px.imageDistance <= 0)
+        throw std::runtime_error("camera '" + name + "': lens does not form a real image for the requested focus");
+    // The housing must enclose both the lens and the sensor; mounts close the gap between them.
+    const double maxR = maxSemiDiameter(lens);
+    double halfDiag = 0.5 * std::sqrt(sqr(c.sensorWidth) + sqr(c.sensorHeight));
+    double tubeR = c.housing ? std::max(maxR * 1.08 + 1e-3, halfDiag * 1.05) : 0.0;
+    int cam = w.addAssembly(name, parentAssembly, placement);
+    BuiltInstrument bi = buildPrescription(w, lens, name + ".lens", cam, Transform{}, tubeR, index);
+    double focusShift = c.realFocus ? realFocusShift(lens) : 0;
+    double zSensor = bi.lastVertexZ + px.imageDistance + focusShift + c.sensorShift;
+    if (c.housing) {
+        uint32_t black = w.absorberOptics();
+        double zFront = -1e-3;
+        buildTube(w, name + ".housing", tubeR, zFront - 0.02 * maxR, zSensor + 2e-3, cam, Transform{}, black);
+        buildStop(w, name + ".back", 0, tubeR, cam, Transform::translate({0, 0, zSensor + 2e-3}));
+        w.bodies().back().kind = "housing";
     }
+    int detIndex = addCameraSensor(scene, name, c, cam, zSensor, bi, px, halfDiag);
+    scene.notes[name] = depthOfFieldNote(lens, c.focusDistance, halfDiag, index);
     return detIndex;
 }
 

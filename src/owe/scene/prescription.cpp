@@ -18,6 +18,83 @@ double parseNumber(const std::string& s, const std::string& ctx) {
     if (pos != s.size()) throw std::runtime_error(ctx + ": trailing characters in '" + s + "'");
     return v;
 }
+// support=spider(count=N,width=w,angle=deg,outer_radius=r)
+void parseSpider(const std::string& v, const std::string& ctx, double unit, PrescriptionSurface& s) {
+    if (v.rfind("spider(", 0) != 0 || v.back() != ')') throw std::runtime_error(ctx + ": support must be spider(...)");
+    std::istringstream args(v.substr(7, v.size() - 8));
+    std::string kv;
+    while (std::getline(args, kv, ',')) {
+        auto e = kv.find('=');
+        if (e == std::string::npos) throw std::runtime_error(ctx + ": spider takes name=value pairs");
+        std::string n = kv.substr(0, e);
+        double val = parseNumber(kv.substr(e + 1), ctx);
+        if (n == "count") s.spiderCount = int(val);
+        else if (n == "width") s.spiderWidth = val * unit;
+        else if (n == "angle") s.spiderAngle = val * Pi / 180;
+        else if (n == "outer_radius") s.spiderOuter = val * unit;
+        else throw std::runtime_error(ctx + ": unknown spider parameter '" + n + "'");
+    }
+    if (s.spiderCount < 1 || !(s.spiderWidth > 0) || !(s.spiderOuter > 0))
+        throw std::runtime_error(ctx + ": spider needs count >= 1, width > 0 and outer_radius > 0");
+}
+
+// One option of a surface row: a flag, or key=value.
+void parseSurfaceOption(const std::string& x, const std::string& ctx, double unit, PrescriptionSurface& s) {
+    if (x == "stop") { s.stop = true; return; }
+    if (x == "reflect") { s.reflect = true; return; }
+    if (x == "solve") { s.solve = true; return; }
+    auto eq = x.find('=');
+    if (eq == std::string::npos) throw std::runtime_error(ctx + ": unexpected token '" + x + "'");
+    std::string k = x.substr(0, eq);
+    if (k == "material") { s.material = x.substr(eq + 1); return; }
+    if (k == "out_axis") throw std::runtime_error(ctx + ": out_axis (folded, non-coaxial mirrors) is not supported yet");
+    if (k == "support") { parseSpider(x.substr(eq + 1), ctx, unit, s); return; }
+    double v = parseNumber(x.substr(eq + 1), ctx);
+    if (k == "substrate") s.substrate = v * unit;
+    else if (k == "hole") s.hole = v * unit;
+    else if (k == "k") s.k = v;
+    else if (k.size() > 1 && k[0] == 'A') {
+        int order = std::stoi(k.substr(1));
+        if (order < 4 || order % 2) throw std::runtime_error(ctx + ": aspheric terms are A4, A6, A8, ...");
+        size_t slot = size_t((order - 4) / 2);
+        if (s.A.size() <= slot) s.A.resize(slot + 1, 0.0);
+        s.A[slot] = v * std::pow(unit, 1 - order);  // coefficient of r^order: [length^(1-order)]
+    } else throw std::runtime_error(ctx + ": unknown key '" + k + "'");
+}
+
+// A surface row: label R t medium semi-diameter [options].
+PrescriptionSurface parseSurface(const std::vector<std::string>& tok, const std::string& ctx, double unit) {
+    if (tok.size() < 5) throw std::runtime_error(ctx + ": surface lines need: label R t medium semi-diameter");
+    PrescriptionSurface s;
+    s.label = tok[0];
+    s.R = parseNumber(tok[1], ctx) * unit;
+    s.t = parseNumber(tok[2], ctx) * unit;
+    s.medium = tok[3];
+    s.sd = parseNumber(tok[4], ctx) * unit;
+    for (size_t i = 5; i < tok.size(); ++i) parseSurfaceOption(tok[i], ctx, unit, s);
+    if (std::isinf(s.t)) throw std::runtime_error(ctx + ": thickness must be finite");
+    if (s.reflect && (s.material.empty() || !(s.substrate > 0)))
+        throw std::runtime_error(ctx + ": a reflecting row needs material= and substrate= > 0");
+    if (s.reflect && s.hole >= 2 * s.sd) throw std::runtime_error(ctx + ": the hole must be smaller than the mirror");
+    return s;
+}
+
+// Coaxial mirrors: each leg's t carries the sign of its travel; glass only on +z legs.
+void checkMirrorLegs(const Prescription& p, const std::string& origin) {
+    double dir = 1;
+    for (size_t i = 0; i < p.surfaces.size(); ++i) {
+        const PrescriptionSurface& sf = p.surfaces[i];
+        if (sf.reflect) {
+            if (sf.medium != p.ambient) throw std::runtime_error(origin + ": " + sf.label + ": a mirror reflects into the ambient medium");
+            dir = -dir;
+        } else if (dir < 0) {
+            throw std::runtime_error(origin + ": " + sf.label + ": refraction on a leg travelling -z is not supported yet");
+        }
+        if (i + 1 < p.surfaces.size() && sf.t * dir <= 0)
+            throw std::runtime_error(origin + ": " + sf.label + ": t must have the sign of the travel (" +
+                                     (dir > 0 ? "+" : "-") + "z) after this row");
+    }
+}
 }  // namespace
 
 Prescription parsePrescription(const std::string& text, const std::string& origin) {
@@ -54,80 +131,11 @@ Prescription parsePrescription(const std::string& text, const std::string& origi
         } else if (key == "wavelength") {
             p.wavelength = parseNumber(tok.at(1), ctx);
         } else {
-            if (tok.size() < 5) throw std::runtime_error(ctx + ": surface lines need: label R t medium semi-diameter");
-            PrescriptionSurface s;
-            s.label = key;
-            s.R = parseNumber(tok[1], ctx) * unit;
-            s.t = parseNumber(tok[2], ctx) * unit;
-            s.medium = tok[3];
-            s.sd = parseNumber(tok[4], ctx) * unit;
-            for (size_t i = 5; i < tok.size(); ++i) {
-                const std::string& x = tok[i];
-                if (x == "stop") { s.stop = true; continue; }
-                if (x == "reflect") { s.reflect = true; continue; }
-                if (x == "solve") { s.solve = true; continue; }
-                auto eq = x.find('=');
-                if (eq == std::string::npos) throw std::runtime_error(ctx + ": unexpected token '" + x + "'");
-                std::string k = x.substr(0, eq);
-                if (k == "material") { s.material = x.substr(eq + 1); continue; }
-                if (k == "out_axis") throw std::runtime_error(ctx + ": out_axis (folded, non-coaxial mirrors) is not supported yet");
-                if (k == "support") {
-                    // spider(count=N,width=w,angle=deg,outer_radius=r)
-                    std::string v = x.substr(eq + 1);
-                    if (v.rfind("spider(", 0) != 0 || v.back() != ')') throw std::runtime_error(ctx + ": support must be spider(...)");
-                    std::istringstream args(v.substr(7, v.size() - 8));
-                    std::string kv;
-                    while (std::getline(args, kv, ',')) {
-                        auto e = kv.find('=');
-                        if (e == std::string::npos) throw std::runtime_error(ctx + ": spider takes name=value pairs");
-                        std::string n = kv.substr(0, e);
-                        double val = parseNumber(kv.substr(e + 1), ctx);
-                        if (n == "count") s.spiderCount = int(val);
-                        else if (n == "width") s.spiderWidth = val * unit;
-                        else if (n == "angle") s.spiderAngle = val * Pi / 180;
-                        else if (n == "outer_radius") s.spiderOuter = val * unit;
-                        else throw std::runtime_error(ctx + ": unknown spider parameter '" + n + "'");
-                    }
-                    if (s.spiderCount < 1 || !(s.spiderWidth > 0) || !(s.spiderOuter > 0))
-                        throw std::runtime_error(ctx + ": spider needs count >= 1, width > 0 and outer_radius > 0");
-                    continue;
-                }
-                double v = parseNumber(x.substr(eq + 1), ctx);
-                if (k == "substrate") { s.substrate = v * unit; continue; }
-                if (k == "hole") { s.hole = v * unit; continue; }
-                if (k == "k") s.k = v;
-                else if (k.size() > 1 && k[0] == 'A') {
-                    int order = std::stoi(k.substr(1));
-                    if (order < 4 || order % 2) throw std::runtime_error(ctx + ": aspheric terms are A4, A6, A8, ...");
-                    size_t slot = size_t((order - 4) / 2);
-                    if (s.A.size() <= slot) s.A.resize(slot + 1, 0.0);
-                    s.A[slot] = v * std::pow(unit, 1 - order);  // coefficient of r^order: [length^(1-order)]
-                } else throw std::runtime_error(ctx + ": unknown key '" + k + "'");
-            }
-            if (std::isinf(s.t)) throw std::runtime_error(ctx + ": thickness must be finite");
-            if (s.reflect && (s.material.empty() || !(s.substrate > 0)))
-                throw std::runtime_error(ctx + ": a reflecting row needs material= and substrate= > 0");
-            if (s.reflect && s.hole >= 2 * s.sd) throw std::runtime_error(ctx + ": the hole must be smaller than the mirror");
-            p.surfaces.push_back(s);
+            p.surfaces.push_back(parseSurface(tok, ctx, unit));
         }
     }
     if (p.surfaces.empty()) throw std::runtime_error(origin + ": prescription has no surfaces");
-    if (hasMirrors(p)) {
-        // Coaxial mirrors: each leg's t carries the sign of its travel; glass only on +z legs.
-        double dir = 1;
-        for (size_t i = 0; i < p.surfaces.size(); ++i) {
-            const PrescriptionSurface& sf = p.surfaces[i];
-            if (sf.reflect) {
-                if (sf.medium != p.ambient) throw std::runtime_error(origin + ": " + sf.label + ": a mirror reflects into the ambient medium");
-                dir = -dir;
-            } else if (dir < 0) {
-                throw std::runtime_error(origin + ": " + sf.label + ": refraction on a leg travelling -z is not supported yet");
-            }
-            if (i + 1 < p.surfaces.size() && sf.t * dir <= 0)
-                throw std::runtime_error(origin + ": " + sf.label + ": t must have the sign of the travel (" +
-                                         (dir > 0 ? "+" : "-") + "z) after this row");
-        }
-    }
+    if (hasMirrors(p)) checkMirrorLegs(p, origin);
     return p;
 }
 
