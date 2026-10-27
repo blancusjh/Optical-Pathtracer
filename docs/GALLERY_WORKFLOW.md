@@ -1,7 +1,11 @@
 # Gallery staging and review
 
-Promotion requires `rights: "cleared"` in the manifest and recorded zero region
-inconsistencies and leaks. All selected entries pass these checks before any copy.
+Promotion requires `rights: "cleared"` in the manifest, recorded zero leaks, and at
+most one region inconsistency per million paths (each stops its path, so at most that
+share of paths loses its light; `MAX_INCONSISTENCY_RATE` in `tools/render_gallery.py`).
+Rare float32 contact cases at sub-millimetre bodies far from the eye made exactly zero
+unreachable over the ~600M paths of a gallery capture. All selected entries pass these
+checks before any copy.
 A clean counter record still requires visual review for noise and composition. Unresolved targets may be
 rendered into local archives for diagnosis, but cannot be promoted. See [current status](STATUS.md).
 

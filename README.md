@@ -26,7 +26,7 @@ every pixel.
 
 These historical captures are previews: all five have nonzero transport diagnostics,
 and Kunstkammer still shows isolated bright noise. They are not validated reference
-images; new gallery promotion requires clean diagnostics. Window Room and Wall are withheld from this
+images; new gallery promotion requires zero leaks and at most one region inconsistency per million paths. Window Room and Wall are withheld from this
 featured gallery until a capture has clean transport diagnostics. Historical images
 and native diagnostics remain available for investigation.
 See [current status](docs/STATUS.md), [capture records](benchmarks/results/20261010_gallery.json)

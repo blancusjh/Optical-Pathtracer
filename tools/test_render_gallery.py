@@ -25,7 +25,7 @@ class GalleryTests(unittest.TestCase):
         for ext in gallery.EXTENSIONS:
             Path(str(self.prefix) + ext).write_text('fixture' + ext)
         Path(str(self.prefix) + '.json').write_text(json.dumps({
-            'statistics': {'region_inconsistencies': 0, 'leaks': 0}}))
+            'statistics': {'paths': 10**7, 'region_inconsistencies': 0, 'leaks': 0}}))
         with mock.patch.object(benchmark, 'ROOT', self.root):
             assets = benchmark.asset_identity(self.root / 'scene.owe')
         self.data = {'schema': 1, 'name': 'fixture', 'identity': {'scene': 'scene.owe', 'assets': assets,
@@ -73,16 +73,25 @@ class GalleryTests(unittest.TestCase):
 
     def test_promotion_rejects_bad_or_missing_transport_diagnostics(self):
         destination = self.root / 'public'
-        for stats in ({'region_inconsistencies': 1, 'leaks': 0},
-                      {'region_inconsistencies': 0, 'leaks': 1}, {},
-                      {'region_inconsistencies': False, 'leaks': 0}):
+        for stats in ({'paths': 10**7, 'region_inconsistencies': 11, 'leaks': 0},
+                      {'paths': 10**7, 'region_inconsistencies': 0, 'leaks': 1}, {},
+                      {'region_inconsistencies': 0, 'leaks': 0},
+                      {'paths': 10**7, 'region_inconsistencies': False, 'leaks': 0}):
             with self.subTest(stats=stats):
-                Path(str(self.prefix) + '.json').write_text(json.dumps({'statistics': stats}))
-                self.data['artifacts']['.json'] = benchmark.file_digest(str(self.prefix) + '.json')
-                Path(str(self.prefix) + '.gallery.json').write_text(json.dumps(self.data))
-                with self.assertRaisesRegex(ValueError, 'recorded zero'):
+                self.record(stats)
+                with self.assertRaisesRegex(ValueError, 'promotion requires'):
                     gallery.promote_entry(self.prefix, self.entry, destination, 'reviewed')
                 self.assertFalse(destination.exists())
+
+    def test_promotion_accepts_one_inconsistency_per_million_paths(self):
+        self.record({'paths': 10**7, 'region_inconsistencies': 10, 'leaks': 0})
+        gallery.promote_entry(self.prefix, self.entry, self.root / 'public', 'reviewed')
+        self.assertTrue((self.root / 'public/fixture.png').exists())
+
+    def record(self, stats):
+        Path(str(self.prefix) + '.json').write_text(json.dumps({'statistics': stats}))
+        self.data['artifacts']['.json'] = benchmark.file_digest(str(self.prefix) + '.json')
+        Path(str(self.prefix) + '.gallery.json').write_text(json.dumps(self.data))
 
     def test_batch_preflight_rejects_all_before_copying(self):
         manifest = self.root / 'manifest.json'

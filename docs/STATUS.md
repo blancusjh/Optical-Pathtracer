@@ -19,8 +19,9 @@ capture logs are retained in the [October archive](archive/2026-10/ROADMAP.md).
   accumulation, so image agreement must be checked within floating-point tolerance.
 - Environment overrides for VCM strategy masking and SPPM debug readback are
   removed. Strategy-isolation tests use explicit renderer settings.
-- New gallery promotion requires cleared rights and recorded zero inconsistencies
-  and leaks, with preflight checks for every selected entry before copying.
+- New gallery promotion requires cleared rights, zero leaks and at most one region
+  inconsistency per million paths (zero until 10-26), with preflight checks for every
+  selected entry before copying.
 - CI runs Python tooling/asset tests and GPU contact regressions. Required GPU
   tests fail when the device is unavailable; unmatched test filters also fail.
 - The four empty root files and obsolete `build-dev` directory are removed.

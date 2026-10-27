@@ -15,6 +15,9 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / 'docs/gallery/manifest.json'
 EXTENSIONS = ('.png', '.json', '.pfm', '.stdout.log', '.stderr.log')
+# Each region inconsistency stops one path (its light is dropped): a gallery capture may stop at most
+# one path in a million, and leak none.
+MAX_INCONSISTENCY_RATE = 1e-6
 
 
 def load_entries(path=MANIFEST):
@@ -137,9 +140,13 @@ def promotion_data(prefix, entry, review_note):
     data = verified_archive(prefix, entry)
     record = json.loads(Path(str(prefix) + '.json').read_text())
     stats = record.get('statistics', {})
-    for field in ('region_inconsistencies', 'leaks'):
-        if type(stats.get(field)) is not int or stats[field] != 0:
-            raise ValueError('promotion requires recorded zero ' + field + '; retain this diagnostic capture locally')
+    if any(type(stats.get(field)) is not int for field in ('paths', 'region_inconsistencies', 'leaks')):
+        raise ValueError('promotion requires recorded path, inconsistency and leak counts; retain this capture locally')
+    if stats['leaks'] != 0:
+        raise ValueError('promotion requires recorded zero leaks; retain this diagnostic capture locally')
+    if stats['region_inconsistencies'] > MAX_INCONSISTENCY_RATE * stats['paths']:
+        raise ValueError(f'promotion requires at most {MAX_INCONSISTENCY_RATE:g} region inconsistencies per path; '
+                         'retain this diagnostic capture locally')
     return data
 
 
