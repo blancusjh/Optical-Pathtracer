@@ -1,5 +1,5 @@
 // The GPU renderer (internal to the backend): the flattened scene in device-local storage buffers,
-// the path kernel dispatched in short slices, the pass read back and accumulated in double.
+// kernels dispatched in bounded queued slices, accepted film accumulated on the device.
 #pragma once
 
 #include <memory>

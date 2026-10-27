@@ -26,10 +26,6 @@ struct Film {
         xyz[3 * i + 1] += Y;
         xyz[3 * i + 2] += Z;
     }
-    void merge(const Film& o) {
-        for (size_t i = 0; i < xyz.size(); ++i) xyz[i] += o.xyz[i];
-        for (size_t i = 0; i < samples.size(); ++i) samples[i] += o.samples[i];
-    }
 };
 
 // Resolved image: per-pixel XYZ of the measured quantity.
@@ -72,18 +68,6 @@ public:
     // weight is the importance-to-pdf ratio; false means a zero-valued sample.
     virtual bool generate(double px, double py, Rng& rng, Ray& ray, double& weight) const = 0;
 
-    // Light-tracing connection for virtual observers: from world point x, choose a
-    // pupil point, report the pixel and the factor W such that the pixel receives
-    // β·f·|cos_x|·W·Tr / N. Returns false if x cannot be seen.
-    virtual bool connect(const Vec3& x, Rng& rng, Vec3& pupilPoint, int& px, int& py, double& factor) const {
-        (void)x; (void)rng; (void)pupilPoint; (void)px; (void)py; (void)factor;
-        return false;
-    }
-    // Surface sensors: pixel receiving a particle that hit `hit`.
-    virtual bool pixelOfHit(const SurfaceHit& hit, Rng& rng, int& px, int& py, double& pixelArea) const {
-        (void)hit; (void)rng; (void)px; (void)py; (void)pixelArea;
-        return false;
-    }
     virtual int boundary() const { return -1; }
     virtual bool isVirtual() const { return false; }
 };
@@ -121,7 +105,6 @@ public:
     std::string describe() const override;
     void prepare(const World& world) override;
     bool generate(double px, double py, Rng& rng, Ray& ray, double& weight) const override;
-    bool connect(const Vec3& x, Rng& rng, Vec3& pupilPoint, int& px, int& py, double& factor) const override;
     bool isVirtual() const override { return true; }
 
     Vec3 forward() const { return fwd_; }
@@ -129,6 +112,7 @@ public:
     Vec3 upVec() const { return up_; }
     double tanX() const { return tanX_; }
     double tanY() const { return tanY_; }
+    double pixelAngle() const { return 2 * tanY_ / height; }  // a pixel's angular height
 
 private:
     Vec3 fwd_, right_, up_;
@@ -162,13 +146,12 @@ public:
     std::string describe() const override;
     void prepare(const World& world) override;
     bool generate(double px, double py, Rng& rng, Ray& ray, double& weight) const override;
-    bool pixelOfHit(const SurfaceHit& hit, Rng& rng, int& px, int& py, double& pixelArea) const override;
     int boundary() const override { return int(boundaryIndex); }
     const Transform& toWorld() const { return toWorld_; }
     Vec3 normal() const { return normal_; }
 
 private:
-    Transform toWorld_, toLocal_;
+    Transform toWorld_;
     Vec3 normal_;
 };
 

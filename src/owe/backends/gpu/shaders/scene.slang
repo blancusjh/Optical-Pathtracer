@@ -15,7 +15,7 @@ static const uint kShapeCone = 9;
 static const uint kShapeTorus = 10;
 
 static const uint kGpuNone = 0xFFFFFFFFu;
-// A triangle's corner words (GTriangle.v2.w): three normals, then three texture coordinates.
+// A triangle's corner words (GTriangle.corners): three normals, then three texture coordinates.
 static const uint kCornerNormals = 0x80000000u, kCornerUvs = 0x40000000u, kCornerIndex = 0x3FFFFFFFu;
 static const uint kNodeInner = 0x80000000u;
 
@@ -34,21 +34,22 @@ struct GNode {
     float4 hi;  // w: b (bits)
 };
 
+#define OWE_GPU_M(name) float4 name[3];
+#define OWE_GPU_V(name) float3 name;
+#define OWE_GPU_U(name) uint name;
+#define OWE_GPU_F(name) float name;
+#define OWE_GPU_FIELD(kind, name, offset) OWE_GPU_##kind(name)
 struct GBoundary {
-    float4 toLocal[3];
-    float4 toWorld[3];
-    float4 boxLo;   // w: shape kind (bits)
-    float4 boxHi;   // w: shape data offset (bits)
-    uint4 links;    // front, back, optics, emission
-    uint4 mesh;     // light, meshNodes, meshTris, meshCount
-    float4 misc;    // scale, area, sampleable (bits), pad
+#include "../boundary_fields.inc"
 };
-
 struct GTriangle {
-    float4 v0;  // w: original index (bits)
-    float4 v1;  // w: the owning boundary (bits)
-    float4 v2;  // w: first corner word in g_normals, with kCorner flags (bits; kGpuNone: flat, untextured)
+#include "../triangle_fields.inc"
 };
+#undef OWE_GPU_FIELD
+#undef OWE_GPU_M
+#undef OWE_GPU_V
+#undef OWE_GPU_U
+#undef OWE_GPU_F
 
 struct GMedium {
     uint4 index;  // kind, relAir, coeffs, nTerms
@@ -69,6 +70,8 @@ struct GOptics {
     float4 sampleAimNormal; // normal, mixture share
     float4 roughMap;        // material map: roughness of texture components a, b, c; w: 1 if mapped
     float4 relief;          // relief: scale, depth, octaves (depth 0: none)
+    uint4 maps;             // normal map, roughness map (image record | mapping bits; kGpuNone: none), scales (bits)
+    float4 mapParams;       // normal strength, 1 for DirectX normals, roughness channel, unused
 };
 
 struct GEmission {
@@ -123,12 +126,15 @@ static const uint kFlagPartition = 1u;  // hybrid: light tracing owns eye → D 
 // (VCM, which treats media as extinction only, takes all the others).
 static const uint kFlagMediumOnly = 2u;
 
+#define OWE_PUSH_U uint
+#define OWE_PUSH_F float
+#define OWE_PUSH_FIELD(kind, name, offset) OWE_PUSH_##kind name;
 struct PushConstants {
-    uint pass, spp, sampleBase, sampleCount;  // particles: sampleBase is the low word of the first index
-    uint seedLo, seedHi, width, height;
-    uint flags, baseHi, pad0, pad1;
-    uint4 extra;  // integrator-specific (SPPM: wavelength rotation, alpha, radius scale, pixel angle)
+#include "../push_fields.inc"
 };
+#undef OWE_PUSH_FIELD
+#undef OWE_PUSH_U
+#undef OWE_PUSH_F
 
 [[vk::push_constant]] ConstantBuffer<PushConstants> pc;
 

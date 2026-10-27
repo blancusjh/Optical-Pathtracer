@@ -1,0 +1,17 @@
+owe_gpu_profile enabled: diagnostic timestamps may affect performance
+gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)
+ideal observer 'Eye' 128x96, fovY=34 deg, pupil diameter=3 mm, focus=0.340000 m, pixel filter gaussian(0.4)
+pass 1/4: 16 spp, 0.22 s, mean Y 0.36524
+pass 2/4: 32 spp, 0.45 s, mean Y 0.36748
+pass 3/4: 48 spp, 0.69 s, mean Y 0.36877
+pass 4/4: 64 spp, 0.93 s, mean Y 0.37252
+paths 786432, segments 934617, region inconsistencies 0, leaks 0
+owe_gpu_profile kind=kernel name=film accumulation calls=4 gpu_ms=0.048928
+owe_gpu_profile kind=kernel name=particle (ray queries) calls=21 gpu_ms=916.053888
+owe_gpu_profile kind=submission name=accumulate film and read diagnostics calls=4 gpu_ms=0.058848 cpu_ms=1.659837
+owe_gpu_profile kind=submission name=calibrate dispatch calls=4 gpu_ms=348.586272 cpu_ms=350.202320
+owe_gpu_profile kind=submission name=queued dispatch calls=8 gpu_ms=567.468736 cpu_ms=570.978626
+owe_gpu_profile kind=submission name=resolve film calls=8 gpu_ms=0.451104 cpu_ms=2.393329
+owe_gpu_profile kind=submission name=submission calls=9 gpu_ms=0.390624 cpu_ms=1.076140
+owe_gpu_profile kind=submission name=upload calls=17 gpu_ms=0.045408 cpu_ms=1.521863
+out/maintenance_20261012/profile_after.png out/maintenance_20261012/profile_after.pfm out/maintenance_20261012/profile_after.json

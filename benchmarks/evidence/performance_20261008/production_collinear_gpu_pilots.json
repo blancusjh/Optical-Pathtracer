@@ -1,0 +1,194 @@
+[
+  {
+    "case": "gregorian",
+    "command": [
+      "/tmp/owe_contact_collinear_probe_20261008/owe_cli",
+      "render",
+      "scenes/the_gregorian.owe",
+      "--backend",
+      "gpu",
+      "--device",
+      "1",
+      "--integrator",
+      "path",
+      "--detector",
+      "Eyepiece",
+      "--spp",
+      "16",
+      "--resolution",
+      "960x600",
+      "--max-depth",
+      "16",
+      "--seed",
+      "7",
+      "--out",
+      "out/performance_20261008/gregorian_collinear_gpu16"
+    ],
+    "returncode": 0,
+    "wall_seconds": 19.630486721001944,
+    "scope": "diagnostic during host build; pre-final finite-connection changes",
+    "statistics": {
+      "paths": 9216000,
+      "segments": 50352702,
+      "region_inconsistencies": 2,
+      "leaks": 0,
+      "first_inconsistency": {
+        "boundary": "Gregorian.P.rim",
+        "ray_region": "ambient[air]"
+      }
+    },
+    "mean_Y": 0.00377652,
+    "render_seconds": 2.75847,
+    "native_image_opened": true,
+    "visual_review": [
+      "The complete erect lunar phase fits the optical field, with recognizable mare structure.",
+      "Sixteen samples leave strong spectral grain; this is not a final-quality optical image.",
+      "No central bright spot is visible in this path pilot; two reported primary-rim events remain unresolved."
+    ],
+    "accepted_for_gallery": false
+  },
+  {
+    "case": "window",
+    "command": [
+      "/tmp/owe_contact_collinear_probe_20261008/owe_cli",
+      "render",
+      "out/curation_20261008/invisible_window_review04.owe",
+      "--backend",
+      "gpu",
+      "--device",
+      "1",
+      "--integrator",
+      "path",
+      "--detector",
+      "Room",
+      "--spp",
+      "16",
+      "--resolution",
+      "960x600",
+      "--max-depth",
+      "10",
+      "--seed",
+      "7",
+      "--out",
+      "out/performance_20261008/window_collinear_gpu16"
+    ],
+    "returncode": 0,
+    "wall_seconds": 15.58386460499969,
+    "scope": "diagnostic during host build; pre-final finite-connection changes",
+    "statistics": {
+      "paths": 9216000,
+      "segments": 59708811,
+      "region_inconsistencies": 1,
+      "leaks": 0,
+      "first_inconsistency": {
+        "boundary": "Floor.surface",
+        "ray_region": "ambient[air]"
+      }
+    },
+    "mean_Y": 427.078,
+    "render_seconds": 1.76667,
+    "native_image_opened": true,
+    "visual_review": [
+      "Both optical endpoints fit the contextual framing, but the projected image is unresolved.",
+      "Plain path tracing at16spp produces rare bright samples and an almost-black native display despite high mean radiance.",
+      "Use a validated photon/VCM estimator for the final caustic; this image cannot support aesthetic acceptance."
+    ],
+    "accepted_for_gallery": false
+  },
+  {
+    "case": "kunstkammer",
+    "command": [
+      "/tmp/owe_contact_collinear_probe_20261008/owe_cli",
+      "render",
+      "scenes/the_kunstkammer.owe",
+      "--backend",
+      "gpu",
+      "--device",
+      "1",
+      "--integrator",
+      "path",
+      "--detector",
+      "Room",
+      "--spp",
+      "16",
+      "--resolution",
+      "960x600",
+      "--max-depth",
+      "12",
+      "--seed",
+      "1",
+      "--out",
+      "out/performance_20261008/kunstkammer_collinear_gpu16"
+    ],
+    "returncode": 0,
+    "wall_seconds": 40.349201908000396,
+    "scope": "diagnostic during host build; pre-final finite-connection changes",
+    "statistics": {
+      "paths": 9216000,
+      "segments": 60339002,
+      "region_inconsistencies": 11,
+      "leaks": 0,
+      "first_inconsistency": {
+        "boundary": "LeftSillWall.surface",
+        "ray_region": "ambient[air]"
+      }
+    },
+    "mean_Y": 0.042897,
+    "render_seconds": 4.08913,
+    "native_image_opened": true,
+    "visual_review": [
+      "The lit armour and horse remain the focal point, with a readable cast shadow and foreground table.",
+      "Window, cabinet and red textile establish depth; sampling grain dominates the ceiling and shadowed furniture.",
+      "Material response is recognizable, but16spp is a diagnostic preview;11boundary events remain recorded."
+    ],
+    "accepted_for_gallery": false
+  },
+  {
+    "case": "lamp",
+    "command": [
+      "/tmp/owe_contact_collinear_probe_20261008/owe_cli",
+      "render",
+      "scenes/the_peacock_lamp.owe",
+      "--backend",
+      "gpu",
+      "--device",
+      "1",
+      "--integrator",
+      "path",
+      "--detector",
+      "Room",
+      "--spp",
+      "16",
+      "--resolution",
+      "960x600",
+      "--max-depth",
+      "16",
+      "--seed",
+      "17",
+      "--out",
+      "out/performance_20261008/lamp_collinear_gpu16"
+    ],
+    "returncode": 0,
+    "wall_seconds": 27.121615919997566,
+    "scope": "diagnostic during host build; pre-final finite-connection changes",
+    "statistics": {
+      "paths": 9216000,
+      "segments": 61251245,
+      "region_inconsistencies": 2,
+      "leaks": 0,
+      "first_inconsistency": {
+        "boundary": "NorthRail.surface",
+        "ray_region": "ambient[air]"
+      }
+    },
+    "mean_Y": 1.55634e-05,
+    "render_seconds": 4.43728,
+    "native_image_opened": true,
+    "visual_review": [
+      "The shade occupies the right third, balanced by books on the table.",
+      "Warm light and teal glass pattern remain legible; the bronze base and room are intentionally dark.",
+      "Path16 leaves severe spectral/shadow grain; retain the longer VCM final plan and review its energy and contacts."
+    ],
+    "accepted_for_gallery": false
+  }
+]

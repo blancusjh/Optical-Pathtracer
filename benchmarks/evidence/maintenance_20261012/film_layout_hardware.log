@@ -1,0 +1,8 @@
+[ RUN  ] backends_reset_observer_matches_fresh_render
+    [cpu]
+    [gpu]
+[  OK  ] backends_reset_observer_matches_fresh_render (1.03 s)
+[ RUN  ] gpu_film_resolve_is_idempotent_across_passes
+[  OK  ] gpu_film_resolve_is_idempotent_across_passes (5.12 s)
+
+2/2 tests passed

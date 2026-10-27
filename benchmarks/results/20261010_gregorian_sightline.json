@@ -1,0 +1,279 @@
+{
+  "scope": "CPU double-precision physical sightline check; no GPU render, engine change, or build.",
+  "source_before_camera_edit": {
+    "path": "scenes/the_gregorian.owe",
+    "sha256": "947a5f369e16f4701acde5f9614fb9324c484a98b212303417bd7fbba0001868",
+    "preserved_input": "benchmarks/results/inputs/20261010_gregorian_before_sightline.owe.txt",
+    "preserved_sha256": "947a5f369e16f4701acde5f9614fb9324c484a98b212303417bd7fbba0001868",
+    "relative_paths": "Resolve copied input relative to original scenes/ directory."
+  },
+  "binary_sha256": "281347b390f6bfc1fa215f72fc94469fab184283780ec109721cf56f9e8ea243",
+  "original_naked_position_m": [
+    0.0771708026707,
+    -0.393556702822,
+    1.00497567392
+  ],
+  "selected_naked_position_m": [
+    0.2,
+    -0.393556702822,
+    1.00497567392
+  ],
+  "lateral_change_m": 0.1228291973293,
+  "target_m": [
+    -1695124.731945268,
+    374928465.7111637,
+    84788750.1477401
+  ],
+  "unchanged": [
+    "y/z position",
+    "look_at target",
+    "38 degree field",
+    "3 mm pupil diameter",
+    "3.8 EV exposure",
+    "white balance",
+    "optical prescription",
+    "physical geometry/materials/lights"
+  ],
+  "finding": "Original exact central ray first hits RamsdenScan.surface about 104 mm from the eye. Selected x=0.20 m central ray and all 192 field/pupil-edge samples first hit Moon.surface.",
+  "probes": [
+    {
+      "name": "original_center",
+      "command": [
+        "build/owe",
+        "emit",
+        "scenes/the_gregorian.owe",
+        "--from",
+        "0.0771708026707,-0.393556702822,1.00497567392",
+        "--toward",
+        "-1695124.7319452681,374928465.7111637,84788750.147740096",
+        "--cone",
+        "0",
+        "--rays",
+        "1",
+        "--lambda",
+        "550",
+        "--primary",
+        "--json",
+        "out/contact_performance_fix_20261009/gregorian_naked_center_emit.json"
+      ],
+      "returncode": 0,
+      "cpu_only": true,
+      "origin_m": [
+        0.0771708026707,
+        -0.393556702822,
+        1.00497567392
+      ],
+      "half_cone_degrees": 0,
+      "ray_count": 1,
+      "first_hit_counts": {
+        "RamsdenScan.surface": 1
+      },
+      "representative_first_hit": {
+        "boundary": "RamsdenScan.surface",
+        "position_m": [
+          0.07671245099,
+          -0.2921782717,
+          1.027902048
+        ],
+        "geometric_distance_m": 0.10393947759801318,
+        "optical_path_m": 0.103968356
+      },
+      "records_sha256": "6ed450556278eaace466369ee4b236afd84f7131fca974fc42789279d19cb295",
+      "log": "out/contact_performance_fix_20261009/gregorian_naked_center_emit.log",
+      "log_sha256": "080de0d1e838802719b635038d23094fdf42f18a39e402f413c52509c1796c7e"
+    },
+    {
+      "name": "selected_field",
+      "command": [
+        "build/owe",
+        "emit",
+        "scenes/the_gregorian.owe",
+        "--from",
+        "0.2,-0.393556702822,1.00497567392",
+        "--toward",
+        "-1695124.7319452681,374928465.7111637,84788750.147740096",
+        "--cone",
+        "0.245",
+        "--rays",
+        "64",
+        "--lambda",
+        "550",
+        "--primary",
+        "--json",
+        "out/contact_performance_fix_20261009/gregorian_naked_x020_field.json"
+      ],
+      "returncode": 0,
+      "cpu_only": true,
+      "origin_m": [
+        0.2,
+        -0.393556702822,
+        1.00497567392
+      ],
+      "half_cone_degrees": 0.245,
+      "ray_count": 64,
+      "first_hit_counts": {
+        "Moon.surface": 64
+      },
+      "representative_first_hit": {
+        "boundary": "Moon.surface",
+        "position_m": [
+          -1866707.861,
+          373535318.5,
+          85812303.29
+        ],
+        "geometric_distance_m": 383269970.49514914,
+        "optical_path_m": 383376457.3
+      },
+      "records_sha256": "5c3d4cd0dc5b779e7d1f714dd83ba912cee305bc39354927eda7150f03cf391f",
+      "log": "out/contact_performance_fix_20261009/gregorian_naked_x020_field.log",
+      "log_sha256": "ca1fb0902f2020998cc9b9161fe2baef8159e69b373378fdc7506e49a55ac1ec"
+    },
+    {
+      "name": "selected_pupil_low",
+      "command": [
+        "build/owe",
+        "emit",
+        "scenes/the_gregorian.owe",
+        "--from",
+        "0.1985,-0.393216702822,1.00347567392",
+        "--toward",
+        "-1695124.7319452681,374928465.7111637,84788750.147740096",
+        "--cone",
+        "0.245",
+        "--rays",
+        "64",
+        "--lambda",
+        "550",
+        "--primary",
+        "--json",
+        "out/contact_performance_fix_20261009/gregorian_naked_x020_pupil_low.json"
+      ],
+      "returncode": 0,
+      "cpu_only": true,
+      "origin_m": [
+        0.1985,
+        -0.393216702822,
+        1.00347567392
+      ],
+      "half_cone_degrees": 0.245,
+      "ray_count": 64,
+      "first_hit_counts": {
+        "Moon.surface": 64
+      },
+      "representative_first_hit": {
+        "boundary": "Moon.surface",
+        "position_m": [
+          -1866707.861,
+          373535318.5,
+          85812303.29
+        ],
+        "geometric_distance_m": 383269970.49514633,
+        "optical_path_m": 383376457.3
+      },
+      "records_sha256": "1fc81199f0e8caa9a0116a7118d2b4a7f2c354cceb49b4d7c57baba0502549ee",
+      "log": "out/contact_performance_fix_20261009/gregorian_naked_x020_pupil_low.log",
+      "log_sha256": "b86d62b2b84e479d57b28a378971027f14fc8a3c5f2382c509d9ea0e704e2272"
+    },
+    {
+      "name": "selected_pupil_high",
+      "command": [
+        "build/owe",
+        "emit",
+        "scenes/the_gregorian.owe",
+        "--from",
+        "0.2015,-0.393896702822,1.00647567392",
+        "--toward",
+        "-1695124.7319452681,374928465.7111637,84788750.147740096",
+        "--cone",
+        "0.245",
+        "--rays",
+        "64",
+        "--lambda",
+        "550",
+        "--primary",
+        "--json",
+        "out/contact_performance_fix_20261009/gregorian_naked_x020_pupil_high.json"
+      ],
+      "returncode": 0,
+      "cpu_only": true,
+      "origin_m": [
+        0.2015,
+        -0.393896702822,
+        1.00647567392
+      ],
+      "half_cone_degrees": 0.245,
+      "ray_count": 64,
+      "first_hit_counts": {
+        "Moon.surface": 64
+      },
+      "representative_first_hit": {
+        "boundary": "Moon.surface",
+        "position_m": [
+          -1866707.861,
+          373535318.5,
+          85812303.29
+        ],
+        "geometric_distance_m": 383269970.49515194,
+        "optical_path_m": 383376457.3
+      },
+      "records_sha256": "7e5ff0850dd66f8532a7e82ff96a5839417e9b0896b99254a9c6d7499386176e",
+      "log": "out/contact_performance_fix_20261009/gregorian_naked_x020_pupil_high.log",
+      "log_sha256": "2d37126533f6286472c980a3966126c6bdf367bce7f056085a657841b1e62827"
+    },
+    {
+      "name": "selected_center",
+      "command": [
+        "build/owe",
+        "emit",
+        "scenes/the_gregorian.owe",
+        "--from",
+        "0.2,-0.393556702822,1.00497567392",
+        "--toward",
+        "-1695124.7319452681,374928465.7111637,84788750.147740096",
+        "--cone",
+        "0",
+        "--rays",
+        "1",
+        "--lambda",
+        "550",
+        "--primary",
+        "--json",
+        "out/contact_performance_fix_20261009/gregorian_naked_x020_center.json"
+      ],
+      "returncode": 0,
+      "cpu_only": true,
+      "origin_m": [
+        0.2,
+        -0.393556702822,
+        1.00497567392
+      ],
+      "half_cone_degrees": 0,
+      "ray_count": 1,
+      "first_hit_counts": {
+        "Moon.surface": 1
+      },
+      "representative_first_hit": {
+        "boundary": "Moon.surface",
+        "position_m": [
+          -1687463.155,
+          373233874.8,
+          84405524.4
+        ],
+        "geometric_distance_m": 382662600.08545643,
+        "optical_path_m": 382768918.2
+      },
+      "records_sha256": "50d5bac80b77675b322c79c411a46fac63f61022dca7956645e4f56b2e82fe3e",
+      "log": "out/contact_performance_fix_20261009/gregorian_naked_x020_center.log",
+      "log_sha256": "e31e73a2af503c8e8b11d4d49d8e2902b3c80abf74005c0fbcf0d48bcda2df76"
+    }
+  ],
+  "limitations": [
+    "Sampled sightlines are not an exhaustive continuous-field/pupil proof.",
+    "Pupil-corner offsets have magnitude about 2.15 mm, conservatively exceeding the actual 1.5 mm pupil radius.",
+    "CPU geometry and first-hit visibility establish the sampled obstruction; this does not validate GPU float32 lunar radiometry, texture/normal support, or final image quality.",
+    "Earlier VCM Moon visibility does not establish an unobstructed direct sightline; this result does not attribute every earlier VCM contribution to a visibility bug.",
+    "Fresh path captures after the camera correction are required; no estimator substitution is justified by these probes alone."
+  ],
+  "adopted_scene_sha256": "f73367c4ca38bb121f855c35fd061357cf6e5cefdb0380cc5107f41df0d403b2",
+  "adoption_scope": "Only Naked observer x position and its explanatory comment changed; every other byte including optics, sources, Moon, Eyepiece/Beside settings is unchanged."
+}

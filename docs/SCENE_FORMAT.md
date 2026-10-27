@@ -75,6 +75,22 @@ tints it per component (`tint` otherwise). A transparent body takes `texture` an
 too: `medium = N-BK7  texture = checker(a = 1, b = 1, scale = 5mm)  roughness = (0, 0.3)` is clear
 glass etched in squares. Material maps are GPU-only; the CPU reference uses the first roughness.
 
+Image maps (GPU), read as data (no sRGB decoding) and placed like an image texture (`mapping = uv |
+triplanar | planar`, `scale`):
+- `normal_map = image("…_normal.png", mapping = uv)` tilts the shading normal by a tangent-space
+  normal map. The convention is OpenGL's: green points to the top of the picture. Use
+  `normal_convention = directx` for maps whose green points down; `normal_strength` scales the
+  tilt (1 by default). With `uv` mapping, the tangent frame is the triangle's direction of
+  increasing u and of the picture's top; planar and triplanar mapping use their projection axes.
+- `roughness_map = image("…_rough.png", mapping = uv)` sets the GGX α to the square of a channel's
+  value (perceptual roughness, as glTF and Poly Haven store it): `roughness_channel = g` by
+  default (glTF's metallic-roughness maps keep roughness in green), or `r`, `b`.
+- `owe model` lists a glTF part's normal and metallic-roughness images.
+
+Images are kept within a texture budget, 2048 MB by default (`OWE_TEXTURE_BUDGET_MB`, 0 for none):
+when a scene's images exceed it, the largest are halved (a box filter, which keeps the mean) until
+they fit, and the log lists them. The files keep their full resolution.
+
 `relief = noise(scale =, depth =, octaves = 3)` gives any surface a relief finer than its geometry:
 a height `depth · fbm(p / scale)` in the body's frame whose slopes (about depth / scale) tilt the
 shading normal, so a low sun rakes a paper's grain or a concrete floor's pores. Transport treats it

@@ -1,6 +1,7 @@
 # The dependency rules of the source tree, checked on every `#include "owe/..."`:
 #
 #   core                 math, sampling, spectra, media
+#   core/shared          formulas compiled by both the C++ reference and the Slang kernels
 #   scene                the world model: geometry, world, detectors, builders, prescriptions
 #   transport            the reference transport (IEEE-754 double): optics, scattering, Tracer
 #   analysis             lens diagnostics and path inspection, built on reference walks
@@ -13,6 +14,7 @@
 #
 # Backends never include each other. Usage: cmake -DROOT=<repository> -P CheckLayers.cmake
 set(rule_core                 core/)
+set(rule_core/shared          core/)
 set(rule_scene                core/ scene/)
 set(rule_transport            core/ scene/ transport/)
 set(rule_analysis             core/ scene/ transport/ analysis/)

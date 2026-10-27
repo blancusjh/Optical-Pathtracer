@@ -1,0 +1,20 @@
+gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, software traversal)
+ideal observer 'Eye' 96x96, fovY=30 deg, pupil diameter=1 mm, focus=1.600000 m, pixel filter gaussian(0.4)
+pass 1/16: 1 spp, 0.13 s, mean Y 0.2334
+pass 2/16: 2 spp, 0.28 s, mean Y 0.2088
+pass 3/16: 3 spp, 0.41 s, mean Y 0.23404
+pass 4/16: 4 spp, 0.52 s, mean Y 0.22298
+pass 5/16: 5 spp, 0.59 s, mean Y 0.22147
+pass 6/16: 6 spp, 0.67 s, mean Y 0.22772
+pass 7/16: 7 spp, 0.74 s, mean Y 0.22095
+pass 8/16: 8 spp, 0.80 s, mean Y 0.22734
+pass 9/16: 9 spp, 0.88 s, mean Y 0.2255
+pass 10/16: 10 spp, 0.95 s, mean Y 0.22214
+pass 11/16: 11 spp, 1.02 s, mean Y 0.22858
+pass 12/16: 12 spp, 1.11 s, mean Y 0.22488
+pass 13/16: 13 spp, 1.23 s, mean Y 0.22602
+pass 14/16: 14 spp, 1.33 s, mean Y 0.22728
+pass 15/16: 15 spp, 1.44 s, mean Y 0.2242
+pass 16/16: 16 spp, 1.53 s, mean Y 0.2278
+paths 294912, segments 721434, region inconsistencies 0, leaks 0
+out/performance_20261008/native_owner_software_sppm_smoke.png out/performance_20261008/native_owner_software_sppm_smoke.pfm out/performance_20261008/native_owner_software_sppm_smoke.json

@@ -12,14 +12,15 @@ These rules are checked on every include by the `layering` test (`cmake/CheckLay
 
 | Directory | Role |
 |---|---|
-| `src/owe/core/` | Double-precision vectors, rigid transforms, AABBs, origin displacement; PCG32 streams and warps; CIE 1931, Planck, spectra, hero wavelengths; n(λ) models, glass/metal catalogs, media |
+| `src/owe/core/` | Double-precision vectors, rigid transforms, AABBs, origin displacement; PCG32 streams; spectra, hero wavelengths; glass/metal catalogs, media |
+| `src/owe/core/shared/` | Every formula both backends evaluate, written once in a dialect C++ compiles as double and `slangc` as float (`prelude.hpp`: `Real`, `OWE_FN`, `OWE_OUT`, per-precision tolerances): warps and hashing (`warps.hpp`), Fresnel, refraction and GGX lobes (`optics.hpp`), quadric and sag roots, apertures (`surfaces.hpp`), CIE 1931, Planck, n(λ) models, RGB bases (`spectra.hpp`), procedural textures (`textures.hpp`), environment-map frames and pdfs (`environment.hpp`). A formula is never re-derived in a kernel |
 | `src/owe/scene/` | The world model: sag surfaces (conic + even asphere), planes with apertures, spheres, cylinders, meshes, dome with slit, round wall with openings; BVHs; media → regions → boundaries → bodies → assemblies, environment, lights; detectors (films, ideal observers, surface sensors); builders (lenses, mirrors, tubes, terrain, forest, lathe profiles, columns, starfields); sequential prescriptions and paraxial analysis; transport statistics |
-| `src/owe/transport/` | The reference transport, IEEE-754 double: interface optics (Snell, Fresnel, GGX — scene-free kernels), boundary scattering, and the `Tracer` (camera paths, particles, diagnostic walks with path records) |
+| `src/owe/transport/` | The reference transport, IEEE-754 double: boundary scattering (on the shared lobes) and the `Tracer` (camera paths, particles, diagnostic walks with path records), built from the same path steps as the kernels (sample the medium, meet a boundary, scatter, weigh) |
 | `src/owe/analysis/` | Real-ray lens diagnostics through the world representation; pixel interrogation, emission probes, SVG/JSON path export — all on reference walks |
-| `src/owe/loader/` | The `.owe` language, scene edits (`Block.key=value`); physical cameras (f-number, real focus traced by the analyser, depth of field) |
+| `src/owe/loader/` | The `.owe` language, scene edits (`Block.key=value`): statements (`scene_loader.cpp`), materials, bodies (one builder per type) and detectors (`loader_*.cpp`); physical cameras (f-number, real focus traced by the analyser, depth of field) |
 | `src/owe/render/` | Backend-neutral rendering: the `Renderer` and `Backend` interfaces, image output (display pipeline, PNG, PFM), reproducibility records |
 | `src/owe/backends/cpu/` | The reference backend: the reference transport scheduled on host threads |
-| `src/owe/backends/gpu/` | The portable GPU backend: the world flattened for kernels (camera-relative, float, 16-byte records; mesh groups), hardware acceleration structures where the device has ray queries, the Vulkan compute host (volk-loaded; MoltenVK on macOS), the renderer, and the Slang kernels in `shaders/` (a float port of geometry, traversal, spectra, optics, camera paths and particles, detectors) |
+| `src/owe/backends/gpu/` | The portable GPU backend: the world flattened for kernels (camera-relative, float, 16-byte records; mesh groups), hardware acceleration structures where the device has ray queries, the Vulkan compute host (volk-loaded; MoltenVK on macOS), the renderer, and the Slang kernels in `shaders/` (geometry, traversal, detectors and the integrators, compiled with `-I src` so they include `core/shared`; every integrator advances its paths with the path steps of `transport.slang`, and `kernel.slang` holds the entry-point plumbing) |
 | `src/owe/backends/` | The registry — the only code that names concrete backends — and the statistical comparison of two backends |
 | `apps/` | `owe` (command line and the `studio` session) and `owe view` (SDL3 and Dear ImGui); they reach backends only through the registry |
 | `tests/` | Validation of the physics against analytic limits; `test_backends.cpp`, the conformance suite every backend runs |
@@ -41,7 +42,7 @@ implements and which estimates the same image (`adaptToBackend`, which says so).
 |---|---|---|
 | Where | host threads | Vulkan compute: NVIDIA, AMD, Intel; Apple silicon via MoltenVK |
 | Arithmetic | IEEE-754 double | float32, camera-relative (XIV) |
-| Integrators | path, light, hybrid | path, light, hybrid, sppm, bdpt, vcm |
+| Integrators | path | path, light, hybrid, sppm, bdpt, vcm |
 | Mesh shading | flat | flat or smooth normals |
 | Material maps | first roughness | roughness and tint per texture component |
 | Reproducibility | bitwise for a seed, any thread count or compiler | bitwise on a given device and driver |
@@ -298,13 +299,24 @@ order from the same PCG32 streams, so GPU and CPU paths coincide until float rou
 decision differ. Camera paths run one thread per pixel; a pass is split into ~50 ms dispatches
 (no OS watchdog) with each pixel's random stream and compensated sums kept in device memory, so
 the result does not depend on how a pass is split. The light and hybrid integrators add a
-particle kernel (one thread per particle, its own PCG32 stream; the hybrid partition is the
-reference's). Particles splat onto pixels from many threads in no fixed order; float atomics
+particle kernel (one thread per particle, its own PCG32 stream; the hybrid partition gives light
+tracing the paths eye → diffuse → specular⁺ → light). They have no CPU counterpart: their tests compare
+them with the reference's path tracer and with analytic results. Particles splat onto pixels from many threads in no fixed order; float atomics
 would make the image depend on that order, so each splat's 24-bit significand is added as an
 integer into 64-bit fixed-point bins keyed by its exponent (32-bit atomics with carries, which
-every Vulkan device has) — exact, associative, and read back as double. Renders of every
-integrator are therefore bitwise reproducible on a given device and driver. Float, not double, because Apple GPUs have no double at all and consumer GPUs run it at
-1/32–1/64 rate; see XIV for how precision is kept.
+every Vulkan device has). These exact bins are converted on the GPU into compensated float
+film sums after each accepted pass. Camera contributions use the same persistent film;
+`resolve()` reads it once and normalizes on the host. The conversion changes rounding relative
+to the earlier host double accumulator; it does not change particle-bin arithmetic. Float is
+used because Apple GPUs have no double support; see XIV for spatial precision.
+
+Dispatch batches use a bounded three-slot command/fence queue after synchronous calibration.
+Film readback, diagnostic readback and VCM capacity decisions synchronize; profiling deliberately
+serializes submissions. Setup, pass execution and film resolution live in separate source files.
+Boundary, triangle, film and push-constant declarations share `.inc` field schemas between C++ and
+Slang, with host offsets checked at compile time. Visibility callers carry endpoint
+records; one internal scalar adapter avoids driver spilling across a non-inlined
+shader function boundary. Shader depfiles track actual includes for incremental builds.
 
 Performance. (1) Meshes that share a frame form one *mesh group* with a single hierarchy and a
 per-triangle owner: modelled scenes are many meshes spanning the same space (bricks, boards,
@@ -324,7 +336,10 @@ thread for 64-thread groups, 128 for 256), and the larger group keeps a third mo
 resident to hide latency, for a small spill (−5% time with hardware traversal, −7% software).
 (5) The hardware-traversal kernels leave out the software mesh traversal: a mesh never reaches
 the analytic shape code there, but that code, inlined at every traversal site with its stacks,
-had spilled ~4 KB of local memory per thread (now 0.1–0.4 KB). None of this changes an image.
+had spilled ~4 KB of local memory per thread (now 0.1–0.4 KB). (6) Spectra are evaluated by a
+`noinline` call (`spectrumEval`, `spectrumEval4`): inlined at every wavelength of every term they
+were half of each kernel; the call halves the SPIR-V and the driver's compile time (a VCM render's
+kernels, uncached: 217 s → 68 s) and is faster (VCM bench −8%). None of this changes an image.
 (Path regeneration — a lane starting its next sample as soon as its path ends — measured ~5%
 faster with hardware traversal, less than (4) and (5), but its interleaved loop is miscompiled
 by Mesa's Intel compiler, which loses the device; portability wins, so a pixel's samples run
@@ -437,7 +452,7 @@ transport runs is one setting, never a different program.
 * The holed-disk aperture cannot be sampled by next-event estimation.
 * Pipelines compile from cold in the driver after every kernel change (the VCM kernels take about
   a minute on an RTX 4060); later runs start in under a second from the driver's cache. See
-  docs/ROADMAP.md.
+  [current status](STATUS.md).
 * Smooth mesh normals are GPU-only; like every shading-normal renderer, a coarse smooth mesh
   keeps its polygonal silhouette and loses a little light at grazing directions where the
   interpolated and the geometric surface disagree (the shadow-terminator band).

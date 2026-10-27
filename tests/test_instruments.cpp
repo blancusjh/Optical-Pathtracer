@@ -3,7 +3,7 @@
 #include "owe/analysis/analysis.hpp"
 #include "owe/backends/registry.hpp"
 #include "owe/scene/builders.hpp"
-#include "owe/transport/optics.hpp"
+#include "owe/core/shared/optics.hpp"
 #include "owe/loader/scene_loader.hpp"
 
 using namespace owe;

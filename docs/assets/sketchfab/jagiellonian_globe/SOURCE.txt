@@ -1,0 +1,7 @@
+Name: The Jagiellonian Globe
+Author: Virtual Museums of Małopolska
+Licence: CC Attribution
+URL: https://sketchfab.com/3d-models/jagiellonian_globe-55a10e6015af4447a66f34b272d4bf1a
+Downloaded: 2026-09-29
+Format: glTF (separate textures)
+Attribution required (CC BY): credit the author and link the source.

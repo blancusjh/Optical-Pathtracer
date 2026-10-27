@@ -1,0 +1,48 @@
+{
+  "date": "2026-10-12",
+  "gpu_commit": "d27d388",
+  "tests_binary_sha256": "42ec2b09dd5cda1e5510bb59877e20a842b35ac0196f2924d222ff0aa7169aca",
+  "checks": [
+    {
+      "command": "OWE_REQUIRE_GPU=1 build/owe_tests",
+      "passed": 158,
+      "total": 158,
+      "log": "hardware_full.log",
+      "scope": "Before renderer translation-unit split and final SPPM photon queue change; same shaders."
+    },
+    {
+      "command": "OWE_REQUIRE_GPU=1 OWE_GPU_RAY_QUERY=0 build/owe_tests gpu_contact_ gpu_planetary_ backends_far_ backends_surface_sensor_ vcm_cache_ vcm_cached_ gpu_film_",
+      "passed": 16,
+      "total": 16,
+      "log": "software_contacts.log",
+      "scope": "After translation-unit split; before final SPPM photon queue change."
+    },
+    {
+      "command": "OWE_REQUIRE_GPU=1 build/owe_tests gpu_film_ backends_reset_observer_ vcm_cache_ shading_smooth_glass_mesh_refracts_like_the_glass_ball",
+      "passed": 5,
+      "total": 5,
+      "log": "hardware_final_renderer.log",
+      "scope": "Final renderer, including queued SPPM photons."
+    },
+    {
+      "command": "OWE_REQUIRE_GPU=1 OWE_GPU_RAY_QUERY=0 build/owe_tests gpu_film_",
+      "passed": 1,
+      "total": 1,
+      "log": "software_final_film.log",
+      "scope": "Final renderer; all six integrators across passes and repeated resolves."
+    },
+    {
+      "command": "ctest --test-dir /tmp/owe-maintenance-cpu --output-on-failure",
+      "passed": 5,
+      "total": 5,
+      "log": "cpu_only_ctest.log",
+      "scope": "Clean Release build with OWE_GPU=OFF and OWE_VIEWER=OFF; /usr/bin/python3."
+    },
+    {
+      "command": "ctest --test-dir build -R \"layering|python|documentation|viewer\" --output-on-failure",
+      "passed": 7,
+      "total": 7,
+      "log": "tooling_viewer_ctest.log"
+    }
+  ]
+}

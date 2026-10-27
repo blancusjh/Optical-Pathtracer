@@ -17,8 +17,8 @@ struct SurfaceSpec {
     double k = 0;                   // conic constant
     std::vector<double> A;          // even aspheric coefficients A4, A6, ...
     double semiDiameter = 0;        // mechanical semi-diameter of the polished surface
-    double clearSemiDiameter = 0;   // annotation
     double curvature() const { return std::isinf(R) ? 0.0 : 1.0 / R; }
+    double edgeSag() const;         // the surface's z at its semi-diameter
 };
 
 // A lens body: surfaces S0..Sn separated by n media along +z (singlet n = 1,
@@ -140,19 +140,12 @@ MeshData makeTreeFoliage(double height, double radius, int segments);
 // Closed surface of revolution about +z from a profile of (r, z) points traversed from the
 // bottom upward; the ends are closed on the axis automatically. Normals face outward.
 MeshData revolveProfile(std::vector<std::pair<double, double>> profile, int segments);
+// The closed box [lo, hi], faces outward.
+MeshData makeBoxMesh(const Vec3& lo, const Vec3& hi);
 MeshData makeTorus(double majorRadius, double minorRadius, int segU, int segV);
 // Fluted column shaft (Doric): radius r0 at the foot, r1 at the neck, entasis as a fraction of r0.
 MeshData makeFlutedShaft(double height, double r0, double r1, double entasis, int flutes, double fluteDepth,
                          int segPerFlute, int segZ);
-// Cylindrical wall (open surface, radius R, height H) with rectangular openings, each given as
-// (centre azimuth from +y toward +x, width, sill height, top height).
-struct WallOpening {
-    double azimuth, width, sill, top;
-};
-MeshData makeRoundWall(double R, double H, int segAz, int segZ, const std::vector<WallOpening>& openings);
-// Hemispherical shell (open surface) of radius R, optionally with an observing slit of constant
-// linear width centred on azimuth slitAz (from +y toward +x), open from the horizon to elevation slitTop.
-MeshData makeDome(double R, int segAz, int segEl, double slitAz, double slitWidth, double slitTop);
 MeshData makeTreeTrunk(double height, double radius, int segments);
 // Scatters conifers over a height field; returns the body index.
 int buildForest(World& w, const std::string& name, const TerrainSpec& terrain, int count, double innerRadius,

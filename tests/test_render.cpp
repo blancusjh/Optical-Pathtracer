@@ -110,7 +110,7 @@ TEST(meter_is_robust_to_one_sample_noise) {
 TEST(meter_is_scale_invariant_and_a_locked_meter_keeps_the_picture) {
     Image img = roomWithLamp(100, 60, 50, 30, 10, 3);
     auto inside = displayRGB8(img, 0, true);
-    auto locked = displayRGB8(img, autoExposureEV(img), false);
+    auto locked = displayRGB8(img, meterEV(img), false);
     CHECK(inside == locked);  // locking the meter must not change the current brightness
     for (double& x : img.xyz) x *= 1e6;  // daylight: the same scene a million times brighter
     auto outside = displayRGB8(img, 0, true);
@@ -258,7 +258,6 @@ TEST(registry_lists_the_reference_first_and_names_backends) {
     CHECK(list.front() == &referenceBackend());
     CHECK(referenceBackend().name() == "cpu");
     CHECK(referenceBackend().available());
-    for (const char* integrator : {"path", "light", "hybrid"}) CHECK(referenceBackend().supports(integrator));
     for (const Backend* b : list) {
         CHECK(findBackend(b->name()) == b);
         CHECK(b->supports("path"));  // every backend implements the path integrator
@@ -279,8 +278,8 @@ TEST(registry_lists_the_reference_first_and_names_backends) {
 TEST(registry_adapts_integrators_a_backend_lacks) {
     RenderSettings rs;
     rs.integrator = "hybrid";
-    CHECK(adaptToBackend(rs).empty());  // the reference implements it
-    CHECK(rs.integrator == "hybrid");
+    CHECK(!adaptToBackend(rs).empty());  // the reference implements the path integrator only
+    CHECK(rs.integrator == "path");
     for (const Backend* b : backends()) {
         RenderSettings s;
         s.backend = b->name();
@@ -320,6 +319,44 @@ TEST(display_keeps_the_hue_of_spectral_colours) {
     double inside[3] = {0.2, 0.5, 0.1}, copy[3] = {0.2, 0.5, 0.1};
     gamutMapLinearSRGB(inside);
     for (int k = 0; k < 3; ++k) CHECK(inside[k] == copy[k]);  // in-gamut colours are untouched
+}
+
+TEST(image_textures_over_the_budget_are_halved_as_decoded_one_by_one) {
+    // Images are decoded in parallel; each must come out as the sequential decode-and-halve would.
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path();
+    std::string text = "units = m\nworld { sky = uniform(1) }\n";
+    std::vector<std::string> files;
+    for (int i = 0; i < 4; ++i) {
+        const int n = 64 >> (i % 2);  // 64 and 32 texels across
+        std::vector<unsigned char> px;
+        for (int k = 0; k < n * n * 3; ++k) px.push_back(static_cast<unsigned char>((k * 37 + i * 101) % 256));
+        files.push_back((dir / ("owe_test_budget_" + std::to_string(i) + ".png")).string());
+        writeRGB8PNG(files.back(), n, n, px);
+        text += "material m" + std::to_string(i) + " { type = diffuse  texture = image(\"" + files.back() + "\", scale = 1) }\n";
+        text += "body S" + std::to_string(i) + " { type = sheet  size = (1, 1)  position = (" + std::to_string(2 * i) +
+                ", 0, 0)  material = m" + std::to_string(i) + " }\n";
+    }
+    text += "observer Eye { position = (0, 0, 5)  look_at = (0, 0, 0)  up = (0, 1, 0)  fov = 20deg  resolution = (8, 8) }\n";
+    setenv("OWE_TEXTURE_BUDGET_MB", "0.02", 1);  // 20 KB: every image is halved at least once
+    setenv("OWE_TEXTURE_DECODE_MB", "0.03", 1);  // at most two decoded at a time
+    Scene sc = loadSceneFromString(text);
+    unsetenv("OWE_TEXTURE_BUDGET_MB");
+    unsetenv("OWE_TEXTURE_DECODE_MB");
+    size_t checked = 0, bytes = 0;
+    for (const auto& o : sc.world.optics()) {
+        if (!o.texture.image) continue;
+        const ImageRGB& got = *o.texture.image;
+        ImageRGB want = decodeImage(got.path);
+        while (want.width > got.width) halveImage(want);
+        CHECK(want.width == got.width && want.height == got.height);
+        CHECK(want.srgb8 == got.srgb8);
+        bytes += imageBytes(got);
+        ++checked;
+    }
+    CHECK(checked == 4);
+    CHECK(bytes <= size_t(0.02 * 1024 * 1024));
+    for (const std::string& f : files) fs::remove(f);
 }
 
 TEST(image_texture_reflects_its_texels_spectra_on_every_backend) {
@@ -457,12 +494,13 @@ TEST(environment_map_lights_the_scene_as_its_radiance_says) {
         // samples (escapes and NEE) and the same with a different seed: consistent, and positive.
         const double s1 = meanOf(sunny, b->name(), 512);
         CHECK(s1 > 0);
+        std::fprintf(stderr, "    [%s] white map / uniform sky %.4f\n", b->name().c_str(), a / u);
+        if (!b->supports("light")) continue;
         // Independently, on the ball (light tracing cannot show the sky seen directly): particles drawn
         // from the map's distribution and connected to the eye against the path tracer.
         const double p1 = centreOf(sunny, b->name(), 512, "path", 12), p2 = centreOf(sunny, b->name(), 4096, "light", 12);
         CHECK_NEAR(p2 / p1, 1, 0.02);
-        std::fprintf(stderr, "    [%s] white map / uniform sky %.4f; patchy map on the ball: path %.5g, light %.5g\n",
-                     b->name().c_str(), a / u, p1, p2);
+        std::fprintf(stderr, "    [%s] patchy map on the ball: path %.5g, light %.5g\n", b->name().c_str(), p1, p2);
     }
     fs::remove(white);
     fs::remove(patch);

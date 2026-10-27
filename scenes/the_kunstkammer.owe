@@ -1,112 +1,303 @@
-# THE KUNSTKAMMER — a quiet cabinet of curiosities, with the world measured in brass and steel.
-# A low western sun enters one unglazed lattice: its bars divide the red carpet and rake the
-# astrolabe's engraving. Steel returns the sun to plaster and flagstones by reflection and VCM
-# merging; gilt holds the window in miniature. The gradient sky alone opens the shadows.
-# References: Holbein, The Ambassadors (1533); Vermeer, The Astronomer (1668);
-# Hammershoi, Interior with Sunlight on the Floor (1906). Ochre plaster, oxblood wool, dark oak.
-# The requested collection spans centuries; this is a Renaissance-style museum arrangement,
-# not a claim that the later telescope, sextant, prayer book and tellurium existed in 1533.
-# CC BY: The Jagiellonian Globe — Virtual Museums of Małopolska
+# DAYTIME ENVIRONMENT: Hosek-Wilkie atmospheric HDR, generated at this scene's
+# exact solar elevation/azimuth. Sky only: the existing analytic sun supplies
+# the sole solar disc. Turbidity2.4; diffuse horizontal irradiance=10% of DNI
+# is an explicit clear-day assumption, not measured site/weather calibration.
+# 4096x2048 original radiance maps and parameters: assets/daylight/MANIFEST.json.
+# THE KUNSTKAMMER — steel in afternoon light.
+# PLAN: Holbein, The Ambassadors (1533): oxblood cloth and brass in measured repose;
+# Vermeer, The Astronomer (1668): one lateral window; Hammershoi, Interior with
+# Sunlight on the Floor (1906): architectural shadow and quiet intervals.
+# HERO: Cleveland's mounted armour, clear of the foreground table; western sunlight
+# enters a deep stone window and strikes the steel. Brightest: breastplate and horse;
+# darkest: table undercroft and cabinet recesses. Palette: ochre lime, fumed oak,
+# red woven wool, silver and restrained gold. No artificial lights.
+# ASSETS: museum scans below; Poly Haven white_plaster_02, oak_veneer_01,
+# marble_01, quatrefoil_jacquard_fabric, GothicCabinet_01 and marble_bust_01
+# (all CC0), plus the CC0 Wawel carved chest. Full normal/roughness maps used.
+# Original full-resolution files are retained; the engine uses its default texture budget.
+# This is a collected historical cabinet: the explicitly requested sextant and
+# tellurium are later acquisitions, not claimed as Renaissance inventions.
+# CC BY: The Jagiellonian Globe — Virtual Museums of Malopolska:
 # https://sketchfab.com/3d-models/jagiellonian_globe-55a10e6015af4447a66f34b272d4bf1a
-# CC BY: ETH: Tellurium with Lunarium — ETH Library_Collections
+# CC BY: ETH Tellurium with Lunarium — ETH Library_Collections:
 # https://sketchfab.com/3d-models/tellurium_lunarium-e4c9f36a40f3479885f27380f8286b2d
-# CC0 acknowledgements: Cleveland Museum of Art; Virtual Museums of Małopolska / Collegium
-# Maius and Wawel Royal Castle; Morbase | Museu Virtual; Varldskulturmuseerna / Medelhavsmuseet.
-# Measurements and caveats are recorded in out/scenes/kunstkammer/report.txt.
+# Other museum scans CC0: Cleveland Museum of Art, Virtual Museums of Malopolska,
+# Morbase / Museu Virtual, Varldskulturmuseerna. Sources: assets/sketchfab/MANIFEST.json.
+# Native armour metre scale retained: museum supplies no overall dimensions.
 units = m
 world {
- sky = gradient(zenith = rgb(0.40, 0.57, 0.90, luminance = 0.8),
-                horizon = rgb(0.94, 0.87, 0.72, luminance = 1.4),
-                ground = rgb(0.20, 0.18, 0.14, luminance = 0.12))
- sun { elevation = 20deg azimuth = 285deg luminance = 1.2e5 temperature = 4800K nee_share = 1 }
+ sky = map("../assets/daylight/kunstkammer_sun_aligned.hdr", rotation = 0deg, scale = 1)
+ sun { elevation = 16deg azimuth = 250deg luminance = 1.2e5 temperature = 5100K nee_share = .8 }
 }
-material plaster { type = diffuse reflectance = rgb(0.66, 0.60, 0.47) relief = noise(scale = 3mm, depth = 0.12mm) }
-material limestone { type = diffuse texture = noise(a = rgb(0.34,0.31,0.25), b = rgb(0.43,0.39,0.31), scale = 0.4) relief = noise(scale = 4mm, depth = 0.08mm) }
-material walnut { type = diffuse texture = wood(a = rgb(0.10,0.052,0.025), b = rgb(0.055,0.029,0.014), scale = 5mm, turbulence = 0.3) }
-material wool { type = diffuse texture = noise(a = rgb(0.29,0.027,0.021), b = rgb(0.13,0.013,0.010), scale = 0.022) relief = noise(scale = 1mm, depth = 0.05mm) }
-material carpetGold { type = diffuse reflectance = rgb(0.43,0.25,0.09) }
-material iron { type = conductor metal = silver tint = 0.55 roughness = 0.22 }
-# Room: x +/-3, y +/-2.25, ceiling 4.3 m. Door is behind Room's eye.
 
-body Floor { type = box size = (6, 4.5, 0.08) position = (0, 0, -0.0402) material = limestone  }
-body Ceiling { type = box size = (6, 4.5, 0.1) position = (0, 0, 4.3502) material = plaster  }
-body FarWall { type = box size = (6, 0.12, 4.3) position = (0, 2.3102, 2.15) material = plaster  }
-body RightWall { type = box size = (0.12, 4.5, 4.3) position = (3.0602, 0, 2.15) material = plaster  }
-body DoorWall { type = box size = (6, 0.12, 4.3) position = (0, -2.3102, 2.15) material = plaster  }
-# Southwark stained-glass reservation (ROADMAP 2.2): 1.35 x 3.30 m, y=-0.625.
-# Install its measured-up scan here when stained-glass transport is supported; no glazing now.
-body LeftFront { type = box size = (0.12, 0.95, 4.3) position = (-3.0602, -1.775, 2.15) material = plaster  }
-body LeftRear { type = box size = (0.12, 2.2, 4.3) position = (-3.0602, 1.15, 2.15) material = plaster  }
-body LeftSillWall { type = box size = (0.12, 1.35, 0.85) position = (-3.0602, -0.625, 0.425) material = plaster  }
-body LeftLintel { type = box size = (0.12, 1.35, 0.15) position = (-3.0602, -0.625, 4.225) material = plaster  }
-body Mullion0 { type = box size = (0.1, 0.045, 3.3) position = (-3, -1.3, 2.5) material = walnut  }
-body Mullion1 { type = box size = (0.1, 0.045, 3.3) position = (-3, -0.625, 2.5) material = walnut  }
-body Mullion2 { type = box size = (0.1, 0.045, 3.3) position = (-3, 0.05, 2.5) material = walnut  }
-body Transom0 { type = box size = (0.1, 1.305, 0.045) position = (-3, -0.625, 0.85) material = walnut  }
-body Transom1 { type = box size = (0.1, 1.305, 0.045) position = (-3, -0.625, 1.675) material = walnut  }
-body Transom2 { type = box size = (0.1, 1.305, 0.045) position = (-3, -0.625, 2.5) material = walnut  }
-body Transom3 { type = box size = (0.1, 1.305, 0.045) position = (-3, -0.625, 3.325) material = walnut  }
-body Transom4 { type = box size = (0.1, 1.305, 0.045) position = (-3, -0.625, 4.15) material = walnut  }
-body Sill { type = box size = (0.32, 1.48, 0.08) position = (-2.9, -0.625, 0.8098) material = limestone  }
-body FarWainscot { type = box size = (5.999, 0.032, 0.8) position = (0, 2.2338, 0.4002) material = walnut  }
-body RightWainscot { type = box size = (0.032, 4.499, 0.8) position = (2.9838, 0, 0.4002) material = walnut  }
-body PanelStile0 { type = box size = (0.032, 0.012, 0.74) position = (-2.8, 2.2116, 0.4002) material = walnut  }
-body PanelStile1 { type = box size = (0.032, 0.012, 0.74) position = (-2.0999999999999996, 2.2116, 0.4002) material = walnut  }
-body PanelStile2 { type = box size = (0.032, 0.012, 0.74) position = (-1.3999999999999995, 2.2116, 0.4002) material = walnut  }
-body PanelStile3 { type = box size = (0.032, 0.012, 0.74) position = (-0.6999999999999993, 2.2116, 0.4002) material = walnut  }
-body PanelStile4 { type = box size = (0.032, 0.012, 0.74) position = (8.881784197001252e-16, 2.2116, 0.4002) material = walnut  }
-body PanelStile5 { type = box size = (0.032, 0.012, 0.74) position = (0.7000000000000011, 2.2116, 0.4002) material = walnut  }
-body PanelStile6 { type = box size = (0.032, 0.012, 0.74) position = (1.4000000000000012, 2.2116, 0.4002) material = walnut  }
-body PanelStile7 { type = box size = (0.032, 0.012, 0.74) position = (2.1000000000000014, 2.2116, 0.4002) material = walnut  }
-body PanelStile8 { type = box size = (0.032, 0.012, 0.74) position = (2.8000000000000016, 2.2116, 0.4002) material = walnut  }
-body UpperTier { type = box size = (1.95, 0.76, 0.045) position = (-0.42, -0.4, 1.0575) material = walnut  }
-body LowerTier { type = box size = (1.95, 0.98, 0.045) position = (-0.42, -0.49, 0.6275) material = walnut  }
-body Leg0 { type = box size = (0.07, 0.07, 1.0346) position = (-1.31, -0.72, 0.5175) material = walnut  }
-body Leg1 { type = box size = (0.07, 0.07, 1.0346) position = (0.47, -0.72, 0.5175) material = walnut  }
-body Leg2 { type = box size = (0.07, 0.07, 1.0346) position = (-1.31, -0.08, 0.5175) material = walnut  }
-body Leg3 { type = box size = (0.07, 0.07, 1.0346) position = (0.47, -0.08, 0.5175) material = walnut  }
-body Carpet { type = box size = (1.97, 0.78, 0.006) position = (-0.42, -0.4, 1.0832) material = wool  }
-body CarpetFrontDrop { type = box size = (1.97, 0.006, 0.19) position = (-0.42, -0.7932, 0.985) material = wool  }
-body CarpetBackDrop { type = box size = (1.97, 0.006, 0.19) position = (-0.42, -0.0068, 0.985) material = wool  }
-body CarpetBorder0 { type = box size = (0.037, 0.77, 0.0004) position = (-1.345, -0.4, 1.0866) material = carpetGold  }
-body CarpetBorder1 { type = box size = (0.037, 0.77, 0.0004) position = (0.505, -0.4, 1.0866) material = carpetGold  }
-body Plinth { type = box size = (1.9, 1.94, 0.16) position = (0.75, 1.08, 0.0802) material = limestone  }
-body HelmetChest { type = box size = (0.66, 0.48, 0.71) position = (2.0, 1.38, 0.3552) material = walnut  }
-body TelescopeStand { type = box size = (0.6, 0.82, 0.8) position = (-2.08, -0.34, 0.4002) material = walnut  }
-material ArmourMat0 { type = conductor metal = silver roughness = 0.10 texture = image("../assets/sketchfab/armor_man_and_horse/textures/Armor_Mat_baseColor.jpeg", mapping = uv) }
-body Armour0 { type = mesh file = "../assets/sketchfab/armor_man_and_horse/scene.gltf" part = "Armor_Mat" fit_height = 3.714308000 normals = file position = (0.75, 1.08, 0.1604) rotate = (-0.0, 0.0, -18) material = ArmourMat0 }
-material HelmetMat0 { type = conductor metal = silver roughness = 0.10 texture = image("../assets/sketchfab/closed_helmet/textures/wire_006134006_baseColor.jpeg", mapping = uv) }
-body Helmet0 { type = mesh file = "../assets/sketchfab/closed_helmet/scene.gltf" part = "wire_006134006" fit_height = 0.340000000 normals = file position = (2.0, 1.38, 0.7104) rotate = (0, 0, -24) material = HelmetMat0 }
-material AstrolabeMat0 { type = conductor metal = gold roughness = 0.22 texture = image("../assets/sketchfab/astrolabe/textures/Default_OBJ_baseColor.jpeg", mapping = uv) }
-body Astrolabe0 { type = mesh file = "../assets/sketchfab/astrolabe/scene.gltf" part = "Default_OBJ" fit_height = 0.308716378 normals = file position = (-1.02, -0.38, 1.0868) rotate = (0, 0, -12) material = AstrolabeMat0 }
-material GlobeMat0 { type = conductor metal = gold roughness = 0.16 texture = image("../assets/sketchfab/jagiellonian_globe/textures/MUJ_798_I_Globus_Jagiellonski_u1_v1_baseColor.png", mapping = uv) }
-body Globe0 { type = mesh file = "../assets/sketchfab/jagiellonian_globe/scene.gltf" part = "MUJ_798_I_Globus_Jagiellonski_u1_v1" fit_height = 0.420000000 normals = file position = (-0.4, -0.34, 1.0868) rotate = (0, 0, 16) material = GlobeMat0 }
-material SextantMat0 { type = conductor metal = gold roughness = 0.22 texture = image("../assets/sketchfab/pocket_sextant/textures/17231_2255_V_Sekstant_kieszonkowy_07_FIN_baseColor.png", mapping = uv) }
-body Sextant0 { type = mesh file = "../assets/sketchfab/pocket_sextant/scene.gltf" part = "17231_2255_V_Sekstant_kieszonkowy_07_FIN" fit_height = 0.080000000 normals = file position = (0.2, -0.54, 1.0868) rotate = (0, 0, -20) material = SextantMat0 }
+material plaster { type = diffuse texture = image("../assets/polyhaven/white_plaster_02/ochre.jpg", mapping = triplanar, scale = 2)  normal_map = image("../assets/polyhaven/white_plaster_02/white_plaster_02_nor_gl_8k.jpg", mapping = triplanar, scale = 2) normal_strength = .65 roughness_map = image("../assets/polyhaven/white_plaster_02/white_plaster_02_rough_8k.jpg", mapping = triplanar, scale = 2) }
+material limestone { type = diffuse texture = image("../assets/polyhaven/marble_01/marble_01_diff_8k.jpg", mapping = triplanar, scale = 1.4) roughness = .65  normal_map = image("../assets/polyhaven/marble_01/marble_01_nor_gl_8k.jpg", mapping = triplanar, scale = 1.4) normal_strength = .65 roughness_map = image("../assets/polyhaven/marble_01/marble_01_rough_8k.jpg", mapping = triplanar, scale = 1.4) }
+material walnut { type = diffuse texture = image("../assets/polyhaven/oak_veneer_01/fumed.jpg", mapping = triplanar, scale = 1.8) roughness = .35  normal_map = image("../assets/polyhaven/oak_veneer_01/oak_veneer_01_nor_gl_16k.jpg", mapping = triplanar, scale = 1.8) normal_strength = .65 roughness_map = image("../assets/polyhaven/oak_veneer_01/oak_veneer_01_rough_16k.jpg", mapping = triplanar, scale = 1.8) }
+material furnitureOak { type = diffuse texture = image("../assets/polyhaven/oak_veneer_01/fumed.jpg", mapping = triplanar, scale = .8) roughness = .35  normal_map = image("../assets/polyhaven/oak_veneer_01/oak_veneer_01_nor_gl_16k.jpg", mapping = triplanar, scale = .8) normal_strength = .65 roughness_map = image("../assets/polyhaven/oak_veneer_01/oak_veneer_01_rough_16k.jpg", mapping = triplanar, scale = .8) }
+material wool { type = diffuse texture = image("../assets/polyhaven/quatrefoil_jacquard_fabric/oxblood_8k.jpg", mapping = uv)  normal_map = image("../assets/polyhaven/quatrefoil_jacquard_fabric/quatrefoil_jacquard_fabric_nor_gl_8k.jpg", mapping = uv, scale = 1) normal_strength = .65 roughness_map = image("../assets/polyhaven/quatrefoil_jacquard_fabric/quatrefoil_jacquard_fabric_rough_8k.jpg", mapping = uv, scale = 1) }
+material carpetGold { type = diffuse reflectance = rgb(.25,.13,.045) }
+material iron { type = conductor metal = silver tint = .35 roughness = .32 }
+material ArmourMat0 { type = conductor metal = silver roughness = 0.19 texture = image("../assets/sketchfab/armor_man_and_horse/textures/steel_reflectance.jpg", mapping = uv)  normal_map = image("../assets/sketchfab/armor_man_and_horse/textures/Armor_Mat_normal.jpeg", mapping = uv) roughness_map = image("../assets/sketchfab/armor_man_and_horse/textures/polished_steel_roughness.png", mapping = uv) }
+material HelmetMat0 { type = conductor metal = silver roughness = 0.10 texture = image("../assets/sketchfab/closed_helmet/textures/wire_006134006_baseColor.jpeg", mapping = uv)  normal_map = image("../assets/sketchfab/closed_helmet/textures/wire_006134006_normal.png", mapping = uv) roughness_map = image("../assets/sketchfab/closed_helmet/textures/wire_006134006_metallicRoughness.png", mapping = uv) }
+material AstrolabeMat0 { type = conductor metal = gold roughness = 0.22 texture = image("../assets/sketchfab/astrolabe/textures/Default_OBJ_baseColor.jpeg", mapping = uv)  normal_map = image("../assets/sketchfab/astrolabe/textures/Default_OBJ_normal.png", mapping = uv) roughness_map = image("../assets/sketchfab/astrolabe/textures/Default_OBJ_metallicRoughness.png", mapping = uv) }
+material GlobeMat0 { type = conductor metal = gold roughness = 0.16 texture = image("../assets/sketchfab/jagiellonian_globe/textures/MUJ_798_I_Globus_Jagiellonski_u1_v1_baseColor.png", mapping = uv)  }
+material SextantMat0 { type = conductor metal = gold roughness = 0.22 texture = image("../assets/sketchfab/pocket_sextant/textures/17231_2255_V_Sekstant_kieszonkowy_07_FIN_baseColor.png", mapping = uv)  normal_map = image("../assets/sketchfab/pocket_sextant/textures/17231_2255_V_Sekstant_kieszonkowy_07_FIN_normal.png", mapping = uv) roughness_map = image("../assets/sketchfab/pocket_sextant/textures/17231_2255_V_Sekstant_kieszonkowy_07_FIN_metallicRoughness.png", mapping = uv) }
 material SextantMat1 { type = conductor metal = gold roughness = 0.22 tint = 0.55 }
-body Sextant1 { type = mesh file = "../assets/sketchfab/pocket_sextant/scene.gltf" part = "Default_OBJ" fit_height = 0.080000000 normals = file position = (0.2, -0.54, 1.0868) rotate = (0, 0, -20) material = SextantMat1 }
-material TelescopeMat0 { type = conductor metal = gold roughness = 0.22 texture = image("../assets/sketchfab/gregorian_telescope/textures/4044_42_V_Teleskop_05_FIN_baseColor.png", mapping = uv) }
-body Telescope0 { type = mesh file = "../assets/sketchfab/gregorian_telescope/scene.gltf" part = "4044_42_V_Teleskop_05_FIN" fit_height = 0.470000000 normals = file position = (-2.08, -0.34, 0.8004) rotate = (0, 0, -90) material = TelescopeMat0 }
-material BookMat0 { type = diffuse texture = image("../assets/sketchfab/coptic_prayer_book/textures/material0_baseColor.png", mapping = uv) }
-body Book0 { type = mesh file = "../assets/sketchfab/coptic_prayer_book/scene.gltf" part = "material0" fit_height = 0.071352451 normals = file position = (-0.88, -0.76, 0.6502) rotate = (0, 0, -12) material = BookMat0 }
-material TelluriumMat0 { type = diffuse texture = image("../assets/sketchfab/tellurium_lunarium/textures/KGS-001-x_baseColor.jpeg", mapping = uv) }
-body Tellurium0 { type = mesh file = "../assets/sketchfab/tellurium_lunarium/scene.gltf" part = "KGS-001-x" fit_height = 0.475315000 normals = file position = (0.13, -0.53, 0.6502) rotate = (0, 0, 7) material = TelluriumMat0 }
-material TelluriumMat1 { type = diffuse texture = image("../assets/sketchfab/tellurium_lunarium/textures/KGS-001-x_Elemente_baseColor.jpeg", mapping = uv) }
-body Tellurium1 { type = mesh file = "../assets/sketchfab/tellurium_lunarium/scene.gltf" part = "KGS-001-x_Elemente" fit_height = 0.475315000 normals = file position = (0.13, -0.53, 0.6502) rotate = (0, 0, 7) material = TelluriumMat1 }
-material RapierMat0 { type = conductor metal = gold roughness = 0.16 texture = image("../assets/sketchfab/rapier_mascarenhas/textures/Gold_baseColor.png", mapping = uv) }
-body Rapier0 { type = mesh file = "../assets/sketchfab/rapier_mascarenhas/scene.gltf" part = "Gold" fit_height = 0.106741118 normals = file position = (2.74, 0.0, 1.1) rotate = (90, 0, -10) material = RapierMat0 }
-material RapierMat1 { type = conductor metal = silver roughness = 0.10 texture = image("../assets/sketchfab/rapier_mascarenhas/textures/Silver_baseColor.png", mapping = uv) }
-body Rapier1 { type = mesh file = "../assets/sketchfab/rapier_mascarenhas/scene.gltf" part = "Silver" fit_height = 0.106741118 normals = file position = (2.74, 0.0, 1.1) rotate = (90, 0, -10) material = RapierMat1 }
-material RapierMat2 { type = conductor metal = silver roughness = 0.10 texture = image("../assets/sketchfab/rapier_mascarenhas/textures/Steel_baseColor.png", mapping = uv) }
-body Rapier2 { type = mesh file = "../assets/sketchfab/rapier_mascarenhas/scene.gltf" part = "Steel" fit_height = 0.106741118 normals = file position = (2.74, 0.0, 1.1) rotate = (90, 0, -10) material = RapierMat2 }
-# Single photographs cover mixed surfaces: armour includes red straps/plumes; globe its stand;
-# telescope its dark tube; sextant its black case. Dominant metal chosen, baked lighting retained.
-# Rapier on a wall rack: its scan is horizontal before the 90deg x turn.
-body RapierRack { type = box size = (0.10,0.14,0.04) position = (2.85,0,1.20) material = walnut }
-observer Room { position = (1.45,-2.03,1.6) look_at = (-.30,.70,1.6) up = (0,0,1) fov = 62deg pupil = 3mm focus = 3.3 resolution = (720,450) white_balance = 5200K }
-observer Table { position = (.05,-1.80,1.52) look_at = (-.48,-.35,1.25) up = (0,0,1) fov = 38deg pupil = 3mm focus = 1.57 resolution = (640,400) white_balance = 5200K }
-observer Armour { position = (-1.65,-1.18,1.6) look_at = (.75,1.10,1.6) up = (0,0,1) fov = 54deg pupil = 3mm focus = 3.31 resolution = (720,450) white_balance = 5200K }
-observer Book { position = (-.92,-1.25,.94) look_at = (-.88,-.76,.695) up = (0,0,1) fov = 30deg pupil = 3mm focus = .55 resolution = (640,400) white_balance = 5200K }
-# Sun glints need eye -> rough metal -> sun samples; manifold NEE is not implemented.
-render { detector = Room spp = 128 integrator = vcm photons = 0.25 max_depth = 12 }
+material BookMat0 { type = diffuse texture = image("../assets/sketchfab/coptic_prayer_book/textures/material0_baseColor.png", mapping = uv)  normal_map = image("../assets/sketchfab/coptic_prayer_book/textures/material0_normal.png", mapping = uv) roughness_map = image("../assets/sketchfab/coptic_prayer_book/textures/material0_metallicRoughness.png", mapping = uv) }
+material TelluriumMat0 { type = diffuse texture = image("../assets/sketchfab/tellurium_lunarium/textures/KGS-001-x_baseColor.jpeg", mapping = uv)  roughness_map = image("../assets/sketchfab/tellurium_lunarium/textures/KGS-001-x_metallicRoughness.png", mapping = uv) }
+material TelluriumMat1 { type = diffuse texture = image("../assets/sketchfab/tellurium_lunarium/textures/KGS-001-x_Elemente_baseColor.jpeg", mapping = uv)  roughness_map = image("../assets/sketchfab/tellurium_lunarium/textures/KGS-001-x_metallicRoughness.png", mapping = uv) }
+material RapierMat0 { type = conductor metal = gold roughness = 0.16 texture = image("../assets/sketchfab/rapier_mascarenhas/textures/Gold_baseColor.png", mapping = uv)  normal_map = image("../assets/sketchfab/rapier_mascarenhas/textures/Gold_normal.png", mapping = uv) roughness_map = image("../assets/sketchfab/rapier_mascarenhas/textures/Gold_metallicRoughness.png", mapping = uv) }
+material RapierMat1 { type = conductor metal = silver roughness = 0.10 texture = image("../assets/sketchfab/rapier_mascarenhas/textures/Silver_baseColor.png", mapping = uv)  normal_map = image("../assets/sketchfab/rapier_mascarenhas/textures/Silver_normal.png", mapping = uv) roughness_map = image("../assets/sketchfab/rapier_mascarenhas/textures/Silver_metallicRoughness.png", mapping = uv) }
+material RapierMat2 { type = conductor metal = silver roughness = 0.10 texture = image("../assets/sketchfab/rapier_mascarenhas/textures/Steel_baseColor.png", mapping = uv)  normal_map = image("../assets/sketchfab/rapier_mascarenhas/textures/Steel_normal.png", mapping = uv) roughness_map = image("../assets/sketchfab/rapier_mascarenhas/textures/Steel_metallicRoughness.png", mapping = uv) }
+material CabinetWood { type = diffuse texture = image("../assets/polyhaven/GothicCabinet_01/textures/GothicCabinet_01_diff_4k.jpg", mapping = uv) roughness = .4  normal_map = image("../assets/polyhaven/GothicCabinet_01/textures/GothicCabinet_01_nor_gl_4k.jpg", mapping = uv, scale = 1) normal_strength = .65 roughness_map = image("../assets/polyhaven/GothicCabinet_01/textures/GothicCabinet_01_arm_4k.jpg", mapping = uv, scale = 1) }
+material BustMarble { type = diffuse texture = image("../assets/polyhaven/marble_bust_01/textures/marble_bust_01_diff_8k.jpg", mapping = uv) roughness = .55  normal_map = image("../assets/polyhaven/marble_bust_01/textures/marble_bust_01_nor_gl_8k.jpg", mapping = uv, scale = 1) normal_strength = .65 roughness_map = image("../assets/polyhaven/marble_bust_01/textures/marble_bust_01_rough_8k.jpg", mapping = uv, scale = 1) }
+body Floor { type = box size = (7, 8, 0.1) position = (0, -1, -0.05) material = limestone  }
+body Ceiling { type = box size = (7, 8, 0.1) position = (0, -1, 4.65) material = plaster  }
+body FarWall { type = box size = (7, 0.35, 4.6) position = (0, 3.175, 2.3) material = plaster  }
+body RightWall { type = box size = (0.35, 8, 4.6) position = (3.675, -1, 2.3) material = plaster  }
+body DoorWall { type = box size = (7, 0.35, 4.6) position = (0, -5.175, 2.3) material = plaster  }
+# Plaster partitioned around the unchanged limestone sill cap.
+body LeftFront { type = box size = (0.45, 2.0, 0.62) position = (-3.725, -4.0, 0.31) material = plaster }
+body LeftFrontAboveSill { type = box size = (0.45, 2.0, 3.85) position = (-3.725, -4.0, 2.675) material = plaster }
+body LeftFrontSillOuter { type = box size = (0.075, 2.0, 0.13) position = (-3.9125, -4.0, 0.685) material = plaster }
+body LeftFrontSillEnd { type = box size = (0.375, 1.9, 0.13) position = (-3.6875, -4.05, 0.685) material = plaster }
+body LeftRear { type = box size = (0.45, 1.4, 0.62) position = (-3.725, 2.3, 0.31) material = plaster }
+body LeftRearAboveSill { type = box size = (0.45, 1.4, 3.85) position = (-3.725, 2.3, 2.675) material = plaster }
+body LeftRearSillOuter { type = box size = (0.075, 1.4, 0.13) position = (-3.9125, 2.3, 0.685) material = plaster }
+body LeftRearSillEnd { type = box size = (0.375, 1.3, 0.13) position = (-3.6875, 2.35, 0.685) material = plaster }
+body LeftSillWall { type = box size = (0.45, 4.6, 0.62) position = (-3.725, -.7, 0.31) material = plaster }
+body LeftSillWallOuter { type = box size = (0.075, 4.6, 0.13) position = (-3.9125, -.7, 0.685) material = plaster }
+body LeftLintel { type = box size = (0.45, 4.6, 0.35) position = (-3.725, -.7, 4.425) material = plaster  }
+body Sill { type = box size = (0.65, 4.8, 0.13) position = (-3.55, -.7, 0.685) material = limestone  }
+body WindowJamb0 { type = box size = (0.3, 0.065, 3.5) position = (-3.68, -2.9675, 2.5) material = limestone }
+body WindowBead0 { type = cylinder radius = .033 height = 3.5 position = (-3.47,-1.6,.75) material = limestone }
+body WindowJamb1 { type = box size = (0.3, 0.13, 3.5) position = (-3.68, 0, 2.5) material = limestone  }
+body WindowBead1 { type = cylinder radius = .033 height = 3.5 position = (-3.47,0,.75) material = limestone }
+body WindowJamb2 { type = box size = (0.3, 0.065, 3.5) position = (-3.68, 1.5675, 2.5) material = limestone }
+body WindowBead2 { type = cylinder radius = .033 height = 3.5 position = (-3.467,1.6,.75) material = limestone }
+# Rail ends meet jamb faces; exposed edges and aperture are retained.
+body WindowRail0 { type = box size = (0.24, 2.87, 0.0725) position = (-3.67, -1.5, 0.78625) material = limestone }
+body WindowRail0Right { type = box size = (0.24, 1.47, 0.0725) position = (-3.67, 0.8, 0.78625) material = limestone }
+# Rail ends meet jamb faces; exposed edges and aperture are retained.
+body WindowRail1 { type = box size = (0.24, 2.87, 0.085) position = (-3.67, -1.5, 2.1) material = limestone }
+body WindowRail1Right { type = box size = (0.24, 1.47, 0.085) position = (-3.67, 0.8, 2.1) material = limestone }
+# Rail ends meet jamb faces; exposed edges and aperture are retained.
+body WindowRail2 { type = box size = (0.24, 2.87, 0.0625) position = (-3.67, -1.5, 4.21875) material = limestone }
+body WindowRail2Right { type = box size = (0.24, 1.47, 0.0625) position = (-3.67, 0.8, 4.21875) material = limestone }
+body FarWainscot { type = box size = (6.98, 0.04, 1.12) position = (0, 2.978, 0.56) material = walnut  }
+body PanelStile0 { type = box size = (0.065, 0.07, 1.12) position = (-3.12, 2.925, 0.56) material = walnut  }
+body PanelMould0_0 { type = box size = (0.68, 0.085, 0.028) position = (-2.73, 2.91, 0.18) material = walnut  }
+body PanelMould0_1 { type = box size = (0.68, 0.085, 0.028) position = (-2.73, 2.91, 0.96) material = walnut  }
+body PanelStile1 { type = box size = (0.065, 0.07, 1.12) position = (-2.34, 2.925, 0.56) material = walnut  }
+body PanelMould1_0 { type = box size = (0.68, 0.085, 0.028) position = (-1.9499999999999997, 2.91, 0.18) material = walnut  }
+body PanelMould1_1 { type = box size = (0.68, 0.085, 0.028) position = (-1.9499999999999997, 2.91, 0.96) material = walnut  }
+body PanelStile2 { type = box size = (0.065, 0.07, 1.12) position = (-1.56, 2.925, 0.56) material = walnut  }
+body PanelMould2_0 { type = box size = (0.68, 0.085, 0.028) position = (-1.17, 2.91, 0.18) material = walnut  }
+body PanelMould2_1 { type = box size = (0.68, 0.085, 0.028) position = (-1.17, 2.91, 0.96) material = walnut  }
+body PanelStile3 { type = box size = (0.065, 0.07, 1.12) position = (-0.78, 2.925, 0.56) material = walnut  }
+body PanelMould3_0 { type = box size = (0.68, 0.085, 0.028) position = (-0.39, 2.91, 0.18) material = walnut  }
+body PanelMould3_1 { type = box size = (0.68, 0.085, 0.028) position = (-0.39, 2.91, 0.96) material = walnut  }
+body PanelStile4 { type = box size = (0.065, 0.07, 1.12) position = (0, 2.925, 0.56) material = walnut  }
+body PanelMould4_0 { type = box size = (0.68, 0.085, 0.028) position = (0.39, 2.91, 0.18) material = walnut  }
+body PanelMould4_1 { type = box size = (0.68, 0.085, 0.028) position = (0.39, 2.91, 0.96) material = walnut  }
+body PanelStile5 { type = box size = (0.065, 0.07, 1.12) position = (0.78, 2.925, 0.56) material = walnut  }
+body PanelMould5_0 { type = box size = (0.68, 0.085, 0.028) position = (1.17, 2.91, 0.18) material = walnut  }
+body PanelMould5_1 { type = box size = (0.68, 0.085, 0.028) position = (1.17, 2.91, 0.96) material = walnut  }
+body PanelStile6 { type = box size = (0.065, 0.07, 1.12) position = (1.56, 2.925, 0.56) material = walnut  }
+body PanelMould6_0 { type = box size = (0.68, 0.085, 0.028) position = (1.9500000000000002, 2.91, 0.18) material = walnut  }
+body PanelMould6_1 { type = box size = (0.68, 0.085, 0.028) position = (1.9500000000000002, 2.91, 0.96) material = walnut  }
+body PanelStile7 { type = box size = (0.065, 0.07, 1.12) position = (2.34, 2.925, 0.56) material = walnut  }
+body PanelMould7_0 { type = box size = (0.68, 0.085, 0.028) position = (2.73, 2.91, 0.18) material = walnut  }
+body PanelMould7_1 { type = box size = (0.68, 0.085, 0.028) position = (2.73, 2.91, 0.96) material = walnut  }
+body PanelStile8 { type = box size = (0.065, 0.07, 1.12) position = (3.12, 2.925, 0.56) material = walnut  }
+body PanelMould8_0 { type = box size = (0.68, 0.085, 0.028) position = (3.5100000000000002, 2.91, 0.18) material = walnut  }
+body PanelMould8_1 { type = box size = (0.68, 0.085, 0.028) position = (3.5100000000000002, 2.91, 0.96) material = walnut  }
+body Skirting { type = box size = (6.98, 0.12, 0.15) position = (0, 2.939, 0.075) material = walnut  }
+body ChairRail { type = box size = (6.98, 0.12, 0.065) position = (0, 2.939, 1.15) material = walnut  }
+body Cornice { type = box size = (6.98, 0.18, 0.14) position = (0, 2.9090000000000003, 4.42) material = walnut  }
+body CorniceLip { type = box size = (6.98, 0.23, 0.035) position = (0, 2.884, 4.31) material = walnut  }
+body UpperTier { type = box size = (1.95, 0.76, 0.045) position = (-1.07, -1.0, 1.0575) material = furnitureOak  }
+body LowerTier { type = box size = (1.95, 0.98, 0.045) position = (-1.07, -1.0899999999999999, 0.6275) material = furnitureOak  }
+body Astrolabe0 { type = mesh file = "../assets/sketchfab/astrolabe/scene.gltf" part = "Default_OBJ" fit_height = 0.308716378 normals = file position = (-1.67, -0.98, 1.1048) rotate = (0, 0, -12) material = AstrolabeMat0 }
+body Globe0 { type = mesh file = "../assets/sketchfab/jagiellonian_globe/scene.gltf" part = "MUJ_798_I_Globus_Jagiellonski_u1_v1" fit_height = 0.420000000 normals = file position = (-1.05, -0.94, 1.0868) rotate = (0, 0, 16) material = GlobeMat0 }
+body Sextant0 { type = mesh file = "../assets/sketchfab/pocket_sextant/scene.gltf" part = "17231_2255_V_Sekstant_kieszonkowy_07_FIN" fit_height = 0.080000000 normals = file position = (-0.45, -1.1400000000000001, 1.0868) rotate = (0, 0, -20) material = SextantMat0 }
+body Sextant1 { type = mesh file = "../assets/sketchfab/pocket_sextant/scene.gltf" part = "Default_OBJ" fit_height = 0.080000000 normals = file position = (-0.45, -1.1400000000000001, 1.0868) rotate = (0, 0, -20) material = SextantMat1 }
+body Book0 { type = mesh file = "../assets/sketchfab/coptic_prayer_book/scene.gltf" part = "material0" fit_height = 0.071352451 normals = file position = (-1.53, -1.3599999999999999, 0.6502) rotate = (0, 0, -12) material = BookMat0 }
+body Tellurium0 { type = mesh file = "../assets/sketchfab/tellurium_lunarium/scene.gltf" part = "KGS-001-x" fit_height = 0.475315000 normals = file position = (-.50,-.80,1.0868) rotate = (0, 0, 7) material = TelluriumMat0 }
+body Tellurium1 { type = mesh file = "../assets/sketchfab/tellurium_lunarium/scene.gltf" part = "KGS-001-x_Elemente" fit_height = 0.475315000 normals = file position = (-.50,-.80,1.0868) rotate = (0, 0, 7) material = TelluriumMat1 }
+body TableLeg0 { type = lathe segments = 48 position = (-1.96,-1.32,0) material = furnitureOak profile = [(.05,0),(.05,.08),(.035,.12),(.03,.30),(.058,.38),(.058,.44),(.032,.50),(.032,.67),(.054,.74),(.054,.81),(.035,.88),(.035,1.035)] }
+body TableLeg1 { type = lathe segments = 48 position = (-0.18,-1.32,0) material = furnitureOak profile = [(.05,0),(.05,.08),(.035,.12),(.03,.30),(.058,.38),(.058,.44),(.032,.50),(.032,.67),(.054,.74),(.054,.81),(.035,.88),(.035,1.035)] }
+body TableLeg2 { type = lathe segments = 48 position = (-1.96,-0.68,0) material = furnitureOak profile = [(.05,0),(.05,.08),(.035,.12),(.03,.30),(.058,.38),(.058,.44),(.032,.50),(.032,.67),(.054,.74),(.054,.81),(.035,.88),(.035,1.035)] }
+body TableLeg3 { type = lathe segments = 48 position = (-0.18,-0.68,0) material = furnitureOak profile = [(.05,0),(.05,.08),(.035,.12),(.03,.30),(.058,.38),(.058,.44),(.032,.50),(.032,.67),(.054,.74),(.054,.81),(.035,.88),(.035,1.035)] }
+body TableStretcher { type = box size = (1.78, 0.055, 0.065) position = (-1.07, -1.0, 0.25) material = furnitureOak  }
+material ArmourClothMat { type = diffuse texture = image("../assets/sketchfab/armor_man_and_horse/textures/Armor_Mat_baseColor.jpeg", mapping = uv)  normal_map = image("../assets/sketchfab/armor_man_and_horse/textures/Armor_Mat_normal.jpeg", mapping = uv) roughness_map = image("../assets/sketchfab/armor_man_and_horse/textures/Armor_Mat_metallicRoughness.png", mapping = uv) }
+body Armour0 { type = mesh file = "../assets/sketchfab/armor_man_and_horse/curated/scene.gltf" part = "Steel" fit_height = 3.714308000 normals = file position = (1.1, .65, .10) rotate = (-0.0, 0.0, -30) material = ArmourMat0 }
+body ArmourCloth { type = mesh file = "../assets/sketchfab/armor_man_and_horse/curated/scene.gltf" part = "CrimsonCloth" fit_height = 3.714308000 normals = file position = (1.1, .65, .10) rotate = (-0.0, 0.0, -30) material = ArmourClothMat }
+body Helmet0 { type = mesh file = "../assets/sketchfab/closed_helmet/scene.gltf" part = "wire_006134006" fit_height = 0.340000000 normals = file position = (2.25, -.12, .5292) rotate = (0, 0, -24) material = HelmetMat0 }
+body Rapier0 { type = mesh file = "../assets/sketchfab/rapier_mascarenhas/scene.gltf" part = "Gold" fit_height = 0.106741118 normals = file position = (3.38, .1, 1.4) rotate = (90, 0, -10) material = RapierMat0 }
+body Rapier1 { type = mesh file = "../assets/sketchfab/rapier_mascarenhas/scene.gltf" part = "Silver" fit_height = 0.106741118 normals = file position = (3.38, .1, 1.4) rotate = (90, 0, -10) material = RapierMat1 }
+body Rapier2 { type = mesh file = "../assets/sketchfab/rapier_mascarenhas/scene.gltf" part = "Steel" fit_height = 0.106741118 normals = file position = (3.38, .1, 1.4) rotate = (90, 0, -10) material = RapierMat2 }
+body RapierRack { type = box size = (0.12,0.14,0.025) position = (3.44,.1,1.80) material = walnut }
+body ArmourPlinth { type = box size = (2.12, 2.2, 0.1) position = (1.1, 0.65, 0.05) material = limestone  }
+body Cabinet { type = mesh file = "../assets/polyhaven/GothicCabinet_01/GothicCabinet_01_2k.gltf" normals = file ground = true position = (-2.2,2.28,0) rotate = (0,0,4) material = CabinetWood }
+body Bust { type = mesh file = "../assets/polyhaven/marble_bust_01/marble_bust_01_2k.gltf" normals = file ground = true position = (-2.15,2.22,2.361) rotate = (0,0,-14) material = BustMarble }
+# Wawel chest, ZKWawel 1558, CC0, Virtual Museums of Malopolska.
+# https://sketchfab.com/3d-models/chest-c580f18e25b740e49ce8dd0f8cfd3247
+# Native millimetre scan: 1.571 x .558 x .529m; retained uniformly.
+material ChestWood { type = diffuse texture = image("../assets/sketchfab/wawel_chest/textures/material_diffuse.png", mapping = uv) roughness = .4  normal_map = image("../assets/sketchfab/wawel_chest/textures/material_normal.png", mapping = uv) normal_strength = .47 }
+body HelmetChest { type = mesh file = "../assets/sketchfab/wawel_chest/scene.gltf" scale = .001 ground = true normals = file position = (2.25,-.12,0) rotate = (0,0,-7) material = ChestWood }
+
+body Tablecloth { type = mesh file = "../models/crafted/the_kunstkammer_cloth.gltf" normals = smooth material = wool }
+# A low oak cradle supports the astrolabe's rim and back, at its actual scale.
+assembly AstrolabeCradle { position = (-1.67,-.98,1.0868) rotate = (0,0,-12)
+ body Foot { type = box size = (.15,.095,.018) position = (0,.018,.009) material = furnitureOak }
+ body Back { type = box size = (.035,.028,.16) position = (0,.041,.098) material = furnitureOak }
+ body Lip { type = box size = (.075,.012,.026) position = (0,-.025,.031) material = furnitureOak }
+}
+# Hand-leaded clear casements within the deep stone reveal. Real rods, no mask.
+material CasementGlass { type = stained_glass transmittance = .98 index = constant(1.52) thickness = 2mm roughness = .003 }
+body ThirdMullion { type = box size = (.30,.10,3.5) position = (-3.68,-1.5,2.5) material = limestone }
+body CasementPane0 { type = sheet size = (1.3800000000000001,1.2300000000000002) position = (-3.74,-2.245,1.44) axis = (1,0,0) up = (0,0,1) material = CasementGlass }
+body LeadCame1 { type = cylinder radius = 2.3mm height = 0.037353647229627945 position = (-3.725,-2.935,0.8557499999999996) axis = (0,0.02120689655172381,-0.03074999999999961) material = iron }
+body LeadCame2 { type = cylinder radius = 2.3mm height = 0.4503695840775528 position = (-3.725,-2.935,1.1957499999999999) axis = (0,0.25568965517241393,-0.3707499999999999) material = iron }
+body LeadCame3 { type = cylinder radius = 2.3mm height = 0.863385520925477 position = (-3.725,-2.935,1.5357499999999997) axis = (0,0.4901724137931036,-0.7107499999999998) material = iron }
+body LeadCame4 { type = cylinder radius = 2.3mm height = 1.2764014577734009 position = (-3.725,-2.935,1.8757499999999996) axis = (0,0.7246551724137928,-1.0507499999999996) material = iron }
+body LeadCame5 { type = cylinder radius = 2.3mm height = 1.4941458891851382 position = (-3.725,-1.9758620689655175,0.825) axis = (0,-0.8482758620689657,1.2300000000000002) material = iron }
+body LeadCame6 { type = cylinder radius = 2.3mm height = 1.4941458891851382 position = (-3.725,-1.7413793103448278,0.825) axis = (0,-0.8482758620689657,1.2300000000000002) material = iron }
+body LeadCame7 { type = cylinder radius = 2.3mm height = 1.409416884493542 position = (-3.725,-1.555,0.8947499999999999) axis = (0,-0.8001724137931034,1.1602500000000002) material = iron }
+body LeadCame8 { type = cylinder radius = 2.3mm height = 0.9964009476456178 position = (-3.725,-1.555,1.23475) axis = (0,-0.5656896551724142,0.8202500000000001) material = iron }
+body LeadCame9 { type = cylinder radius = 2.3mm height = 0.5833850107976936 position = (-3.725,-1.555,1.5747499999999999) axis = (0,-0.33120689655172453,0.4802500000000003) material = iron }
+body LeadCame10 { type = cylinder radius = 2.3mm height = 0.17036907394976902 position = (-3.725,-1.555,1.91475) axis = (0,-0.09672413793103463,0.1402500000000002) material = iron }
+body LeadCame11 { type = cylinder radius = 2.3mm height = 0.38902456992808204 position = (-3.725,-1.555,1.1452500000000003) axis = (0,-0.2208620689655174,-0.32025000000000037) material = iron }
+body LeadCame12 { type = cylinder radius = 2.3mm height = 0.8020405067760062 position = (-3.725,-1.555,1.4852500000000002) axis = (0,-0.4553448275862071,-0.6602500000000002) material = iron }
+body LeadCame13 { type = cylinder radius = 2.3mm height = 1.2150564436239304 position = (-3.725,-1.555,1.82525) axis = (0,-0.6898275862068968,-1.00025) material = iron }
+body LeadCame14 { type = cylinder radius = 2.3mm height = 1.494145889185138 position = (-3.725,-2.479310344827586,0.825) axis = (0,0.8482758620689654,1.2300000000000002) material = iron }
+body LeadCame15 { type = cylinder radius = 2.3mm height = 1.494145889185138 position = (-3.725,-2.713793103448276,0.825) axis = (0,0.8482758620689652,1.2300000000000002) material = iron }
+body LeadCame16 { type = cylinder radius = 2.3mm height = 1.4707618986430122 position = (-3.725,-2.935,0.8442500000000006) axis = (0,0.8349999999999995,1.2107499999999995) material = iron }
+body LeadCame17 { type = cylinder radius = 2.3mm height = 1.0577459617950882 position = (-3.725,-2.935,1.1842500000000005) axis = (0,0.6005172413793103,0.8707499999999997) material = iron }
+body LeadCame18 { type = cylinder radius = 2.3mm height = 0.644730024947164 position = (-3.725,-2.935,1.5242500000000003) axis = (0,0.3660344827586206,0.5307499999999998) material = iron }
+body LeadCame19 { type = cylinder radius = 2.3mm height = 0.23171408809924007 position = (-3.725,-2.935,1.8642500000000002) axis = (0,0.13155172413793137,0.19074999999999998) material = iron }
+body CasementPane20 { type = sheet size = (1.3800000000000001,2.0399999999999996) position = (-3.74,-2.245,3.165) axis = (1,0,0) up = (0,0,1) material = CasementGlass }
+body LeadCame21 { type = cylinder radius = 2.3mm height = 0.08594375744703105 position = (-3.725,-2.935,2.21575) axis = (0,0.04879310344827559,-0.07074999999999987) material = iron }
+body LeadCame22 { type = cylinder radius = 2.3mm height = 0.49895969429495524 position = (-3.725,-2.935,2.5557499999999997) axis = (0,0.28327586206896527,-0.4107499999999997) material = iron }
+body LeadCame23 { type = cylinder radius = 2.3mm height = 0.9119756311428797 position = (-3.725,-2.935,2.8957499999999996) axis = (0,0.5177586206896554,-0.7507499999999996) material = iron }
+body LeadCame24 { type = cylinder radius = 2.3mm height = 1.324991567990804 position = (-3.725,-2.935,3.23575) axis = (0,0.7522413793103446,-1.0907499999999999) material = iron }
+body LeadCame25 { type = cylinder radius = 2.3mm height = 1.7380075048387282 position = (-3.725,-2.935,3.5757499999999998) axis = (0,0.9867241379310343,-1.4307499999999997) material = iron }
+body LeadCame26 { type = cylinder radius = 2.3mm height = 2.151023441686653 position = (-3.725,-2.935,3.91575) axis = (0,1.2212068965517242,-1.77075) material = iron }
+body LeadCame27 { type = cylinder radius = 2.3mm height = 2.3447765061785466 position = (-3.725,-1.555,2.25475) axis = (0,-1.331206896551724,1.9302499999999996) material = iron }
+body LeadCame28 { type = cylinder radius = 2.3mm height = 1.9317605693306221 position = (-3.725,-1.555,2.59475) axis = (0,-1.0967241379310344,1.5902499999999997) material = iron }
+body LeadCame29 { type = cylinder radius = 2.3mm height = 1.5187446324826976 position = (-3.725,-1.555,2.93475) axis = (0,-0.8622413793103447,1.2502499999999994) material = iron }
+body LeadCame30 { type = cylinder radius = 2.3mm height = 1.1057286956347734 position = (-3.725,-1.555,3.27475) axis = (0,-0.627758620689655,0.9102499999999996) material = iron }
+body LeadCame31 { type = cylinder radius = 2.3mm height = 0.6927127587868491 position = (-3.725,-1.555,3.61475) axis = (0,-0.39327586206896514,0.5702499999999997) material = iron }
+body LeadCame32 { type = cylinder radius = 2.3mm height = 0.27969682193892464 position = (-3.725,-1.555,3.95475) axis = (0,-0.15879310344827569,0.2302499999999994) material = iron }
+body LeadCame33 { type = cylinder radius = 2.3mm height = 0.024598743297560087 position = (-3.725,-1.555,2.16525) axis = (0,-0.013965517241379288,-0.02024999999999988) material = iron }
+body LeadCame34 { type = cylinder radius = 2.3mm height = 0.43761468014548544 position = (-3.725,-1.555,2.5052500000000006) axis = (0,-0.24844827586206963,-0.3602500000000006) material = iron }
+body LeadCame35 { type = cylinder radius = 2.3mm height = 0.8506306169934096 position = (-3.725,-1.555,2.8452500000000005) axis = (0,-0.4829310344827593,-0.7002500000000005) material = iron }
+body LeadCame36 { type = cylinder radius = 2.3mm height = 1.2636465538413335 position = (-3.725,-1.555,3.1852500000000004) axis = (0,-0.7174137931034485,-1.0402500000000003) material = iron }
+body LeadCame37 { type = cylinder radius = 2.3mm height = 1.6766624906892578 position = (-3.725,-1.555,3.52525) axis = (0,-0.9518965517241382,-1.3802500000000002) material = iron }
+body LeadCame38 { type = cylinder radius = 2.3mm height = 2.089678427537182 position = (-3.725,-1.555,3.86525) axis = (0,-1.186379310344828,-1.72025) material = iron }
+body LeadCame39 { type = cylinder radius = 2.3mm height = 2.4061215203280164 position = (-3.725,-2.935,2.204250000000001) axis = (0,1.36603448275862,1.9807499999999987) material = iron }
+body LeadCame40 { type = cylinder radius = 2.3mm height = 1.9931055834800921 position = (-3.725,-2.935,2.544250000000001) axis = (0,1.1315517241379303,1.6407499999999988) material = iron }
+body LeadCame41 { type = cylinder radius = 2.3mm height = 1.580089646632168 position = (-3.725,-2.935,2.8842500000000006) axis = (0,0.8970689655172408,1.300749999999999) material = iron }
+body LeadCame42 { type = cylinder radius = 2.3mm height = 1.1670737097842439 position = (-3.725,-2.935,3.2242500000000005) axis = (0,0.6625862068965511,0.9607499999999991) material = iron }
+body LeadCame43 { type = cylinder radius = 2.3mm height = 0.7540577729363197 position = (-3.725,-2.935,3.5642500000000004) axis = (0,0.42810344827586144,0.6207499999999992) material = iron }
+body LeadCame44 { type = cylinder radius = 2.3mm height = 0.3410418360883957 position = (-3.725,-2.935,3.90425) axis = (0,0.1936206896551722,0.2807499999999994) material = iron }
+body CasementPane45 { type = sheet size = (1.3800000000000001,1.2300000000000002) position = (-3.74,-0.755,1.44) axis = (1,0,0) up = (0,0,1) material = CasementGlass }
+body LeadCame46 { type = cylinder radius = 2.3mm height = 0.30399187704762676 position = (-3.725,-1.445,1.07525) axis = (0,0.1725862068965518,-0.2502500000000001) material = iron }
+body LeadCame47 { type = cylinder radius = 2.3mm height = 0.717007813895551 position = (-3.725,-1.445,1.41525) axis = (0,0.4070689655172415,-0.5902499999999999) material = iron }
+body LeadCame48 { type = cylinder radius = 2.3mm height = 1.1300237507434754 position = (-3.725,-1.445,1.75525) axis = (0,0.641551724137931,-0.93025) material = iron }
+body LeadCame49 { type = cylinder radius = 2.3mm height = 1.4941458891851382 position = (-3.725,-0.5689655172413793,0.825) axis = (0,-0.8482758620689655,1.2300000000000002) material = iron }
+body LeadCame50 { type = cylinder radius = 2.3mm height = 1.4941458891851382 position = (-3.725,-0.3344827586206896,0.825) axis = (0,-0.8482758620689657,1.2300000000000002) material = iron }
+body LeadCame51 { type = cylinder radius = 2.3mm height = 1.4941458891851382 position = (-3.725,-0.09999999999999994,0.825) axis = (0,-0.8482758620689655,1.2300000000000002) material = iron }
+body LeadCame52 { type = cylinder radius = 2.3mm height = 1.1427786546755436 position = (-3.725,-0.065,1.11425) axis = (0,-0.6487931034482759,0.9407500000000002) material = iron }
+body LeadCame53 { type = cylinder radius = 2.3mm height = 0.7297627178276194 position = (-3.725,-0.065,1.45425) axis = (0,-0.4143103448275863,0.6007500000000001) material = iron }
+body LeadCame54 { type = cylinder radius = 2.3mm height = 0.31674678097969494 position = (-3.725,-0.065,1.7942500000000001) axis = (0,-0.17982758620689654,0.26075000000000004) material = iron }
+body LeadCame55 { type = cylinder radius = 2.3mm height = 0.12238634011008358 position = (-3.725,-0.065,0.9257500000000001) axis = (0,-0.0694827586206897,-0.10075000000000012) material = iron }
+body LeadCame56 { type = cylinder radius = 2.3mm height = 0.535402276958008 position = (-3.725,-0.065,1.2657500000000002) axis = (0,-0.30396551724137943,-0.4407500000000002) material = iron }
+body LeadCame57 { type = cylinder radius = 2.3mm height = 0.9484182138059325 position = (-3.725,-0.065,1.6057500000000002) axis = (0,-0.5384482758620692,-0.7807500000000003) material = iron }
+body LeadCame58 { type = cylinder radius = 2.3mm height = 1.3614341506538565 position = (-3.725,-0.065,1.94575) axis = (0,-0.7729310344827587,-1.1207500000000001) material = iron }
+body LeadCame59 { type = cylinder radius = 2.3mm height = 1.4941458891851382 position = (-3.725,-1.0724137931034485,0.825) axis = (0,0.8482758620689657,1.2300000000000002) material = iron }
+body LeadCame60 { type = cylinder radius = 2.3mm height = 1.4941458891851382 position = (-3.725,-1.3068965517241382,0.825) axis = (0,0.8482758620689658,1.2300000000000002) material = iron }
+body LeadCame61 { type = cylinder radius = 2.3mm height = 1.324384191613087 position = (-3.725,-1.445,0.96475) axis = (0,0.751896551724138,1.0902500000000002) material = iron }
+body LeadCame62 { type = cylinder radius = 2.3mm height = 0.9113682547651623 position = (-3.725,-1.445,1.3047500000000003) axis = (0,0.5174137931034481,0.7502499999999999) material = iron }
+body LeadCame63 { type = cylinder radius = 2.3mm height = 0.49835231791723816 position = (-3.725,-1.445,1.6447500000000002) axis = (0,0.2829310344827587,0.41025) material = iron }
+body LeadCame64 { type = cylinder radius = 2.3mm height = 0.08533638106931392 position = (-3.725,-1.445,1.98475) axis = (0,0.04844827586206901,0.07025000000000015) material = iron }
+body CasementPane65 { type = sheet size = (1.3800000000000001,2.0399999999999996) position = (-3.74,-0.755,3.165) axis = (1,0,0) up = (0,0,1) material = CasementGlass }
+body LeadCame66 { type = cylinder radius = 2.3mm height = 0.3525819872650295 position = (-3.725,-1.445,2.43525) axis = (0,0.20017241379310358,-0.2902499999999999) material = iron }
+body LeadCame67 { type = cylinder radius = 2.3mm height = 0.7655979241129541 position = (-3.725,-1.445,2.77525) axis = (0,0.43465517241379326,-0.6302500000000002) material = iron }
+body LeadCame68 { type = cylinder radius = 2.3mm height = 1.1786138609608783 position = (-3.725,-1.445,3.11525) axis = (0,0.6691379310344828,-0.9702500000000001) material = iron }
+body LeadCame69 { type = cylinder radius = 2.3mm height = 1.5916297978088028 position = (-3.725,-1.445,3.4552500000000004) axis = (0,0.9036206896551725,-1.3102500000000004) material = iron }
+body LeadCame70 { type = cylinder radius = 2.3mm height = 2.004645734656727 position = (-3.725,-1.445,3.7952500000000002) axis = (0,1.1381034482758623,-1.6502500000000002) material = iron }
+body LeadCame71 { type = cylinder radius = 2.3mm height = 2.4176616715046513 position = (-3.725,-1.445,4.13525) axis = (0,1.3725862068965518,-1.99025) material = iron }
+body LeadCame72 { type = cylinder radius = 2.3mm height = 2.078138276360548 position = (-3.725,-0.065,2.4742500000000005) axis = (0,-1.179827586206896,1.710749999999999) material = iron }
+body LeadCame73 { type = cylinder radius = 2.3mm height = 1.6651223395126236 position = (-3.725,-0.065,2.8142500000000004) axis = (0,-0.9453448275862066,1.3707499999999992) material = iron }
+body LeadCame74 { type = cylinder radius = 2.3mm height = 1.2521064026646993 position = (-3.725,-0.065,3.15425) axis = (0,-0.710862068965517,1.0307499999999994) material = iron }
+body LeadCame75 { type = cylinder radius = 2.3mm height = 0.8390904658167746 position = (-3.725,-0.065,3.4942500000000005) axis = (0,-0.4763793103448271,0.6907499999999991) material = iron }
+body LeadCame76 { type = cylinder radius = 2.3mm height = 0.4260745289688505 position = (-3.725,-0.065,3.8342500000000004) axis = (0,-0.24189655172413754,0.35074999999999923) material = iron }
+body LeadCame77 { type = cylinder radius = 2.3mm height = 0.013058592120926688 position = (-3.725,-0.065,4.17425) axis = (0,-0.00741379310344796,0.010749999999999815) material = iron }
+body LeadCame78 { type = cylinder radius = 2.3mm height = 0.17097645032748657 position = (-3.725,-0.065,2.28575) axis = (0,-0.09706896551724159,-0.14075000000000015) material = iron }
+body LeadCame79 { type = cylinder radius = 2.3mm height = 0.5839923871754107 position = (-3.725,-0.065,2.62575) axis = (0,-0.33155172413793116,-0.48075) material = iron }
+body LeadCame80 { type = cylinder radius = 2.3mm height = 0.997008324023335 position = (-3.725,-0.065,2.96575) axis = (0,-0.5660344827586208,-0.8207499999999999) material = iron }
+body LeadCame81 { type = cylinder radius = 2.3mm height = 1.4100242608712596 position = (-3.725,-0.065,3.30575) axis = (0,-0.8005172413793107,-1.1607500000000002) material = iron }
+body LeadCame82 { type = cylinder radius = 2.3mm height = 1.8230401977191837 position = (-3.725,-0.065,3.64575) axis = (0,-1.0350000000000001,-1.50075) material = iron }
+body LeadCame83 { type = cylinder radius = 2.3mm height = 2.2360561345671077 position = (-3.725,-0.065,3.98575) axis = (0,-1.2694827586206898,-1.8407499999999999) material = iron }
+body LeadCame84 { type = cylinder radius = 2.3mm height = 2.2597438132980914 position = (-3.725,-1.445,2.32475) axis = (0,1.2829310344827585,1.8602499999999997) material = iron }
+body LeadCame85 { type = cylinder radius = 2.3mm height = 1.8467278764501662 position = (-3.725,-1.445,2.6647500000000006) axis = (0,1.0484482758620683,1.520249999999999) material = iron }
+body LeadCame86 { type = cylinder radius = 2.3mm height = 1.4337119396022422 position = (-3.725,-1.445,3.0047500000000005) axis = (0,0.8139655172413787,1.1802499999999991) material = iron }
+body LeadCame87 { type = cylinder radius = 2.3mm height = 1.020696002754318 position = (-3.725,-1.445,3.3447500000000003) axis = (0,0.5794827586206891,0.8402499999999993) material = iron }
+body LeadCame88 { type = cylinder radius = 2.3mm height = 0.6076800659063938 position = (-3.725,-1.445,3.68475) axis = (0,0.34499999999999953,0.5002499999999994) material = iron }
+body LeadCame89 { type = cylinder radius = 2.3mm height = 0.1946641290584697 position = (-3.725,-1.445,4.02475) axis = (0,0.11051724137931007,0.16024999999999956) material = iron }
+body CasementPane90 { type = sheet size = (1.47,1.2300000000000002) position = (-3.74,0.7999999999999999,1.44) axis = (1,0,0) up = (0,0,1) material = CasementGlass }
+body LeadCame91 { type = cylinder radius = 2.3mm height = 0.12238634011008358 position = (-3.725,0.065,0.9257500000000001) axis = (0,0.0694827586206897,-0.10075000000000012) material = iron }
+body LeadCame92 { type = cylinder radius = 2.3mm height = 0.535402276958008 position = (-3.725,0.065,1.2657500000000002) axis = (0,0.30396551724137943,-0.4407500000000002) material = iron }
+body LeadCame93 { type = cylinder radius = 2.3mm height = 0.9484182138059325 position = (-3.725,0.065,1.6057500000000002) axis = (0,0.5384482758620692,-0.7807500000000003) material = iron }
+body LeadCame94 { type = cylinder radius = 2.3mm height = 1.3614341506538565 position = (-3.725,0.065,1.94575) axis = (0,0.7729310344827587,-1.1207500000000001) material = iron }
+body LeadCame95 { type = cylinder radius = 2.3mm height = 1.4941458891851382 position = (-3.725,1.0724137931034485,0.825) axis = (0,-0.8482758620689657,1.2300000000000002) material = iron }
+body LeadCame96 { type = cylinder radius = 2.3mm height = 1.4941458891851382 position = (-3.725,1.3068965517241382,0.825) axis = (0,-0.8482758620689658,1.2300000000000002) material = iron }
+body LeadCame97 { type = cylinder radius = 2.3mm height = 1.4829094261973634 position = (-3.725,1.535,0.8342500000000004) axis = (0,-0.8418965517241379,1.2207499999999998) material = iron }
+body LeadCame98 { type = cylinder radius = 2.3mm height = 1.0698934893494387 position = (-3.725,1.535,1.1742500000000007) axis = (0,-0.607413793103448,0.8807499999999995) material = iron }
+body LeadCame99 { type = cylinder radius = 2.3mm height = 0.6568775525015146 position = (-3.725,1.535,1.5142500000000005) axis = (0,-0.37293103448275855,0.5407499999999996) material = iron }
+body LeadCame100 { type = cylinder radius = 2.3mm height = 0.24386161565359035 position = (-3.725,1.535,1.8542500000000004) axis = (0,-0.13844827586206887,0.20074999999999976) material = iron }
+body LeadCame101 { type = cylinder radius = 2.3mm height = 0.0495011747839788 position = (-3.725,1.535,0.8657499999999996) axis = (0,-0.028103448275861975,-0.04074999999999962) material = iron }
+body LeadCame102 { type = cylinder radius = 2.3mm height = 0.4625171116319032 position = (-3.725,1.535,1.2057499999999997) axis = (0,-0.26258620689655165,-0.3807499999999997) material = iron }
+body LeadCame103 { type = cylinder radius = 2.3mm height = 0.8755330484798274 position = (-3.725,1.535,1.5457499999999995) axis = (0,-0.49706896551724133,-0.7207499999999996) material = iron }
+body LeadCame104 { type = cylinder radius = 2.3mm height = 1.2885489853277516 position = (-3.725,1.535,1.8857499999999996) axis = (0,-0.7315517241379309,-1.0607499999999996) material = iron }
+body LeadCame105 { type = cylinder radius = 2.3mm height = 1.4941458891851382 position = (-3.725,0.5689655172413793,0.825) axis = (0,0.8482758620689655,1.2300000000000002) material = iron }
+body LeadCame106 { type = cylinder radius = 2.3mm height = 1.4941458891851382 position = (-3.725,0.3344827586206896,0.825) axis = (0,0.8482758620689657,1.2300000000000002) material = iron }
+body LeadCame107 { type = cylinder radius = 2.3mm height = 1.4941458891851382 position = (-3.725,0.09999999999999994,0.825) axis = (0,0.8482758620689655,1.2300000000000002) material = iron }
+body LeadCame108 { type = cylinder radius = 2.3mm height = 1.1427786546755436 position = (-3.725,0.065,1.11425) axis = (0,0.6487931034482759,0.9407500000000002) material = iron }
+body LeadCame109 { type = cylinder radius = 2.3mm height = 0.7297627178276194 position = (-3.725,0.065,1.45425) axis = (0,0.4143103448275863,0.6007500000000001) material = iron }
+body LeadCame110 { type = cylinder radius = 2.3mm height = 0.31674678097969494 position = (-3.725,0.065,1.7942500000000001) axis = (0,0.17982758620689654,0.26075000000000004) material = iron }
+body CasementPane111 { type = sheet size = (1.47,2.0399999999999996) position = (-3.74,0.7999999999999999,3.165) axis = (1,0,0) up = (0,0,1) material = CasementGlass }
+body LeadCame112 { type = cylinder radius = 2.3mm height = 0.17097645032748657 position = (-3.725,0.065,2.28575) axis = (0,0.09706896551724159,-0.14075000000000015) material = iron }
+body LeadCame113 { type = cylinder radius = 2.3mm height = 0.5839923871754107 position = (-3.725,0.065,2.62575) axis = (0,0.33155172413793116,-0.48075) material = iron }
+body LeadCame114 { type = cylinder radius = 2.3mm height = 0.997008324023335 position = (-3.725,0.065,2.96575) axis = (0,0.5660344827586208,-0.8207499999999999) material = iron }
+body LeadCame115 { type = cylinder radius = 2.3mm height = 1.4100242608712596 position = (-3.725,0.065,3.30575) axis = (0,0.8005172413793107,-1.1607500000000002) material = iron }
+body LeadCame116 { type = cylinder radius = 2.3mm height = 1.8230401977191837 position = (-3.725,0.065,3.64575) axis = (0,1.0350000000000001,-1.50075) material = iron }
+body LeadCame117 { type = cylinder radius = 2.3mm height = 2.2360561345671077 position = (-3.725,0.065,3.98575) axis = (0,1.2694827586206898,-1.8407499999999999) material = iron }
+body LeadCame118 { type = cylinder radius = 2.3mm height = 2.418269047882368 position = (-3.725,1.535,2.1942500000000003) axis = (0,-1.3729310344827583,1.9907499999999994) material = iron }
+body LeadCame119 { type = cylinder radius = 2.3mm height = 2.0052531110344427 position = (-3.725,1.535,2.534250000000001) axis = (0,-1.1384482758620682,1.6507499999999986) material = iron }
+body LeadCame120 { type = cylinder radius = 2.3mm height = 1.5922371741865184 position = (-3.725,1.535,2.874250000000001) axis = (0,-0.9039655172413785,1.3107499999999987) material = iron }
+body LeadCame121 { type = cylinder radius = 2.3mm height = 1.1792212373385944 position = (-3.725,1.535,3.2142500000000007) axis = (0,-0.669482758620689,0.9707499999999989) material = iron }
+body LeadCame122 { type = cylinder radius = 2.3mm height = 0.7662053004906703 position = (-3.725,1.535,3.5542500000000006) axis = (0,-0.4349999999999994,0.630749999999999) material = iron }
+body LeadCame123 { type = cylinder radius = 2.3mm height = 0.3531893636427461 position = (-3.725,1.535,3.8942500000000004) axis = (0,-0.20051724137930993,0.2907499999999992) material = iron }
+body LeadCame124 { type = cylinder radius = 2.3mm height = 0.09809128500138171 position = (-3.725,1.535,2.2257499999999997) axis = (0,-0.055689655172413755,-0.08074999999999966) material = iron }
+body LeadCame125 { type = cylinder radius = 2.3mm height = 0.5111072218493059 position = (-3.725,1.535,2.5657499999999995) axis = (0,-0.29017241379310343,-0.4207499999999995) material = iron }
+body LeadCame126 { type = cylinder radius = 2.3mm height = 0.9241231586972305 position = (-3.725,1.535,2.90575) axis = (0,-0.5246551724137931,-0.7607499999999998) material = iron }
+body LeadCame127 { type = cylinder radius = 2.3mm height = 1.3371390955451548 position = (-3.725,1.535,3.2457499999999997) axis = (0,-0.7591379310344827,-1.1007499999999997) material = iron }
+body LeadCame128 { type = cylinder radius = 2.3mm height = 1.7501550323930792 position = (-3.725,1.535,3.58575) axis = (0,-0.9936206896551724,-1.44075) material = iron }
+body LeadCame129 { type = cylinder radius = 2.3mm height = 2.1631709692410035 position = (-3.725,1.535,3.92575) axis = (0,-1.2281034482758622,-1.7807499999999998) material = iron }
+body LeadCame130 { type = cylinder radius = 2.3mm height = 2.4780956210875456 position = (-3.725,0.07241379310344827,2.145) axis = (0,1.4068965517241376,2.0399999999999996) material = iron }
+body LeadCame131 { type = cylinder radius = 2.3mm height = 2.078138276360548 position = (-3.725,0.065,2.4742500000000005) axis = (0,1.179827586206896,1.710749999999999) material = iron }
+body LeadCame132 { type = cylinder radius = 2.3mm height = 1.6651223395126236 position = (-3.725,0.065,2.8142500000000004) axis = (0,0.9453448275862066,1.3707499999999992) material = iron }
+body LeadCame133 { type = cylinder radius = 2.3mm height = 1.2521064026646993 position = (-3.725,0.065,3.15425) axis = (0,0.710862068965517,1.0307499999999994) material = iron }
+body LeadCame134 { type = cylinder radius = 2.3mm height = 0.8390904658167746 position = (-3.725,0.065,3.4942500000000005) axis = (0,0.4763793103448271,0.6907499999999991) material = iron }
+body LeadCame135 { type = cylinder radius = 2.3mm height = 0.4260745289688505 position = (-3.725,0.065,3.8342500000000004) axis = (0,0.24189655172413754,0.35074999999999923) material = iron }
+body LeadCame136 { type = cylinder radius = 2.3mm height = 0.013058592120926688 position = (-3.725,0.065,4.17425) axis = (0,0.00741379310344796,0.010749999999999815) material = iron }
+observer Room { position = (-1.3,-4.7,1.6) look_at = (.3,.5,1.6) up = (0,0,1) fov = 58deg pupil = 3mm focus = 5.35 resolution = (960,600) white_balance = 5200K exposure = 1.0 }
+observer Table { position = (-.05,-2.9,1.70) look_at = (-1.08,-.95,1.20) up = (0,0,1) fov = 38deg pupil = 3mm focus = 1.95 resolution = (960,600) white_balance = 5200K exposure = 1.0 }
+# Catalogue detail: breastplate, reins and chamfron. Room includes the whole mounted armour.
+observer Armour { position = (.6,-1.8,2.0) look_at = (1.1,.65,2.0) up = (0,0,1) fov = 35deg pupil = 3mm focus = 2.5 resolution = (960,600) white_balance = 5200K exposure = 1.0 }
+observer Book { position = (-1.57,-2.04,.96) look_at = (-1.53,-1.36,.695) up = (0,0,1) fov = 28deg pupil = 3mm focus = .72 resolution = (960,600) white_balance = 5200K exposure = .5 }
+render { detector = Room spp = 4096 integrator = path max_depth = 12 }
 

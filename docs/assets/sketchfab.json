@@ -1,0 +1,261 @@
+[
+  {
+    "slug": "jagiellonian_globe",
+    "uid": "55a10e6015af4447a66f34b272d4bf1a",
+    "name": "The Jagiellonian Globe",
+    "author": "Virtual Museums of Ma\u0142opolska",
+    "license": "CC Attribution",
+    "url": "https://sketchfab.com/3d-models/jagiellonian_globe-55a10e6015af4447a66f34b272d4bf1a",
+    "triangleCount": 999914,
+    "status": "downloaded",
+    "gltfPath": "assets/sketchfab/jagiellonian_globe/scene.gltf",
+    "materials": [
+      {
+        "name": "MUJ_798_I_Globus_Jagiellonski_u1_v1",
+        "baseColorTexture": "textures/MUJ_798_I_Globus_Jagiellonski_u1_v1_baseColor.png"
+      }
+    ],
+    "sizeBytes": 107545921
+  },
+  {
+    "slug": "peacock_table_lamp",
+    "uid": "a24bcb6b7a2e448fad661004f403ae12",
+    "name": "2018.281 Peacock Table Lamp",
+    "author": "Cleveland Museum of Art",
+    "license": "CC0 Public Domain",
+    "url": "https://sketchfab.com/3d-models/peacock_table_lamp-a24bcb6b7a2e448fad661004f403ae12",
+    "triangleCount": 59408,
+    "status": "downloaded",
+    "gltfPath": "assets/sketchfab/peacock_table_lamp/scene.gltf",
+    "materials": [
+      {
+        "name": "Ground_Mat",
+        "baseColorTexture": "textures/Ground_Mat_baseColor.png"
+      },
+      {
+        "name": "Shade",
+        "baseColorTexture": "textures/Shade_baseColor.png"
+      },
+      {
+        "name": "Inner",
+        "baseColorTexture": "textures/Inner_baseColor.jpeg"
+      },
+      {
+        "name": "Shell",
+        "baseColorTexture": "textures/Shell_baseColor.png"
+      },
+      {
+        "name": "Lamp_Material",
+        "baseColorTexture": "textures/Lamp_Material_baseColor.jpeg"
+      },
+      {
+        "name": "Chimney",
+        "baseColorTexture": null
+      },
+      {
+        "name": "Wick",
+        "baseColorTexture": "textures/Lamp_Material_baseColor.jpeg"
+      },
+      {
+        "name": "Flame",
+        "baseColorTexture": "textures/Flame_baseColor.png"
+      },
+      {
+        "name": "Bulb_Glass",
+        "baseColorTexture": null
+      },
+      {
+        "name": "Filament_Material",
+        "baseColorTexture": "textures/Filament_Material_baseColor.png"
+      }
+    ],
+    "sizeBytes": 444356755
+  },
+  {
+    "slug": "armor_man_and_horse",
+    "uid": "faca2ad557f64809b598c3a646a8804f",
+    "name": "1964.88 Armor for Man and Horse",
+    "author": "Cleveland Museum of Art",
+    "license": "CC0 Public Domain",
+    "url": "https://sketchfab.com/3d-models/armor_man_and_horse-faca2ad557f64809b598c3a646a8804f",
+    "triangleCount": 119758,
+    "status": "downloaded",
+    "gltfPath": "assets/sketchfab/armor_man_and_horse/scene.gltf",
+    "materials": [
+      {
+        "name": "Armor_Mat",
+        "baseColorTexture": "textures/Armor_Mat_baseColor.jpeg"
+      }
+    ],
+    "sizeBytes": 125265417,
+    "curation": {
+      "mesh": "curated/scene.gltf",
+      "operation": "Partition source triangles by red photo chroma into steel and diffuse textile; positions, UVs, normals and all source triangles retained.",
+      "steelTexture": "textures/steel_reflectance.jpg",
+      "steelReflectance": "neutral linear .18+.50*source luminance; full source resolution",
+      "roughnessTexture": "textures/polished_steel_roughness.png",
+      "roughness": "perceptual .10+.35*original green; full source resolution",
+      "license": "CC0 Public Domain"
+    }
+  },
+  {
+    "slug": "closed_helmet",
+    "uid": "c4bd07612f424fcd9f516cbccc2554e6",
+    "name": "Closed helmet",
+    "author": "Virtual Museums of Ma\u0142opolska",
+    "license": "CC0 Public Domain",
+    "url": "https://sketchfab.com/3d-models/closed_helmet-c4bd07612f424fcd9f516cbccc2554e6",
+    "triangleCount": 90000,
+    "status": "downloaded",
+    "gltfPath": "assets/sketchfab/closed_helmet/scene.gltf",
+    "materials": [
+      {
+        "name": "wire_006134006",
+        "baseColorTexture": "textures/wire_006134006_baseColor.jpeg"
+      }
+    ],
+    "sizeBytes": 68123212
+  },
+  {
+    "slug": "rapier_mascarenhas",
+    "uid": "cd753effd9b0465b8ab84d6003fe7acd",
+    "name": "Rapier of D. Jo\u00e3o de Mascarenhas",
+    "author": "Morbase | Museu Virtual",
+    "license": "CC0 Public Domain",
+    "url": "https://sketchfab.com/3d-models/rapier_mascarenhas-cd753effd9b0465b8ab84d6003fe7acd",
+    "triangleCount": 154112,
+    "status": "downloaded",
+    "gltfPath": "assets/sketchfab/rapier_mascarenhas/scene.gltf",
+    "materials": [
+      {
+        "name": "Gold",
+        "baseColorTexture": "textures/Gold_baseColor.png"
+      },
+      {
+        "name": "Silver",
+        "baseColorTexture": "textures/Silver_baseColor.png"
+      },
+      {
+        "name": "Steel",
+        "baseColorTexture": "textures/Steel_baseColor.png"
+      }
+    ],
+    "sizeBytes": 135855987
+  },
+  {
+    "slug": "astrolabe",
+    "uid": "530bd21edcdf4c4695cc4c8af856d6bf",
+    "name": "Astrolabe",
+    "author": "Virtual Museums of Ma\u0142opolska",
+    "license": "CC0 Public Domain",
+    "url": "https://sketchfab.com/3d-models/astrolabe-530bd21edcdf4c4695cc4c8af856d6bf",
+    "triangleCount": 515442,
+    "status": "downloaded",
+    "gltfPath": "assets/sketchfab/astrolabe/scene.gltf",
+    "materials": [
+      {
+        "name": "Default_OBJ",
+        "baseColorTexture": "textures/Default_OBJ_baseColor.jpeg"
+      }
+    ],
+    "sizeBytes": 160366733
+  },
+  {
+    "slug": "gregorian_telescope",
+    "uid": "385fa9f09a064c8b8d81e5085e2d76f4",
+    "name": "Gregorian reflecting telescope (1700s)",
+    "author": "Virtual Museums of Ma\u0142opolska",
+    "license": "CC0 Public Domain",
+    "url": "https://sketchfab.com/3d-models/gregorian_telescope-385fa9f09a064c8b8d81e5085e2d76f4",
+    "triangleCount": 220952,
+    "status": "downloaded",
+    "gltfPath": "assets/sketchfab/gregorian_telescope/scene.gltf",
+    "materials": [
+      {
+        "name": "4044_42_V_Teleskop_05_FIN",
+        "baseColorTexture": "textures/4044_42_V_Teleskop_05_FIN_baseColor.png"
+      }
+    ],
+    "sizeBytes": 39282846
+  },
+  {
+    "slug": "pocket_sextant",
+    "uid": "45cf60e598904f26ac8c9f8401e711a7",
+    "name": "Pocket sextant",
+    "author": "Virtual Museums of Ma\u0142opolska",
+    "license": "CC0 Public Domain",
+    "url": "https://sketchfab.com/3d-models/pocket_sextant-45cf60e598904f26ac8c9f8401e711a7",
+    "triangleCount": 280498,
+    "status": "downloaded",
+    "gltfPath": "assets/sketchfab/pocket_sextant/scene.gltf",
+    "materials": [
+      {
+        "name": "17231_2255_V_Sekstant_kieszonkowy_07_FIN",
+        "baseColorTexture": "textures/17231_2255_V_Sekstant_kieszonkowy_07_FIN_baseColor.png"
+      },
+      {
+        "name": "Default_OBJ",
+        "baseColorTexture": null
+      }
+    ],
+    "sizeBytes": 52648127
+  },
+  {
+    "slug": "tellurium_lunarium",
+    "uid": "e4c9f36a40f3479885f27380f8286b2d",
+    "name": "ETH: Tellurium with Lunarium",
+    "author": "ETH Library_Collections",
+    "license": "CC Attribution",
+    "url": "https://sketchfab.com/3d-models/tellurium_lunarium-e4c9f36a40f3479885f27380f8286b2d",
+    "triangleCount": 1576763,
+    "status": "downloaded",
+    "gltfPath": "assets/sketchfab/tellurium_lunarium/scene.gltf",
+    "materials": [
+      {
+        "name": "KGS-001-x",
+        "baseColorTexture": "textures/KGS-001-x_baseColor.jpeg"
+      },
+      {
+        "name": "KGS-001-x_Elemente",
+        "baseColorTexture": "textures/KGS-001-x_Elemente_baseColor.jpeg"
+      }
+    ],
+    "sizeBytes": 146167359
+  },
+  {
+    "slug": "coptic_prayer_book",
+    "uid": "500ec4621d764f0dadb8edc93b8700ae",
+    "name": "Coptic prayer book",
+    "author": "V\u00e4rldskulturmuseerna",
+    "license": "CC0 Public Domain",
+    "url": "https://sketchfab.com/3d-models/coptic_prayer_book-500ec4621d764f0dadb8edc93b8700ae",
+    "triangleCount": 222018,
+    "status": "downloaded",
+    "gltfPath": "assets/sketchfab/coptic_prayer_book/scene.gltf",
+    "materials": [
+      {
+        "name": "material0",
+        "baseColorTexture": "textures/material0_baseColor.png"
+      }
+    ],
+    "sizeBytes": 65987412
+  },
+  {
+    "slug": "wawel_chest",
+    "uid": "c580f18e25b740e49ce8dd0f8cfd3247",
+    "name": "Chest, ZKWawel 1558",
+    "author": "Virtual Museums of Malopolska",
+    "license": "CC0 Public Domain",
+    "url": "https://sketchfab.com/3d-models/chest-c580f18e25b740e49ce8dd0f8cfd3247",
+    "status": "downloaded",
+    "gltfPath": "assets/sketchfab/wawel_chest/scene.gltf",
+    "materials": [
+      {
+        "name": "material",
+        "baseColorTexture": "textures/material_diffuse.png",
+        "normalTexture": "textures/material_normal.png"
+      }
+    ],
+    "scaleNote": "Native millimetres interpreted uniformly at scale=.001; 1.571 x .558 x .529m; museum dimensions not independently recovered."
+  }
+]

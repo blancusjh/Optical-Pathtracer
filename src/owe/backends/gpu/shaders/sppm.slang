@@ -56,25 +56,22 @@ struct SppmPixel {
 static const uint kFluxWords = 3 * kSplatBins * 2 + 2;  // XYZ bins, M, pad
 static const uint kFluxCount = 3 * kSplatBins * 2;
 
-// Push constants of the SPPM kernels (pc.extra): x wavelength rotation (float), y hash mask,
-// z α (float), w initial radius per metre of path (float: radius scale × pixel angle); pc.pad0: the
-// smallest initial radius (float).
-float iterationRotation() { return asfloat(pc.extra.x); }
-uint gridMask() { return pc.extra.y; }
+float iterationRotation() { return pc.wavelengthRotation; }
+uint gridMask() { return pc.gridMask; }
 
-// Wavelength groups: an iteration's paths and photons are split into groups (pc.pad1) whose hero
+// Wavelength groups: an iteration's paths and photons are split into groups (pc.wavelengthGroups) whose hero
 // wavelengths interleave (group g rotates by g/(4·groups), between the four stratified wavelengths
 // of a set), so the union covers the spectrum evenly. A visible point seen through glass (its own
 // wavelengths fixed by dispersion on the way) takes the photons of its group; one the eye sees
 // directly takes every photon, at the photon's wavelengths: 16 spectral samples per iteration where
 // a single shared set had one, at the price of 1/groups of the photons for points seen through glass.
-uint wavelengthGroups() { return max(pc.pad1, 1u); }
+uint wavelengthGroups() { return max(pc.wavelengthGroups, 1u); }
 float groupRotation(uint g) {
     float u = iterationRotation() + float(g) / float(4 * wavelengthGroups());
     return u - floor(u);
 }
-float sppmAlpha() { return asfloat(pc.extra.z); }
-float initialRadiusPerMetre() { return asfloat(pc.extra.w); }
+float sppmAlpha() { return pc.photonAlpha; }
+float initialRadiusPerMetre() { return pc.initialRadiusPerMetre; }
 
 // ---------------------------------------------------------------- the hash grid
 
@@ -86,33 +83,9 @@ uint gridHash(int3 c, int level) {
     return h & gridMask();
 }
 
-// ---------------------------------------------------------------- flux accumulation
+// ---------------------------------------------------------------- photons
 
-void fluxAdd64(uint index, uint x) {
-    if (x == 0) return;
-    uint old;
-    InterlockedAdd(g_flux[index], x, old);
-    if (old > 0xFFFFFFFFu - x) InterlockedAdd(g_flux[index + 1], 1u);
-}
-// splatChannel (particle.slang) into this iteration's flux bins.
-void fluxChannel(uint base, float v) {
-    if (!(v > 0) || isinf(v)) return;
-    uint bits = asuint(v);
-    int e = int((bits >> 23) & 0xFFu);
-    if (e == 0) return;
-    uint mant = (bits & 0x7FFFFFu) | 0x800000u;
-    int p = e - 150 - kSplatExp0;
-    if (p < 0) {
-        if (p <= -24) return;
-        mant >>= uint(-p);
-        p = 0;
-    }
-    int b = p >> 5, r = p & 31;
-    if (b >= kSplatBins) return;
-    fluxAdd64(base + uint(b) * 2, mant << uint(r));
-    uint high = r == 0 ? 0u : mant >> uint(32 - r);
-    if (high != 0 && b + 1 < kSplatBins) fluxAdd64(base + uint(b + 1) * 2, high);
-}
+// This iteration's flux in a pixel's fixed-point bins (addFixedPoint's).
 float fluxRead(uint base) {
     float v = 0;
     [ForceUnroll] for (int b = 0; b < kSplatBins; ++b) {
@@ -120,27 +93,6 @@ float fluxRead(uint base) {
         if ((lo | hi) != 0) v += ldexp(float(hi) * 4294967296.0 + float(lo), float(kSplatExp0 + 32 * b));
     }
     return v;
-}
-
-// ---------------------------------------------------------------- photons
-
-// The interface at a visible point at wavelength lambda.
-Interface visibleInterface(VisiblePoint v, GBoundary b, float lambda) {
-    Interface it;
-    it.optics = loadOptics(b.links.z);
-    it.n = v.n.xyz;
-    it.ns = (asuint(v.d.w) & kVpSmooth) != 0 ? octDecode(asuint(v.tex.w)) : it.n;
-    it.p = v.p.xyz;
-    it.nFront = it.nBack = 1;
-    if (it.optics.usesIndices()) {
-        it.nFront = regionIndex(b.links.x, lambda);
-        it.nBack = regionIndex(b.links.y, lambda);
-    }
-    it.lambda = lambda;
-    it.fresnelFloor = globals().misc.z;
-    it.tex = v.tex.xyz;
-    it.applyMaterialMap();
-    return it;
 }
 
 // A photon arriving at a non-specular surface point along d with throughput beta: adds its
@@ -172,28 +124,22 @@ bool gatherPhoton(SurfaceHit hit, float3 d, float4 beta, Wavelengths wl, uint gr
                 if (!free && ((flags >> 8) & 0xFFu) != group) continue;  // wavelengths must agree
                 Wavelengths w = wl;  // the photon's (a free point is evaluated at them)
                 if (!free && (flags & kVpTerminated) != 0) w.terminateSecondary();
-                GBoundary vb = g_boundaries[asuint(v.n.w)];
-                float4 f = 0;
-                [ForceUnroll] for (int j = 0; j < NW; ++j) {
-                    if (w.pdf[j] == 0) continue;
-                    float pdf;
-                    f[j] = evalScatter(visibleInterface(v, vb, w.lambda[j]), v.d.xyz, wi, kModeRadiance, pdf);
-                }
+                const float3 ns = (flags & kVpSmooth) != 0 ? octDecode(asuint(v.tex.w)) : v.n.xyz;
+                float pdf;
+                float4 f = evalScatterSpectral(cachedInterface(asuint(v.n.w), v.n.xyz, ns, v.p.xyz, v.tex.xyz, w.lambda.x), w,
+                                               v.d.xyz, wi, kModeRadiance, pdf);
                 // A shading normal: the camera's cosine |wi·ns| over the photons' density per
                 // geometric area, which carries |wi·n|.
                 if ((flags & kVpSmooth) != 0) {
                     const float cn = abs(dot(wi, v.n.xyz));
-                    f *= cn > 0 ? abs(dot(wi, octDecode(asuint(v.tex.w)))) / cn : 0.0;
+                    f *= cn > 0 ? abs(dot(wi, ns)) / cn : 0.0;
                 }
                 // A point bound to its group sees only that group's photons, 1/groups of them: its share
                 // is scaled back up, so both kinds of point estimate the same flux.
                 float4 value = maskTerminated(w, (free ? float4(v.beta.x) : v.beta * float(wavelengthGroups())) * f * beta);
                 if (isZero(value)) continue;
-                float3 xyz = w.toXYZ(value, globals().misc.y);
                 const uint fb = i * kFluxWords;
-                fluxChannel(fb, xyz.x);
-                fluxChannel(fb + 2 * kSplatBins, xyz.y);
-                fluxChannel(fb + 4 * kSplatBins, xyz.z);
+                addFixedPointXYZ(g_flux, fb, w.toXYZ(value, globals().misc.y));
                 InterlockedAdd(g_flux[fb + kFluxCount], 1u);
                 useful = true;
             }
@@ -206,110 +152,50 @@ bool gatherPhoton(SurfaceHit hit, float3 d, float4 beta, Wavelengths wl, uint gr
 void traceSppmPhoton(inout Wavelengths wl, uint group, inout Rng rng, inout uint4 stats) {
     GGlobals G = globals();
     const int maxDepth = G.limits.x, rrDepth = G.limits.y;
-    const uint ambient = G.counts.z;
     stats.x++;
     Emitted em;
     if (!emitParticle(wl, rng, false, em)) return;
-    bool useful = false;
-    float3 o = em.o, d = em.d;
-    uint region = em.region;
+    PathRay ray = em.ray;
     float4 beta = em.beta;
-    const float hero = wl.hero();
+    bool useful = false;
     int events = 0;  // scattering events so far (direct light is the camera pass's)
-    uint lastBoundary = kGpuNone;
     for (int depth = 0;; ++depth) {
         SurfaceHit hit;
-        bool found = intersectWorld(o, d, infinity(), hit);
-        if (found && depth == 0 && em.distant) refineDistantHit(d, hit);
+        bool found = traceFrom(em, ray, depth, hit);
         stats.y++;
-        uint med = mediumOf(region);
-        float seg = found ? hit.t : infinity();
-        if (mediumScatters(med)) {
-            float4 sT = sigmaT(med, wl);
-            float t = -log(1 - rng.uniform()) / sT.x;
-            if (t < seg) {
-                float pdf0 = sT.x * exp(-sT.x * t);
-                [ForceUnroll] for (int i = 0; i < NW; ++i)
-                    beta[i] *= spectrumEval(g_media[med].props.y, wl.lambda[i]) * exp(-sT[i] * t) / pdf0;
-                if (depth >= maxDepth) break;
-                float u2 = rng.uniform();
-                float u1 = rng.uniform();
-                float3 wi;
-                sampleHg(-d, g_media[med].g.x, u1, u2, wi);
-                o = o + d * t;
-                d = wi;
-                ++events;
-                if (depth >= rrDepth) {
-                    const float q = 0.95;
-                    if (rng.uniform() >= q) break;
-                    beta *= 1 / q;
-                }
-                continue;
-            }
-            if (isinf(seg)) break;
-            beta *= exp(-sT * seg) / exp(-sT.x * seg);
-        } else if (mediumAbsorbs(med)) {
-            if (!found) break;
-            [ForceUnroll] for (int i = 0; i < NW; ++i) beta[i] *= exp(-spectrumEval(g_media[med].props.x, wl.lambda[i]) * seg);
+        uint med = mediumOf(ray.region);
+        float t;
+        const uint event = sampleMedium(med, found ? hit.t : infinity(), wl, beta, rng, t);
+        if (event == kMediumEnd) break;
+        if (event == kMediumScatter) {
+            if (depth >= maxDepth) break;
+            float2 u = draw2(rng);
+            float3 wi;
+            sampleHg(-ray.d, g_media[med].g.x, u.x, u.y, wi);
+            ray.leaveVolume(ray.o + ray.d * t, wi);
+            ++events;
+            if (depth >= rrDepth && !survives(0.95, beta, rng)) break;
+            continue;
         }
         if (!found) {
-            if (region != ambient) stats.w++;
+            if (ray.region != G.counts.z) stats.w++;
             break;
         }
-        GBoundary b = g_boundaries[hit.boundary];
-        bool fromFront = dot(d, hit.n) < 0;
-        uint inc = fromFront ? b.links.x : b.links.y;
-        uint other = fromFront ? b.links.y : b.links.x;
-        if (inc != region) {
-            stats.z++;
-            noteInconsistency(hit.boundary, region, inc, lastBoundary, hit.p);
-            region = inc;
-        }
-        lastBoundary = hit.boundary;
-        uint surfType = g_optics[b.links.z].a.x;
-        if (surfType == kSurfNull) {
-            region = other;
-            o = offsetOrigin(hit.p, hit.n, d, hit.scale);
+        const Crossing c = meetBoundary(hit, ray, stats);
+        if (hit.ambiguousContact) break;
+        if (passThrough(hit, c, ray, wl, beta, rng)) {
             if (depth >= 4 * maxDepth) break;
             continue;
         }
-        if (surfType == kSurfStainedGlass && passStainedGlass(hit, d, wl, beta, rng)) {
-            o = offsetOrigin(hit.p, hit.n, d, hit.scale);
-            if (depth >= 4 * maxDepth) break;
-            continue;
-        }
-        if (surfType == kSurfDetector || surfType == kSurfAbsorber) break;
-        HitInterface hi = makeInterface(hit, hero);
-        if (!hi.it.optics.isDelta() && events >= 1) useful = gatherPhoton(hit, d, beta, wl, group) || useful;
+        if (c.surface == kSurfDetector || c.surface == kSurfAbsorber) break;
+        HitInterface hi = makeInterface(hit, wl.hero());
+        if (!hi.it.optics.isDelta() && events >= 1) useful = gatherPhoton(hit, ray.d, beta, wl, group) || useful;
         if (depth >= maxDepth) break;
-        if (surfType == kSurfDielectric && !wl.secondaryTerminated()) {
-            [ForceUnroll] for (int i = 1; i < NW; ++i)
-                if (wl.pdf[i] != 0 && isDispersive(hi.it, atWavelength(hi, wl.lambda[i]))) {
-                    wl.terminateSecondary();
-                    beta = maskTerminated(wl, beta);
-                    break;
-                }
-        }
-        float u3 = rng.uniform();
-        float u2 = rng.uniform();
-        float u1 = rng.uniform();
+        terminateIfDispersive(hi, wl, beta);
         ScatterSample s;
-        if (!sampleScatter(hi.it, d, u1, u2, u3, kModeImportance, s) || s.weight <= 0) break;
-        float w0 = s.weight;
-        beta.x *= s.weight;
-        [ForceUnroll] for (int i = 1; i < NW; ++i)
-            if (wl.pdf[i] != 0) beta[i] *= secondaryScatterWeight(atWavelength(hi, wl.lambda[i]), d, s, kModeImportance);
-        if (s.transmitted) region = other;
-        o = offsetOrigin(hit.p, hit.n, s.wi, hit.scale);
-        d = s.wi;
+        if (!scatterAtSurface(hit, c, hi, ray, wl, beta, rng, kModeImportance, s)) break;
         ++events;
-        if (depth >= rrDepth) {
-            float q = min(1.0, w0);
-            if (q < 1) {
-                if (rng.uniform() >= q) break;
-                beta *= 1 / q;
-            }
-        }
+        if (depth >= rrDepth && s.weight < 1 && !survives(s.weight, beta, rng)) break;
     }
     if (useful && em.guideCell != kGpuNone) InterlockedAdd(g_guide[em.guideCell], 1u);
 }

@@ -1,0 +1,19 @@
+Test project /home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/build
+    Start  3: layering
+1/7 Test  #3: layering .........................   Passed    0.02 sec
+    Start  4: python_tools
+2/7 Test  #4: python_tools .....................   Passed    0.40 sec
+    Start  5: documentation_links
+3/7 Test  #5: documentation_links ..............   Passed    0.03 sec
+    Start  6: python_scene_assets
+4/7 Test  #6: python_scene_assets ..............   Passed    0.27 sec
+    Start  8: viewer_display
+5/7 Test  #8: viewer_display ...................   Passed    0.59 sec
+    Start  9: viewer_navigation
+6/7 Test  #9: viewer_navigation ................   Passed    4.05 sec
+    Start 10: viewer_smoke
+7/7 Test #10: viewer_smoke .....................   Passed    0.72 sec
+
+100% tests passed out of 7
+
+Total Test time (real) =   6.09 sec

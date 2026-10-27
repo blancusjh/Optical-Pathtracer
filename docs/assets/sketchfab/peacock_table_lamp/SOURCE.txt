@@ -1,0 +1,6 @@
+Name: 2018.281 Peacock Table Lamp
+Author: Cleveland Museum of Art
+Licence: CC0 Public Domain
+URL: https://sketchfab.com/3d-models/peacock_table_lamp-a24bcb6b7a2e448fad661004f403ae12
+Downloaded: 2026-09-29
+Format: glTF (separate textures)

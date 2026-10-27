@@ -1,0 +1,12 @@
+owe_gpu_profile enabled: diagnostic timestamps may affect performance
+gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)
+ideal observer 'Eye' 128x96, fovY=34 deg, pupil diameter=3 mm, focus=0.340000 m, pixel filter gaussian(0.4)
+pass 1/4: 16 spp, 0.01 s, mean Y 0.36524
+pass 2/4: 32 spp, 0.03 s, mean Y 0.36748
+pass 3/4: 48 spp, 0.04 s, mean Y 0.36877
+pass 4/4: 64 spp, 0.05 s, mean Y 0.37252
+paths 786432, segments 934617, region inconsistencies 0, leaks 0
+owe_gpu_profile kind=kernel name=particle (ray queries) calls=6 gpu_ms=44.829312
+owe_gpu_profile kind=submission name=submission calls=17 gpu_ms=45.603872 cpu_ms=49.218965
+owe_gpu_profile kind=submission name=upload calls=17 gpu_ms=0.045760 cpu_ms=1.519370
+out/maintenance_20261012/profile_before.png out/maintenance_20261012/profile_before.pfm out/maintenance_20261012/profile_before.json

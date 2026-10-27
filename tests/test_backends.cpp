@@ -11,7 +11,7 @@
 #include "owe/loader/scene_loader.hpp"
 #include "owe/scene/builders.hpp"
 #include "owe/scene/prescription.hpp"
-#include "owe/transport/optics.hpp"
+#include "owe/core/shared/optics.hpp"
 
 using namespace owe;
 
@@ -50,13 +50,16 @@ Image render(const Scene& sc, int det, const std::string& backend, int spp, uint
 // The candidate's image agrees with the reference's over independent seeds (block z-scores). The
 // comparison must also be sharp enough to mean something: maxRelSe bounds the reference's
 // relative standard error.
+// The candidate's integrator against the reference's path tracer: independent unbiased estimators
+// of the same image must agree within their errors.
 void checkAgainstReference(const Scene& sc, int det, const std::string& candidate, int spp, int runs,
                            double maxRelSe = 0.02, const std::string& integrator = "path") {
     RenderSettings reference;
     reference.backend = referenceBackend().name();
-    reference.integrator = integrator;
+    reference.integrator = "path";
     RenderSettings other = reference;
     other.backend = candidate;
+    other.integrator = integrator;
     ComparisonReport rep = compareRenderers(sc, det, reference, other, spp, runs, 6);
     if (!rep.consistent() || !(rep.seA < maxRelSe * rep.meanA)) std::fprintf(stderr, "%s", rep.text().c_str());
     CHECK(rep.consistent());
@@ -584,12 +587,30 @@ TEST(backends_agree_with_reference_on_a_caustic) {
             body Lamp  { type = sphere radius = 0.35  position = (0.2, 0.1, 1.8)  material = black  emission = blackbody(5000K, 4) }
             observer Eye { position = (0, -2.0, 1.1)  look_at = (0, 0, 0.3)  fov = 45deg  resolution = (36, 24) }
         )");
-        // Every integrator both backends implement: path, and the caustic owned by particles.
-        for (const char* integrator : {"path", "light", "hybrid"}) {
-            if (!findBackend(backend)->supports(integrator) || !referenceBackend().supports(integrator)) continue;
+        // Path tracing, and the hybrid whose particles own the caustic seen on the floor. (Light tracing
+        // alone cannot reach the eye through the ball: an eye link needs a non-specular vertex.)
+        for (const char* integrator : {"path", "hybrid"}) {
+            if (!findBackend(backend)->supports(integrator)) continue;
             std::fprintf(stderr, "    %s\n", integrator);
             checkAgainstReference(sc, 0, backend, 256, 8, 0.02, integrator);
         }
+    });
+}
+
+TEST(backends_light_tracing_agrees_with_reference_through_a_pinhole_and_a_lens_pupil) {
+    forEachCandidate([](const std::string& backend) {
+        if (!findBackend(backend)->supports("light")) return;
+        Scene sc = loadSceneFromString(R"(
+            units = m
+            material floor { type = diffuse  reflectance = rgb(0.9, 0.6, 0.3) }
+            body Floor { type = sheet  size = (4, 4)  material = floor }
+            body Lamp  { type = sphere radius = 0.25  position = (0.4, -0.2, 1.2)  material = black  emission = blackbody(4000K, 5) }
+            observer Pin   { position = (0, -2.2, 1.4)  look_at = (0, 0, 0)  fov = 40deg  resolution = (24, 18) }
+            observer Thin  { position = (0, -2.2, 1.4)  look_at = (0, 0, 0)  fov = 40deg  resolution = (24, 18)
+                             pupil = 60mm  focus = 2.6 m }
+        )");
+        // 12 blocks only: enough runs that a block's z is near normal (few runs give Student-t tails).
+        for (int det : {0, 1}) checkAgainstReference(sc, det, backend, 1024, 16, 0.01, "light");
     });
 }
 

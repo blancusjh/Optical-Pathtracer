@@ -1,0 +1,200 @@
+[
+  {
+    "scene": "the_lens",
+    "suite": "canonical",
+    "settings": {
+      "scene": "scenes/the_lens.owe",
+      "detector": "Eye",
+      "backend": "gpu",
+      "device": 1,
+      "threads": 0,
+      "passes": 1,
+      "seed": 1,
+      "resolution": "256x192",
+      "max_depth": 64
+    },
+    "runs": [
+      {
+        "integrator": "path",
+        "spp": 16,
+        "seconds": 0.0178724,
+        "mean_Y": 0.83423,
+        "paths": 786432,
+        "inconsistencies": 3,
+        "leaks": 2,
+        "mpaths_per_second": 44.00259618182225,
+        "wall_seconds": 0.3485628419985005,
+        "non_transport_seconds": 0.3306904419985005,
+        "peak_host_rss_bytes": 337797120,
+        "rss_method": "isolated_resource_children_maxrss",
+        "rel_mse": 0.06630086005431604,
+        "rel_mse_no_glints": 0.06257045305407162,
+        "mean_ratio": 0.9338841514328553
+      },
+      {
+        "integrator": "path",
+        "spp": 64,
+        "seconds": 0.0699306,
+        "mean_Y": 0.833957,
+        "paths": 3145728,
+        "inconsistencies": 5,
+        "leaks": 2,
+        "mpaths_per_second": 44.98356942454377,
+        "wall_seconds": 0.4109382509996067,
+        "non_transport_seconds": 0.34100765099960667,
+        "peak_host_rss_bytes": 337887232,
+        "rss_method": "isolated_resource_children_maxrss",
+        "rel_mse": 0.6174210690172882,
+        "rel_mse_no_glints": 0.019693400536137832,
+        "mean_ratio": 0.9337018164639437
+      }
+    ],
+    "failures": [],
+    "profiled": false,
+    "reference": {
+      "integrator": "path",
+      "spp": 256,
+      "seconds": 0.331891,
+      "mean_Y": 0.864925,
+      "glint_fraction": 0.006490071614583333,
+      "pfm_sha256": "b92afc4ef6ced75d81f4eef3c46e8565f61218fe8589bddad02a016e805d37b7",
+      "wall_seconds": 0.7888560620012868,
+      "non_transport_seconds": 0.4569650620012868,
+      "peak_host_rss_bytes": 338202624,
+      "rss_method": "isolated_resource_children_maxrss"
+    },
+    "measurement_id": "2a3d77ce255f545a16f0aaaec5fb8ca0d67117ccfc0815d5998b6862748b2485"
+  },
+  {
+    "scene": "prism_in_sunlight",
+    "suite": "canonical",
+    "settings": {
+      "scene": "scenes/prism_in_sunlight.owe",
+      "detector": "Eye",
+      "backend": "gpu",
+      "device": 1,
+      "threads": 0,
+      "passes": 1,
+      "seed": 1,
+      "resolution": "256x192",
+      "max_depth": 64
+    },
+    "runs": [
+      {
+        "integrator": "path",
+        "spp": 16,
+        "seconds": 0.0193212,
+        "mean_Y": 0.00159631,
+        "paths": 786432,
+        "inconsistencies": 5,
+        "leaks": 0,
+        "mpaths_per_second": 40.70306192161977,
+        "wall_seconds": 0.38773395500174956,
+        "non_transport_seconds": 0.3684127550017496,
+        "peak_host_rss_bytes": 337346560,
+        "rss_method": "isolated_resource_children_maxrss",
+        "rel_mse": 0.17844941362704828,
+        "rel_mse_no_glints": 0.17844941362704828,
+        "mean_ratio": 0.75150082415744
+      },
+      {
+        "integrator": "path",
+        "spp": 64,
+        "seconds": 0.0771207,
+        "mean_Y": 0.00159516,
+        "paths": 3145728,
+        "inconsistencies": 6,
+        "leaks": 4,
+        "mpaths_per_second": 40.7896712555773,
+        "wall_seconds": 0.4522586400016735,
+        "non_transport_seconds": 0.3751379400016735,
+        "peak_host_rss_bytes": 337453056,
+        "rss_method": "isolated_resource_children_maxrss",
+        "rel_mse": 0.0443613418315553,
+        "rel_mse_no_glints": 0.0443613418315553,
+        "mean_ratio": 0.7515012533919698
+      }
+    ],
+    "failures": [],
+    "profiled": false,
+    "reference": {
+      "integrator": "path",
+      "spp": 256,
+      "seconds": 0.299155,
+      "mean_Y": 0.00182545,
+      "glint_fraction": 0.0,
+      "pfm_sha256": "968e243b0a76c5241fa0eaa0f7e0d3ce0e3398464709e520d6f7835fbcf268c2",
+      "wall_seconds": 0.6732629939979233,
+      "non_transport_seconds": 0.3741079939979233,
+      "peak_host_rss_bytes": 337719296,
+      "rss_method": "isolated_resource_children_maxrss"
+    },
+    "measurement_id": "2a5b7d66201c3cb1b66c9d01f76f34c8009a399d0ef1b052d5d86e3439d82bf2"
+  },
+  {
+    "scene": "the_peacock_lamp",
+    "suite": "scans",
+    "settings": {
+      "scene": "scenes/the_peacock_lamp.owe",
+      "detector": "Room",
+      "backend": "gpu",
+      "device": 1,
+      "threads": 0,
+      "passes": 1,
+      "seed": 1,
+      "resolution": "960x600",
+      "max_depth": 16
+    },
+    "runs": [
+      {
+        "integrator": "vcm",
+        "spp": 16,
+        "seconds": 18.3959,
+        "mean_Y": 1.16968e-05,
+        "paths": 18432000,
+        "inconsistencies": 116278,
+        "leaks": 0,
+        "mpaths_per_second": 1.0019623937942692,
+        "wall_seconds": 40.97392344299806,
+        "non_transport_seconds": 22.578023442998056,
+        "peak_host_rss_bytes": 2748522496,
+        "rss_method": "isolated_resource_children_maxrss",
+        "rel_mse": 0.9352956275899748,
+        "rel_mse_no_glints": 0.8942389218389938,
+        "mean_ratio": 0.8988885165145508
+      },
+      {
+        "integrator": "vcm",
+        "spp": 64,
+        "seconds": 63.2678,
+        "mean_Y": 1.1871e-05,
+        "paths": 73728000,
+        "inconsistencies": 466568,
+        "leaks": 0,
+        "mpaths_per_second": 1.1653321278754754,
+        "wall_seconds": 84.97617899400211,
+        "non_transport_seconds": 21.70837899400211,
+        "peak_host_rss_bytes": 2746863616,
+        "rss_method": "isolated_resource_children_maxrss",
+        "rel_mse": 4.030536063575971,
+        "rel_mse_no_glints": 0.2563182621861994,
+        "mean_ratio": 0.8869875727021359
+      }
+    ],
+    "failures": [],
+    "profiled": false,
+    "reference": {
+      "integrator": "vcm",
+      "spp": 256,
+      "seconds": 223.36,
+      "mean_Y": 1.36008e-05,
+      "glint_fraction": 0.0038350694444444443,
+      "pfm_sha256": "e47006015eca65457c69f51e78cd61c4a575eb7b7fceed607b949c7c8970ae91",
+      "wall_seconds": 241.1173009640006,
+      "non_transport_seconds": 17.757300964000592,
+      "peak_host_rss_bytes": 2783256576,
+      "rss_method": "isolated_resource_children_maxrss"
+    },
+    "measurement_id": "d6a3627eebc92cf7b56cbf6b02db283a9d18ab9de953a3c9b8886c170231810d"
+  }
+]

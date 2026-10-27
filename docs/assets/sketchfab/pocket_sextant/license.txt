@@ -1,0 +1,8 @@
+Model Information:
+* title:	Pocket sextant
+* source:	https://sketchfab.com/3d-models/pocket-sextant-45cf60e598904f26ac8c9f8401e711a7
+* author:	Virtual Museums of Małopolska (https://sketchfab.com/WirtualneMuzeaMalopolski)
+
+Model License:
+* license type:	CC0-1.0 (http://creativecommons.org/publicdomain/zero/1.0/)
+* requirements:	Credit is not mandatory. Commercial use is allowed.

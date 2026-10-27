@@ -17,28 +17,38 @@ every pixel.
 
 | | |
 |---|---|
-| ![The observatory](docs/gallery/observatory_room.png) | ![The desk](docs/gallery/observatory_desk.png) |
-| **The Observatory** — the current brick-and-stone observatory at night: walnut panelling, a woven carpet, candles and two refractors aimed through the dome slit. | **The Astronomer's Desk** — tooled books, an orbital folio, an armillary and a compass under glass, in the observatory's detailed interior. |
-| ![Glass in sunlight](docs/gallery/glass_in_sunlight.png) | ![Tea glass](docs/gallery/tea_glass.png) |
-| **Glass in Sunlight** — a rounded tumbler of water on concrete: the sun forms a cusped caustic in its shadow and another inside the glass (VCM). | **Tea Glass** — low sunlight through black tea on textured paper: amber caustics from spectral absorption, with dispersion along their edge (VCM). |
-| ![The Lens](docs/gallery/the_lens.png) | ![Prism in sunlight](docs/gallery/prism_in_sunlight.png) |
-| **The Lens** — a loose magnifier over a page: magnified view, dispersion-tinted caustic in its shadow. | **Prism in Sunlight** — low sun through a slit onto an N-SF11 prism: the white beam, the spectrum and the beams its faces reflect, seen where they graze the floor (VCM). |
-| ![The study](docs/gallery/study_room.png) | |
-| **The Study** — one sunlit room to walk through: a glass of water and a prism in the sun, a magnifier, a mirror, a lamp, and a telescope aimed out of the window (VCM). | |
+| ![Kunstkammer Room](docs/gallery/kunstkammer_room.png) | ![Peacock Lamp Room](docs/gallery/peacock_lamp_room.png) |
+| **The Kunstkammer** — daylight reaches the mounted armour and casts its silhouette across plaster; steel, carved wood and red cloth remain distinct. | **The Peacock Lamp** — real carbon filaments illuminate opalescent glass, bronze and an antique binding. |
+| ![Gregorian Beside](docs/gallery/gregorian_beside.png) | ![Gregorian Eyepiece](docs/gallery/gregorian_eyepiece.png) |
+| **The Gregorian** — candlelit telescope, stand and the real Moon beyond its window. | **Through the eyepiece** — an erect lunar image emerges through the unchanged two-mirror, two-lens prescription. |
+| ![Gregorian Naked](docs/gallery/gregorian_naked.png) | ![Peacock Lamp Shade](docs/gallery/peacock_lamp_shade.png) |
+| **The unaided Moon** — true angular scale at the same 38° field and display settings as the eyepiece view. | **The shade** — peacock eyes and feather glass lit from within by the three filaments. |
+| ![Invisible Window Wall](docs/gallery/invisible_window_wall.png) | |
+| **The invisible window** — a clear PMMA panel, shaped by inverse caustic design, projects a lancet window onto the wall in sunlight. | |
 
-More in [`docs/gallery`](docs/gallery) (each PNG has a JSON record for reproduction).
+The two Peacock views and the invisible window's wall were captured on 26 October 2026 and
+meet the promotion criteria: zero leaks and at most one region inconsistency per million
+paths (4.7e-7, 4.0e-7 and 2.1e-8). The Peacock views keep a few dozen isolated bright pixels
+on the shade. The Kunstkammer and Gregorian views are earlier previews with nonzero transport
+diagnostics, and the Kunstkammer shows isolated bright noise; they are not validated reference
+images. The window's room view is withheld: its capture recorded one leak.
+See [current status](docs/STATUS.md), [capture records](benchmarks/results/20261010_gallery.json)
+and [asset credits](docs/ASSET_CREDITS.md).
 
-Regenerate the observatory and glass images with the GPU backend:
+Install the external scene assets using [the setup instructions](docs/GALLERY_WORKFLOW.md#curated-scene-asset-setup),
+then stage all seven views with the validated GPU build:
 
 ```sh
-bash tools/render_gallery.sh observatory_room observatory_desk glass_in_sunlight tea_glass
+bash tools/render_gallery.sh kunstkammer_room gregorian_beside gregorian_eyepiece \
+  gregorian_naked peacock_lamp_room invisible_window_room invisible_window_wall \
+  --device 1 --binary build/owe --archive out/gallery/local_review
 ```
 
-The observatory and glass images above are rendered from the current scenes. Scene models include
-jointed paving, branching foliage, slope-grounded landscapes, and the observatory's detailed
-interior. See [`models/README.md`](models/README.md) for the assets,
-regeneration commands and the live Blender review (`bash tools/review_models.sh`). The models are
-ordinary meshes: they change no transport, and every backend renders them.
+The tracked manifest records each view's estimator, budget and camera. Rendering stages native
+images, raw data, logs and identities; review them before explicit local promotion using
+[the gallery workflow](docs/GALLERY_WORKFLOW.md). Asset recipes preserve the authoritative
+scenes; regenerated external assets are not promised to match historical bytes.
+Original procedural models have a separate [regeneration guide](models/README.md).
 
 ## The one idea
 
@@ -61,7 +71,7 @@ Medium  →  Region  →  Boundary  →  Body  →  Assembly
 
 The order in which light meets surfaces is never prescribed; it is discovered by ray casting.
 Ghost paths such as S₄ → S₇ → S₄ → S₂ are simply paths. The same reference `Tracer` serves path
-tracing, light tracing, the lens analyser and the inspector.
+tracing, the lens analyser and the inspector.
 
 Where that transport runs is a separate, explicit choice — a **backend**:
 
@@ -103,6 +113,11 @@ time only a Vulkan driver is needed: any recent NVIDIA, AMD or Intel driver on L
 macOS, MoltenVK (`brew install molten-vk vulkan-loader`, or the LunarG Vulkan SDK). Without a
 driver the conformance suite skips the GPU backend and `--backend gpu` explains why.
 
+For reproducible raw-image error, memory and timing comparisons, see
+[`docs/BENCHMARKS.md`](docs/BENCHMARKS.md). The performance suite includes the canonical views
+and four scan scenes at 960×600. `OWE_GPU_PROFILE=1` prints diagnostic Vulkan kernel and
+submission timings; keep it off when measuring production throughput.
+
 ## Interactive viewer
 
 Install the SDL3 development package (SDL ≥ 3.2), then enable the window:
@@ -132,8 +147,8 @@ with a 0.35 EV dead band). **L** meters again, **+**/**-** change the exposure (
 the automatic modes). A lamp or the sun entering the view saturates; the room around it does not
 darken. Saved images use exactly the exposure the window shows.
 Click a pixel to inspect its light paths. **S** saves PNG, raw PFM and a JSON render record under
-`out/view_<scene>_<detector>`. On a backend without the scene's light or hybrid integrator the
-view uses path tracing (same expected image); on the reference it can use either. Scene changes
+`out/view_<scene>_<detector>`. On a backend without the scene's light or hybrid integrator (the
+reference has the path integrator only) the view uses path tracing (same expected image). Scene changes
 take effect after the current render pass finishes.
 
 ### Explore the scene
@@ -309,7 +324,7 @@ devices and integrators:
 |---|---|---|
 | Where | host threads | Vulkan compute: NVIDIA, AMD, Intel; Apple silicon via MoltenVK |
 | Arithmetic | IEEE-754 double | float32, camera-relative |
-| Integrators | path, light, hybrid | path, light, hybrid |
+| Integrators | path | path, light, hybrid, sppm, bdpt, vcm |
 | Reproducible | bitwise for a seed, any thread count or compiler | bitwise on a given device and driver |
 
 `--backend gpu` runs every integrator as Slang kernels on Vulkan compute. It is a float port of the reference: the same shapes and quadric root
@@ -361,8 +376,9 @@ blocks: 96 × XYZ over 8 runs: 288 tests, Σz²/n = 1.199, max |z| = 4.03, |z|>3
 verdict: consistent (differences are Monte-Carlo noise)
 ```
 
-Every detector of every scene in `scenes/` is consistent, and so are the particle integrators
-(`--integrator light` or `hybrid`; the lens, prism and glass-of-water scenes use hybrid). Particle
+Every detector of every scene in `scenes/` is consistent. The particle integrators
+(`--integrator light` or `hybrid`; the lens, prism and glass-of-water scenes use hybrid) run on the
+GPU only and are compared with the reference's path tracer. Particle
 splats land on pixels from many threads in no fixed order, so the GPU adds them as exact integers
 (each splat's significand in 64-bit fixed-point bins), which keeps particle images bitwise
 reproducible too. Every backend also runs the conformance suite (`tests/test_backends.cpp`), so a
@@ -462,8 +478,7 @@ Correctness is established against analytic limits, never by "looks plausible"
 * **Transport** — Beer–Lambert; an absorbing glass plate with incoherent multiple
   reflections (T = (1−R)²τ / (1 − R²τ²)); white furnace L = Lₑ/(1−ρ); a lossless glass
   sphere is invisible in a uniform field; the n² radiance law under water; irradiance from a
-  Lambertian disk (exact off-axis formula) by path *and* light tracing; path tracing, light
-  tracing and the hybrid agree within 4σ over independent seeds; bitwise reproducibility.
+  Lambertian disk (exact off-axis formula); bitwise reproducibility.
 * **Instruments** — paraxial EFL/BFL equal the thick-lens formulas; a near-axis real ray
   through the lens *body* reaches the paraxial focus to 5e-11 m; the same lens 3 km from the
   origin keeps that precision; spherical aberration and chromatic trends; an achromat
@@ -480,16 +495,13 @@ Correctness is established against analytic limits, never by "looks plausible"
   area; starlight and a lamp; reflected moonlight; a diffuse screen's irradiance readout and its
   equal radiance over the front hemisphere; the telescope image for freely placed eyes; sliver
   triangles lit like their neighbours; bit-exact observer resets; and, for the GPU, block-wise
-  statistical agreement with the reference on a caustic (path, light and hybrid), diffuse
-  screens, a telescope, a physical camera and Saturn at 1.28·10¹² m.
+  statistical agreement with the reference's path tracer on a caustic (path, light and hybrid),
+  light tracing through a pinhole and a lens pupil, diffuse screens, a telescope, a physical
+  camera and Saturn at 1.28·10¹² m.
 
 ## Status
 
-What exists, what is partial and what is ahead is mapped section by section to the vision
-in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). In short: the reference engine, geometrical
-optics with spectral transport, the ontology, instruments inside the world, inspection and lens
-diagnostics are implemented, on two backends (CPU reference, portable GPU), with a command-line
-studio and an interactive window. On the GPU: photon mapping (SPPM) and bidirectional estimators
-(BDPT, VCM) for caustics, and glTF models with texture coordinates. GRIN media, thin-film
-coatings, polarisation and optimisation are not yet. The priorities ahead, starting with faster
-loading, are in [`docs/ROADMAP.md`](docs/ROADMAP.md).
+See [STATUS.md](docs/STATUS.md) for the current implementation, validation,
+performance target and open transport/gallery issues. [Architecture](docs/ARCHITECTURE.md)
+describes the engine; historical measurements and capture logs are retained in the
+[October archive](docs/archive/2026-10/ROADMAP.md).

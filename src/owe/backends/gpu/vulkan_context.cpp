@@ -1,6 +1,7 @@
 #include "owe/backends/gpu/vulkan_context.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -48,6 +49,10 @@ std::string pipelineCachePath(const VkPhysicalDeviceProperties& p) {
     }
     return (dir / (file + ".bin")).string();
 }
+
+// The cache file keeps the pipelines of every build of the kernels that used it, though only the
+// current build's are looked up again: past this size it starts over from one process's pipelines.
+constexpr size_t kMaxPipelineCacheBytes = size_t(128) << 20;
 
 // The file's bytes when its header names this device and driver (a stale or foreign cache is ignored).
 std::vector<char> readPipelineCache(const std::string& path, const VkPhysicalDeviceProperties& p) {
@@ -102,6 +107,27 @@ void loadVulkan() {
             "or set OWE_VULKAN_LIBRARY to libvulkan / libMoltenVK)");
 }
 
+// The items of a Vulkan two-call enumeration: f(args..., &count, nullptr), then f(args..., &count, items).
+template <class T, class F, class... Args>
+std::vector<T> vkList(F f, Args... args) {
+    uint32_t n = 0;
+    f(args..., &n, nullptr);
+    std::vector<T> items(n);
+    f(args..., &n, items.data());
+    items.resize(n);
+    return items;
+}
+
+// A pipeline cache holding `data` (the driver may refuse it: then empty); VK_NULL_HANDLE on failure.
+VkPipelineCache createPipelineCache(VkDevice device, const std::vector<char>& data) {
+    VkPipelineCacheCreateInfo cci{VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
+    cci.initialDataSize = data.size();
+    cci.pInitialData = data.empty() ? nullptr : data.data();
+    VkPipelineCache cache = VK_NULL_HANDLE;
+    if (vkCreatePipelineCache(device, &cci, nullptr, &cache) == VK_SUCCESS) return cache;
+    return data.empty() ? VK_NULL_HANDLE : createPipelineCache(device, {});
+}
+
 bool hasExtension(const std::vector<VkExtensionProperties>& exts, const char* name) {
     return std::any_of(exts.begin(), exts.end(), [&](const VkExtensionProperties& e) { return std::strcmp(e.extensionName, name) == 0; });
 }
@@ -127,10 +153,7 @@ int typeRank(VkPhysicalDeviceType t) {
 
 VkInstance createInstance(bool& portability) {
     loadVulkan();
-    uint32_t n = 0;
-    vkEnumerateInstanceExtensionProperties(nullptr, &n, nullptr);
-    std::vector<VkExtensionProperties> exts(n);
-    vkEnumerateInstanceExtensionProperties(nullptr, &n, exts.data());
+    const auto exts = vkList<VkExtensionProperties>(vkEnumerateInstanceExtensionProperties, nullptr);
     std::vector<const char*> enable;
     portability = hasExtension(exts, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
     if (portability) enable.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
@@ -167,39 +190,38 @@ const char* const kRayQueryExtensions[] = {
     VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
     VK_KHR_SPIRV_1_4_EXTENSION_NAME, VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME};
 
+// The features ray queries need, chained ahead of `next` for a query or a device request.
+struct RayQueryFeatures {
+    VkPhysicalDeviceBufferDeviceAddressFeaturesKHR bda{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR};
+    VkPhysicalDeviceAccelerationStructureFeaturesKHR as{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR};
+    VkPhysicalDeviceRayQueryFeaturesKHR rq{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR};
+    void* chain(void* next) {
+        bda.pNext = next;
+        as.pNext = &bda;
+        rq.pNext = &as;
+        return &rq;
+    }
+};
+
 bool supportsRayQuery(VkPhysicalDevice dev, const std::vector<VkExtensionProperties>& exts) {
     for (const char* e : kRayQueryExtensions)
         if (!hasExtension(exts, e)) return false;
-    VkPhysicalDeviceBufferDeviceAddressFeaturesKHR bda{};
-    bda.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR;
-    VkPhysicalDeviceAccelerationStructureFeaturesKHR as{};
-    as.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
-    as.pNext = &bda;
-    VkPhysicalDeviceRayQueryFeaturesKHR rq{};
-    rq.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR;
-    rq.pNext = &as;
-    VkPhysicalDeviceFeatures2 f2{};
-    f2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-    f2.pNext = &rq;
+    RayQueryFeatures f;
+    VkPhysicalDeviceFeatures2 f2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+    f2.pNext = f.chain(nullptr);
     vkGetPhysicalDeviceFeatures2(dev, &f2);
-    return rq.rayQuery && as.accelerationStructure && bda.bufferDeviceAddress;
+    return f.rq.rayQuery && f.as.accelerationStructure && f.bda.bufferDeviceAddress;
 }
 
 std::vector<Candidate> enumerate(VkInstance inst) {
-    uint32_t n = 0;
-    vkEnumeratePhysicalDevices(inst, &n, nullptr);
-    std::vector<VkPhysicalDevice> devs(n);
-    vkEnumeratePhysicalDevices(inst, &n, devs.data());
+    const auto devs = vkList<VkPhysicalDevice>(vkEnumeratePhysicalDevices, inst);
     std::vector<Candidate> out;
-    for (uint32_t i = 0; i < n; ++i) {
+    for (uint32_t i = 0; i < devs.size(); ++i) {
         VkPhysicalDeviceProperties p;
         vkGetPhysicalDeviceProperties(devs[i], &p);
         VkPhysicalDeviceFeatures f;
         vkGetPhysicalDeviceFeatures(devs[i], &f);
-        uint32_t ne = 0;
-        vkEnumerateDeviceExtensionProperties(devs[i], nullptr, &ne, nullptr);
-        std::vector<VkExtensionProperties> exts(ne);
-        vkEnumerateDeviceExtensionProperties(devs[i], nullptr, &ne, exts.data());
+        const auto exts = vkList<VkExtensionProperties>(vkEnumerateDeviceExtensionProperties, devs[i], nullptr);
         Candidate c;
         c.device = devs[i];
         c.info.index = int(i);
@@ -221,10 +243,7 @@ std::vector<Candidate> enumerate(VkInstance inst) {
             c.usable = false;
             c.why = "compute groups of 256 threads are not supported";
         }
-        uint32_t nq = 0;
-        vkGetPhysicalDeviceQueueFamilyProperties(devs[i], &nq, nullptr);
-        std::vector<VkQueueFamilyProperties> qs(nq);
-        vkGetPhysicalDeviceQueueFamilyProperties(devs[i], &nq, qs.data());
+        const auto qs = vkList<VkQueueFamilyProperties>(vkGetPhysicalDeviceQueueFamilyProperties, devs[i]);
         if (std::none_of(qs.begin(), qs.end(), [](auto& q) { return (q.queueFlags & VK_QUEUE_COMPUTE_BIT) != 0; })) {
             c.usable = false;
             c.why = "no compute queue";
@@ -255,10 +274,8 @@ Context::Context(int device) {
     rayQuery_ = pick->rayQuery;
     vkGetPhysicalDeviceMemoryProperties(physical_, &memProps_);
 
-    uint32_t nq = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(physical_, &nq, nullptr);
-    std::vector<VkQueueFamilyProperties> qs(nq);
-    vkGetPhysicalDeviceQueueFamilyProperties(physical_, &nq, qs.data());
+    const auto qs = vkList<VkQueueFamilyProperties>(vkGetPhysicalDeviceQueueFamilyProperties, physical_);
+    const uint32_t nq = uint32_t(qs.size());
     // Prefer a compute queue without graphics (asynchronous compute), else any compute queue.
     int family = -1;
     for (uint32_t i = 0; i < nq; ++i)
@@ -282,11 +299,7 @@ Context::Context(int device) {
     VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR pep{};
     pep.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_EXECUTABLE_PROPERTIES_FEATURES_KHR;
     if (const char* e = std::getenv("OWE_GPU_STATS"); e && *e && *e != '0') {
-        uint32_t ne = 0;
-        vkEnumerateDeviceExtensionProperties(physical_, nullptr, &ne, nullptr);
-        std::vector<VkExtensionProperties> dexts(ne);
-        vkEnumerateDeviceExtensionProperties(physical_, nullptr, &ne, dexts.data());
-        if (hasExtension(dexts, VK_KHR_PIPELINE_EXECUTABLE_PROPERTIES_EXTENSION_NAME)) {
+        if (hasExtension(vkList<VkExtensionProperties>(vkEnumerateDeviceExtensionProperties, physical_, nullptr), VK_KHR_PIPELINE_EXECUTABLE_PROPERTIES_EXTENSION_NAME)) {
             exts.push_back(VK_KHR_PIPELINE_EXECUTABLE_PROPERTIES_EXTENSION_NAME);
             pep.pipelineExecutableInfo = VK_TRUE;
             statistics_ = true;
@@ -295,21 +308,11 @@ Context::Context(int device) {
     VkDeviceCreateInfo dci{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
     if (statistics_) dci.pNext = &pep;
     // Hardware ray traversal where the device has it (the kernels choose it per renderer).
-    VkPhysicalDeviceBufferDeviceAddressFeaturesKHR bda{};
-    bda.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR;
-    bda.bufferDeviceAddress = VK_TRUE;
-    VkPhysicalDeviceAccelerationStructureFeaturesKHR asf{};
-    asf.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
-    asf.accelerationStructure = VK_TRUE;
-    VkPhysicalDeviceRayQueryFeaturesKHR rqf{};
-    rqf.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR;
-    rqf.rayQuery = VK_TRUE;
+    RayQueryFeatures rqf;
+    rqf.bda.bufferDeviceAddress = rqf.as.accelerationStructure = rqf.rq.rayQuery = VK_TRUE;
     if (rayQuery_) {
         for (const char* e : kRayQueryExtensions) exts.push_back(e);
-        bda.pNext = const_cast<void*>(dci.pNext);
-        asf.pNext = &bda;
-        rqf.pNext = &asf;
-        dci.pNext = &rqf;
+        dci.pNext = rqf.chain(const_cast<void*>(dci.pNext));
         VkPhysicalDeviceAccelerationStructurePropertiesKHR ap{};
         ap.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
         VkPhysicalDeviceProperties2 p2{};
@@ -338,19 +341,31 @@ Context::Context(int device) {
     vkCheck(vkAllocateCommandBuffers(device_, &cai, &cmd_), "vkAllocateCommandBuffers");
     VkFenceCreateInfo fci{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
     vkCheck(vkCreateFence(device_, &fci, nullptr, &fence_), "vkCreateFence");
+    for (auto& submission : submissions_) {
+        vkCheck(vkAllocateCommandBuffers(device_, &cai, &submission.command), "vkAllocateCommandBuffers async");
+        vkCheck(vkCreateFence(device_, &fci, nullptr, &submission.fence), "vkCreateFence async");
+    }
 
     vkGetPhysicalDeviceProperties(physical_, &props_);
+    if (const char* e = std::getenv("OWE_GPU_PROFILE"); e && *e && *e != '0') {
+        timestampBits_ = qs[queueFamily_].timestampValidBits;
+        if (timestampBits_ && props_.limits.timestampPeriod > 0) {
+            VkQueryPoolCreateInfo qpi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
+            qpi.queryType = VK_QUERY_TYPE_TIMESTAMP;
+            qpi.queryCount = kProfileQueries;
+            if (vkCreateQueryPool(device_, &qpi, nullptr, &profilePool_) != VK_SUCCESS)
+                std::fprintf(stderr, "owe_gpu_profile unavailable: timestamp query allocation failed\n");
+            else
+                std::fprintf(stderr, "owe_gpu_profile enabled: diagnostic timestamps may affect performance\n");
+        } else {
+            std::fprintf(stderr, "owe_gpu_profile unavailable: compute queue has no timestamps\n");
+        }
+    }
     cachePath_ = pipelineCachePath(props_);
     if (!cachePath_.empty()) {
-        const std::vector<char> data = readPipelineCache(cachePath_, props_);
-        VkPipelineCacheCreateInfo cci{VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
-        cci.initialDataSize = data.size();
-        cci.pInitialData = data.empty() ? nullptr : data.data();
-        if (vkCreatePipelineCache(device_, &cci, nullptr, &pipelineCache_) != VK_SUCCESS) {
-            cci.initialDataSize = 0;  // the driver refused the file: start empty
-            cci.pInitialData = nullptr;
-            if (vkCreatePipelineCache(device_, &cci, nullptr, &pipelineCache_) != VK_SUCCESS) pipelineCache_ = VK_NULL_HANDLE;
-        }
+        std::vector<char> data = readPipelineCache(cachePath_, props_);
+        if (data.size() > kMaxPipelineCacheBytes) data.clear();
+        pipelineCache_ = createPipelineCache(device_, data);
         if (pipelineCache_) vkGetPipelineCacheData(device_, pipelineCache_, &cacheSavedBytes_, nullptr);
     }
 }
@@ -363,16 +378,11 @@ void Context::savePipelineCache() {
     if (bytes <= cacheSavedBytes_) return;
     try {
         // Keep what other processes added since this one loaded the file.
-        const std::vector<char> disk = readPipelineCache(cachePath_, props_);
-        if (!disk.empty()) {
-            VkPipelineCacheCreateInfo cci{VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
-            cci.initialDataSize = disk.size();
-            cci.pInitialData = disk.data();
-            VkPipelineCache other = VK_NULL_HANDLE;
-            if (vkCreatePipelineCache(device_, &cci, nullptr, &other) == VK_SUCCESS) {
-                vkMergePipelineCaches(device_, pipelineCache_, 1, &other);
-                vkDestroyPipelineCache(device_, other, nullptr);
-            }
+        std::vector<char> disk = readPipelineCache(cachePath_, props_);
+        if (disk.size() > kMaxPipelineCacheBytes) disk.clear();
+        if (VkPipelineCache other = disk.empty() ? VK_NULL_HANDLE : createPipelineCache(device_, disk)) {
+            vkMergePipelineCaches(device_, pipelineCache_, 1, &other);
+            vkDestroyPipelineCache(device_, other, nullptr);
         }
         vkGetPipelineCacheData(device_, pipelineCache_, &bytes, nullptr);
         std::vector<char> data(bytes);
@@ -401,10 +411,23 @@ void Context::savePipelineCache() {
 Context::~Context() {
     if (device_) {
         vkDeviceWaitIdle(device_);
+        if (profilePool_) {
+            for (const auto& [name, total] : kernelProfile_)
+                std::fprintf(stderr, "owe_gpu_profile kind=kernel name=%s calls=%llu gpu_ms=%.6f\n",
+                             name.c_str(), static_cast<unsigned long long>(total.calls), total.gpuMs);
+            for (const auto& [name, total] : submissionProfile_)
+                std::fprintf(stderr, "owe_gpu_profile kind=submission name=%s calls=%llu gpu_ms=%.6f cpu_ms=%.6f\n",
+                             name.c_str(), static_cast<unsigned long long>(total.calls), total.gpuMs, total.cpuMs);
+            if (profileOmitted_)
+                std::fprintf(stderr, "owe_gpu_profile omitted_kernel_spans=%llu (query capacity exceeded)\n",
+                             static_cast<unsigned long long>(profileOmitted_));
+            vkDestroyQueryPool(device_, profilePool_, nullptr);
+        }
         if (pipelineCache_) {
             savePipelineCache();
             vkDestroyPipelineCache(device_, pipelineCache_, nullptr);
         }
+        for (const auto& submission : submissions_) vkDestroyFence(device_, submission.fence, nullptr);
         vkDestroyFence(device_, fence_, nullptr);
         vkDestroyCommandPool(device_, pool_, nullptr);
         vkDestroyDevice(device_, nullptr);
@@ -428,19 +451,24 @@ Buffer Context::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemo
     bci.usage = usage;
     bci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     vkCheck(vkCreateBuffer(device_, &bci, nullptr, &b.buffer), "vkCreateBuffer");
-    VkMemoryRequirements req;
-    vkGetBufferMemoryRequirements(device_, b.buffer, &req);
-    VkMemoryAllocateInfo mai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
-    VkMemoryAllocateFlagsInfo flags{};
-    flags.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
-    flags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
-    if (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) mai.pNext = &flags;
-    mai.allocationSize = req.size;
-    mai.memoryTypeIndex = memoryType(req.memoryTypeBits, want, fallback);
-    vkCheck(vkAllocateMemory(device_, &mai, nullptr, &b.memory), "vkAllocateMemory");
-    vkCheck(vkBindBufferMemory(device_, b.buffer, b.memory, 0), "vkBindBufferMemory");
-    if (memProps_.memoryTypes[mai.memoryTypeIndex].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
-        vkCheck(vkMapMemory(device_, b.memory, 0, VK_WHOLE_SIZE, 0, &b.mapped), "vkMapMemory");
+    try {
+        VkMemoryRequirements req;
+        vkGetBufferMemoryRequirements(device_, b.buffer, &req);
+        VkMemoryAllocateInfo mai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+        VkMemoryAllocateFlagsInfo flags{};
+        flags.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
+        flags.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+        if (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) mai.pNext = &flags;
+        mai.allocationSize = req.size;
+        mai.memoryTypeIndex = memoryType(req.memoryTypeBits, want, fallback);
+        vkCheck(vkAllocateMemory(device_, &mai, nullptr, &b.memory), "vkAllocateMemory");
+        vkCheck(vkBindBufferMemory(device_, b.buffer, b.memory, 0), "vkBindBufferMemory");
+        if (memProps_.memoryTypes[mai.memoryTypeIndex].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
+            vkCheck(vkMapMemory(device_, b.memory, 0, VK_WHOLE_SIZE, 0, &b.mapped), "vkMapMemory");
+    } catch (...) {
+        destroy(b);
+        throw;
+    }
     return b;
 }
 
@@ -477,6 +505,7 @@ Accel Context::createAccel(VkAccelerationStructureTypeKHR type, VkDeviceSize siz
 }
 
 void Context::destroy(Accel& a) {
+    waitPending();
     if (a.handle) vkDestroyAccelerationStructureKHR(device_, a.handle, nullptr);
     destroy(a.storage);
     a = Accel{};
@@ -489,45 +518,138 @@ Buffer Context::createHostBuffer(VkDeviceSize size, bool readback) {
 }
 
 void Context::destroy(Buffer& b) {
+    waitPending();
     if (b.mapped) vkUnmapMemory(device_, b.memory);
     if (b.buffer) vkDestroyBuffer(device_, b.buffer, nullptr);
     if (b.memory) vkFreeMemory(device_, b.memory, nullptr);
     b = Buffer{};
 }
 
-void Context::upload(const Buffer& dst, const void* data, size_t bytes) {
+void Context::upload(const Buffer& dst, const void* data, size_t bytes) { uploadAt(dst, 0, data, bytes); }
+
+void Context::uploadAt(const Buffer& dst, VkDeviceSize offset, const void* data, size_t bytes) {
     if (bytes == 0) return;
-    Buffer staging = createHostBuffer(bytes, false);
-    std::memcpy(staging.mapped, data, bytes);
-    submit([&](VkCommandBuffer cmd) {
-        VkBufferCopy region{0, 0, bytes};
-        vkCmdCopyBuffer(cmd, staging.buffer, dst.buffer, 1, &region);
-    });
+    const size_t slice = std::min<size_t>(bytes, size_t(64) << 20);
+    Buffer staging = createHostBuffer(slice, false);
+    for (size_t done = 0; done < bytes; done += slice) {
+        const size_t n = std::min(slice, bytes - done);
+        std::memcpy(staging.mapped, static_cast<const char*>(data) + done, n);
+        submit([&](VkCommandBuffer cmd) {
+            VkBufferCopy region{0, offset + done, n};
+            vkCmdCopyBuffer(cmd, staging.buffer, dst.buffer, 1, &region);
+        }, "upload");
+    }
     destroy(staging);
 }
 
-void Context::begin() {
-    vkCheck(vkResetCommandBuffer(cmd_, 0), "vkResetCommandBuffer");
-    VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-    bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    vkCheck(vkBeginCommandBuffer(cmd_, &bi), "vkBeginCommandBuffer");
+void Context::waitPending() {
+    for (auto& submission : submissions_) {
+        if (!submission.pending) continue;
+        vkCheck(vkWaitForFences(device_, 1, &submission.fence, VK_TRUE, UINT64_MAX), "wait async submission");
+        submission.pending = false;
+    }
 }
 
-void Context::endAndWait() {
-    vkCheck(vkEndCommandBuffer(cmd_), "vkEndCommandBuffer");
+VkCommandBuffer Context::beginAsync() {
+    auto& submission = submissions_[nextSubmission_];
+    if (submission.pending) {
+        vkCheck(vkWaitForFences(device_, 1, &submission.fence, VK_TRUE, UINT64_MAX), "reuse async submission");
+        submission.pending = false;
+    }
+    beginCommand(submission.command);
+    return submission.command;
+}
+
+void Context::endAsync() {
+    auto& submission = submissions_[nextSubmission_];
+    submitCommand(submission.command, submission.fence);
+    submission.pending = true;
+    nextSubmission_ = (nextSubmission_ + 1) % submissions_.size();
+}
+
+void Context::beginCommand(VkCommandBuffer cmd) {
+    vkCheck(vkResetCommandBuffer(cmd, 0), "vkResetCommandBuffer");
+    VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vkCheck(vkBeginCommandBuffer(cmd, &bi), "vkBeginCommandBuffer");
+}
+
+void Context::submitCommand(VkCommandBuffer cmd, VkFence fence) {
+    vkCheck(vkEndCommandBuffer(cmd), "vkEndCommandBuffer");
+    vkCheck(vkResetFences(device_, 1, &fence), "vkResetFences");
     VkSubmitInfo si{VK_STRUCTURE_TYPE_SUBMIT_INFO};
     si.commandBufferCount = 1;
-    si.pCommandBuffers = &cmd_;
-    vkCheck(vkResetFences(device_, 1, &fence_), "vkResetFences");
-    vkCheck(vkQueueSubmit(queue_, 1, &si, fence_), "vkQueueSubmit");
+    si.pCommandBuffers = &cmd;
+    vkCheck(vkQueueSubmit(queue_, 1, &si, fence), "vkQueueSubmit");
+}
+
+void Context::begin() {
+    beginCommand(cmd_);
+    if (profilePool_) {
+        profileNext_ = 2;
+        profileSpans_.clear();
+        vkCmdResetQueryPool(cmd_, profilePool_, 0, kProfileQueries);
+        vkCmdWriteTimestamp(cmd_, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, profilePool_, 0);
+    }
+}
+
+uint32_t Context::beginKernelProfile(VkCommandBuffer cmd, const std::string& name) {
+    if (!profilePool_) return ~0u;
+    if (profileNext_ + 2 > kProfileQueries) {
+        ++profileOmitted_;
+        return ~0u;
+    }
+    const uint32_t query = profileNext_;
+    profileNext_ += 2;
+    profileSpans_.push_back({name, query});
+    // Bottom-of-pipe on both sides excludes previously queued GPU work from this span.
+    vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, profilePool_, query);
+    // Prevent the next dispatch from overlapping the starting timestamp. Profiling deliberately
+    // serialises dispatches; its timings diagnose costs, not production throughput.
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                         0, 0, nullptr, 0, nullptr, 0, nullptr);
+    return query;
+}
+
+void Context::endKernelProfile(VkCommandBuffer cmd, uint32_t query) {
+    if (query != ~0u)
+        vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, profilePool_, query + 1);
+}
+
+void Context::endAndWait(const char* label) {
+    if (profilePool_)
+        vkCmdWriteTimestamp(cmd_, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, profilePool_, 1);
+    const auto start = std::chrono::steady_clock::now();
+    submitCommand(cmd_, fence_);
     vkCheck(vkWaitForFences(device_, 1, &fence_, VK_TRUE, UINT64_MAX), "vkWaitForFences (device lost?)");
+    // This fence also covers earlier submissions on this queue.
+    for (auto& submission : submissions_) submission.pending = false;
+    if (profilePool_) {
+        const double cpuMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+        std::vector<uint64_t> ticks(profileNext_);
+        vkCheck(vkGetQueryPoolResults(device_, profilePool_, 0, profileNext_, ticks.size() * sizeof(uint64_t),
+                                     ticks.data(), sizeof(uint64_t), VK_QUERY_RESULT_64_BIT), "vkGetQueryPoolResults");
+        const uint64_t mask = timestampBits_ == 64 ? ~uint64_t(0) : (uint64_t(1) << timestampBits_) - 1;
+        const auto elapsed = [&](uint32_t a, uint32_t b) {
+            return double((ticks[b] - ticks[a]) & mask) * double(props_.limits.timestampPeriod) * 1e-6;
+        };
+        auto& total = submissionProfile_[label];
+        ++total.calls;
+        total.gpuMs += elapsed(0, 1);
+        total.cpuMs += cpuMs;
+        for (const auto& span : profileSpans_) {
+            auto& kernel = kernelProfile_[span.name];
+            ++kernel.calls;
+            kernel.gpuMs += elapsed(span.query, span.query + 1);
+        }
+    }
 }
 
 // ---------------------------------------------------------------- Kernel
 
 Kernel::Kernel(Context& ctx, const unsigned char* spirv, size_t bytes, uint32_t bindings, uint32_t pushBytes,
                const char* name, uint32_t accelBinding)
-    : ctx_(ctx), pushBytes_(pushBytes) {
+    : ctx_(ctx), pushBytes_(pushBytes), name_(name) {
     VkDevice dev = ctx_.device();
     std::vector<uint32_t> words((bytes + 3) / 4);
     std::memcpy(words.data(), spirv, bytes);
@@ -625,6 +747,7 @@ void Kernel::printStatistics(const char* name) const {
 }
 
 Kernel::~Kernel() {
+    ctx_.waitPending();
     VkDevice dev = ctx_.device();
     vkDeviceWaitIdle(dev);
     vkDestroyDescriptorPool(dev, pool_, nullptr);
@@ -660,19 +783,39 @@ void Kernel::bindAccel(uint32_t binding, VkAccelerationStructureKHR as) {
 }
 
 void Kernel::dispatch(VkCommandBuffer cmd, const void* push, uint32_t gx, uint32_t gy) {
+    const uint32_t query = ctx_.beginKernelProfile(cmd, name_);
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout_, 0, 1, &set_, 0, nullptr);
     if (pushBytes_) vkCmdPushConstants(cmd, layout_, VK_SHADER_STAGE_COMPUTE_BIT, 0, pushBytes_, push);
     vkCmdDispatch(cmd, gx, gy, 1);
+    ctx_.endKernelProfile(cmd, query);
+}
+
+void memoryBarrier(VkCommandBuffer cmd, VkPipelineStageFlags srcStage, VkAccessFlags srcAccess,
+                   VkPipelineStageFlags dstStage, VkAccessFlags dstAccess) {
+    VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+    mb.srcAccessMask = srcAccess;
+    mb.dstAccessMask = dstAccess;
+    vkCmdPipelineBarrier(cmd, srcStage, dstStage, 0, 1, &mb, 0, nullptr, 0, nullptr);
 }
 
 void computeBarrier(VkCommandBuffer cmd, bool toTransfer) {
-    VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
-    mb.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-    mb.dstAccessMask = toTransfer ? VK_ACCESS_TRANSFER_READ_BIT : (VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
-    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                         toTransfer ? VK_PIPELINE_STAGE_TRANSFER_BIT : VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &mb, 0,
-                         nullptr, 0, nullptr);
+    if (toTransfer)
+        memoryBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                      VK_ACCESS_TRANSFER_READ_BIT);
+    else
+        memoryBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                      VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
+}
+
+void transferToCompute(VkCommandBuffer cmd) {
+    memoryBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                  VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
+}
+
+void copyBuffer(VkCommandBuffer cmd, const Buffer& src, const Buffer& dst, VkDeviceSize bytes) {
+    VkBufferCopy region{0, 0, bytes};
+    vkCmdCopyBuffer(cmd, src.buffer, dst.buffer, 1, &region);
 }
 
 std::shared_ptr<Context> acquireContext(int device) {
@@ -687,12 +830,22 @@ std::shared_ptr<Context> acquireContext(int device) {
 
 // ---------------------------------------------------------------- device listing
 
+namespace {
+// The candidate devices of a temporary instance (destroyed even when enumeration throws).
+std::vector<Candidate> candidates() {
+    bool portability = false;
+    VkInstance inst = createInstance(portability);
+    struct Destroy {
+        VkInstance i;
+        ~Destroy() { vkDestroyInstance(i, nullptr); }
+    } destroy{inst};
+    return enumerate(inst);
+}
+}  // namespace
+
 bool available(std::string* why) {
     try {
-        bool portability = false;
-        VkInstance inst = createInstance(portability);
-        auto cands = enumerate(inst);
-        vkDestroyInstance(inst, nullptr);
+        auto cands = candidates();
         for (auto& c : cands)
             if (c.usable) return true;
         if (why) *why = cands.empty() ? "no Vulkan device found" : "no usable Vulkan device: " + cands[0].why;
@@ -706,14 +859,11 @@ bool available(std::string* why) {
 std::vector<DeviceInfo> devices() {
     std::vector<DeviceInfo> out;
     try {
-        bool portability = false;
-        VkInstance inst = createInstance(portability);
-        for (auto& c : enumerate(inst)) {
+        for (auto& c : candidates()) {
             DeviceInfo d = c.info;
             if (!c.usable) d.type += " (unusable: " + c.why + ")";
             out.push_back(d);
         }
-        vkDestroyInstance(inst, nullptr);
     } catch (const std::exception&) {
     }
     return out;

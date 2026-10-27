@@ -19,6 +19,8 @@ uint32_t interiorRegion(World& w, int body, const std::string& name, const BodyM
 
 // ---------------------------------------------------------------- lenses
 
+double SurfaceSpec::edgeSag() const { return SagSurface(curvature(), k, A, semiDiameter).sag(semiDiameter); }
+
 int buildLens(World& w, const std::string& name, const LensSpec& s, int assembly, const Transform& xf,
               uint32_t ambient) {
     size_t n = s.media.size();
@@ -43,8 +45,7 @@ int buildLens(World& w, const std::string& name, const LensSpec& s, int assembly
     for (size_t i = 0; i <= n; ++i) {
         const SurfaceSpec& sf = s.surfaces[i];
         auto shape = std::make_shared<SagSurface>(sf.curvature(), sf.k, sf.A, sf.semiDiameter);
-        shape->clearSemiDiameter = sf.clearSemiDiameter;
-        zEdge[i] = zv[i] + shape->sag(sf.semiDiameter);
+        zEdge[i] = zv[i] + sf.edgeSag();
         uint32_t front = i < n ? regions[i] : kOutside;  // +z side
         uint32_t back = i > 0 ? regions[i - 1] : kOutside;
         w.addBoundary(body, idx("S", i + 1), shape, Transform::translate({0, 0, zv[i]}), front, back, dielectric);
@@ -179,12 +180,11 @@ int buildMesh(World& w, const std::string& name, const MeshData& mesh, const Bod
     return body;
 }
 
-int buildBox(World& w, const std::string& name, const Vec3& size, const BodyMaterial& m, int assembly,
-             const Transform& xf) {
-    MeshData md;
-    Vec3 h = size * 0.5;
+MeshData makeBoxMesh(const Vec3& lo, const Vec3& hi) {
+    const AABB box{lo, hi};
     Vec3 c[8];
-    for (int i = 0; i < 8; ++i) c[i] = {(i & 1) ? h.x : -h.x, (i & 2) ? h.y : -h.y, (i & 4) ? h.z : -h.z};
+    for (int i = 0; i < 8; ++i) c[i] = box.corner(i);
+    MeshData md;
     md.addQuad(c[0], c[2], c[3], c[1]);  // -z
     md.addQuad(c[4], c[5], c[7], c[6]);  // +z
     md.addQuad(c[0], c[1], c[5], c[4]);  // -y
@@ -192,7 +192,12 @@ int buildBox(World& w, const std::string& name, const Vec3& size, const BodyMate
     md.addQuad(c[0], c[4], c[6], c[2]);  // -x
     md.addQuad(c[1], c[3], c[7], c[5]);  // +x
     orientOutward(md);
-    int body = buildMesh(w, name, md, m, assembly, xf);
+    return md;
+}
+
+int buildBox(World& w, const std::string& name, const Vec3& size, const BodyMaterial& m, int assembly,
+             const Transform& xf) {
+    int body = buildMesh(w, name, makeBoxMesh(size * -0.5, size * 0.5), m, assembly, xf);
     w.bodies()[body].kind = "box";
     return body;
 }
@@ -210,39 +215,28 @@ int buildCylinder(World& w, const std::string& name, double radius, double heigh
 }
 
 namespace {
-// A point or direction in the (r, z) half-plane.
-struct P2 {
-    double x = 0, y = 0;
-    P2() = default;
-    P2(double a, double b) : x(a), y(b) {}
-    P2 operator+(const P2& o) const { return {x + o.x, y + o.y}; }
-    P2 operator-(const P2& o) const { return {x - o.x, y - o.y}; }
-    P2 operator-() const { return {-x, -y}; }
-    P2 operator*(double k) const { return {x * k, y * k}; }
-};
-double length(const P2& p) { return std::hypot(p.x, p.y); }
-P2 normalize(const P2& p) { return p * (1 / length(p)); }
+// Points and directions in the (r, z) half-plane are Vec2s (x: r, y: z).
 
 // A piece of a lathe profile: a line from a to b, or an arc of radius rho about c from angle a0 to a1
-// (counterclockwise in (r, z) if a1 > a0). P2 components: (r, z).
+// (counterclockwise in (r, z) if a1 > a0).
 struct ProfilePiece {
     bool arc = false;
-    P2 a, b;           // line ends; for an arc its end points too
-    P2 c;              // arc centre
+    Vec2 a, b;           // line ends; for an arc its end points too
+    Vec2 c;              // arc centre
     double rho = 0, a0 = 0, a1 = 0;
-    P2 at(double u) const {  // u ∈ [0, 1] along the piece
+    Vec2 at(double u) const {  // u ∈ [0, 1] along the piece
         if (!arc) return a + (b - a) * u;
         const double t = a0 + (a1 - a0) * u;
-        return c + P2(std::cos(t), std::sin(t)) * rho;
+        return c + Vec2(std::cos(t), std::sin(t)) * rho;
     }
-    P2 tangent(double u) const {  // direction of travel
+    Vec2 tangent(double u) const {  // direction of travel
         if (!arc) return normalize(b - a);
         const double t = a0 + (a1 - a0) * u, s = a1 > a0 ? 1.0 : -1.0;
-        return P2(-std::sin(t), std::cos(t)) * s;
+        return Vec2(-std::sin(t), std::cos(t)) * s;
     }
 };
 
-ProfilePiece lineOf(const P2& a, const P2& b) {
+ProfilePiece lineOf(const Vec2& a, const Vec2& b) {
     ProfilePiece p;
     p.a = a;
     p.b = b;
@@ -253,23 +247,23 @@ ProfilePiece lineOf(const P2& a, const P2& b) {
 std::vector<ProfilePiece> filletProfile(const std::vector<ProfilePoint>& pts, const std::string& what) {
     if (pts.size() < 2) throw std::runtime_error("vessel " + what + " profile needs at least two points");
     std::vector<ProfilePiece> out;
-    P2 cursor(pts[0].r, pts[0].z);
+    Vec2 cursor(pts[0].r, pts[0].z);
     for (size_t i = 1; i < pts.size(); ++i) {
-        const P2 P(pts[i].r, pts[i].z);
+        const Vec2 P(pts[i].r, pts[i].z);
         const double f = i + 1 < pts.size() ? pts[i].fillet : 0;
         if (!(f > 0)) {
             if (length(P - cursor) > 1e-12) out.push_back(lineOf(cursor, P));
             cursor = P;
             continue;
         }
-        const P2 N(pts[i + 1].r, pts[i + 1].z);
-        const P2 u = normalize(cursor - P), v = normalize(N - P);
+        const Vec2 N(pts[i + 1].r, pts[i + 1].z);
+        const Vec2 u = normalize(cursor - P), v = normalize(N - P);
         const double half = 0.5 * std::acos(std::clamp(u.x * v.x + u.y * v.y, -1.0, 1.0));
         if (!(half > 1e-6 && half < Pi / 2 - 1e-9)) throw std::runtime_error("vessel " + what + " profile: a fillet on a straight corner");
         const double d = f / std::tan(half);
         if (d > length(cursor - P) + 1e-12 || d > length(N - P) + 1e-12)
             throw std::runtime_error("vessel " + what + " profile: fillet too large for its corner");
-        const P2 t1 = P + u * d, t2 = P + v * d, c = P + normalize(u + v) * (f / std::sin(half));
+        const Vec2 t1 = P + u * d, t2 = P + v * d, c = P + normalize(u + v) * (f / std::sin(half));
         if (length(t1 - cursor) > 1e-12) out.push_back(lineOf(cursor, t1));
         ProfilePiece arc{true, t1, t2, c, f, std::atan2(t1.y - c.y, t1.x - c.x), std::atan2(t2.y - c.y, t2.x - c.x)};
         // Take the short way round (a fillet turns by less than π).
@@ -288,7 +282,7 @@ void splitAt(const ProfilePiece& p, double z, std::vector<ProfilePiece>& below, 
     if (!p.arc) {
         if (hi <= z) { below.push_back(p); return; }
         if (lo >= z) { above.push_back(p); return; }
-        const P2 m = p.a + (p.b - p.a) * ((z - za) / (zb - za));
+        const Vec2 m = p.a + (p.b - p.a) * ((z - za) / (zb - za));
         ProfilePiece p1 = p, p2 = p;
         p1.b = m;
         p2.a = m;
@@ -322,11 +316,11 @@ void splitAt(const ProfilePiece& p, double z, std::vector<ProfilePiece>& below, 
 
 // The revolved surface of a piece, and whether its own normal points to the side `sideNormal`
 // (a direction in (r, z) at the piece's middle) indicates.
-std::shared_ptr<const Shape> revolve(const ProfilePiece& p, Transform& local, const P2& sideNormal, bool& alongNormal) {
+std::shared_ptr<const Shape> revolve(const ProfilePiece& p, Transform& local, const Vec2& sideNormal, bool& alongNormal) {
     local = Transform{};
-    P2 n;  // the shape's own normal at the middle, in (r, z)
+    Vec2 n;  // the shape's own normal at the middle, in (r, z)
     std::shared_ptr<const Shape> shape;
-    const P2 mid = p.at(0.5);
+    const Vec2 mid = p.at(0.5);
     if (p.arc) {
         shape = std::make_shared<TorusPatchShape>(p.c.x, p.c.y, p.rho, p.a0, p.a1);
         n = normalize(mid - p.c);
@@ -334,14 +328,14 @@ std::shared_ptr<const Shape> revolve(const ProfilePiece& p, Transform& local, co
         const double r0 = std::min(p.a.x, p.b.x), r1 = std::max(p.a.x, p.b.x);
         shape = PlaneShape::disk(r1, r0);
         local = Transform::translate({0, 0, p.a.y});
-        n = P2(0, 1);
+        n = Vec2(0, 1);
     } else if (std::abs(p.a.x - p.b.x) < 1e-12) {
         shape = std::make_shared<CylinderShape>(p.a.x, p.a.y, p.b.y);
-        n = P2(1, 0);
+        n = Vec2(1, 0);
     } else {
         auto cone = std::make_shared<ConeShape>(p.a.x, p.a.y, p.b.x, p.b.y);
         const double k = (p.b.x - p.a.x) / (p.b.y - p.a.y);
-        n = normalize(P2(1, -k));
+        n = normalize(Vec2(1, -k));
         shape = cone;
     }
     alongNormal = n.x * sideNormal.x + n.y * sideNormal.y > 0;
@@ -358,8 +352,8 @@ int buildVessel(World& w, const std::string& name, const VesselSpec& s, int asse
     if (s.level > 0) liquid = w.addRegion(name + ".liquid", w.medium(s.liquid), body);
     // Walking a profile from the axis up to the rim, the air lies on the right of the outer one and
     // the cavity on the left of the inner one.
-    auto rightOf = [](const ProfilePiece& p) { P2 t = p.tangent(0.5); return P2(t.y, -t.x); };
-    auto add = [&](const ProfilePiece& p, const P2& sideNormal, uint32_t sideRegion, uint32_t otherRegion,
+    auto rightOf = [](const ProfilePiece& p) { Vec2 t = p.tangent(0.5); return Vec2(t.y, -t.x); };
+    auto add = [&](const ProfilePiece& p, const Vec2& sideNormal, uint32_t sideRegion, uint32_t otherRegion,
                    const char* what) {
         Transform local;
         bool along;
@@ -368,9 +362,9 @@ int buildVessel(World& w, const std::string& name, const VesselSpec& s, int asse
     };
     for (const ProfilePiece& p : outer) add(p, rightOf(p), kOutside, glass, "outer");
     // The rim: from the outer profile's last point to the inner's, the air above (on its right).
-    const P2 o(s.outer.back().r, s.outer.back().z), in(s.inner.back().r, s.inner.back().z);
+    const Vec2 o(s.outer.back().r, s.outer.back().z), in(s.inner.back().r, s.inner.back().z);
     if (s.roundRim && length(o - in) > 1e-9) {
-        const P2 c = (o + in) * 0.5;
+        const Vec2 c = (o + in) * 0.5;
         ProfilePiece rim{true, o, in, c, 0.5 * length(o - in), std::atan2(o.y - c.y, o.x - c.x), 0};
         rim.a1 = rim.a0 + Pi;  // over the top: counterclockwise from the outer to the inner side
         if (rim.at(0.5).y < c.y) rim.a1 = rim.a0 - Pi;
@@ -393,7 +387,7 @@ int buildVessel(World& w, const std::string& name, const VesselSpec& s, int asse
         double rl = -1;
         for (const ProfilePiece& p : inner)
             for (int i = 0; i < 4096; ++i) {
-                const P2 a = p.at(i / 4096.0), b = p.at((i + 1) / 4096.0);
+                const Vec2 a = p.at(i / 4096.0), b = p.at((i + 1) / 4096.0);
                 if ((a.y - s.level) * (b.y - s.level) <= 0 && a.y != b.y) {
                     const double r = a.x + (b.x - a.x) * (s.level - a.y) / (b.y - a.y);
                     rl = std::max(rl, r);
@@ -558,7 +552,7 @@ double terrainHeight(const TerrainSpec& t, double x, double y) {
     if (t.flatRadius > 0) {
         // Blend smoothly to a level plateau around the origin (a site for instruments).
         double r = std::sqrt(x * x + y * y);
-        double s = clampd((r - t.flatRadius) / t.flatRadius, 0, 1);
+        double s = clamp((r - t.flatRadius) / t.flatRadius, 0, 1);
         s = s * s * (3 - 2 * s);
         z = rawTerrainHeight(t, 0, 0) * (1 - s) + z * s;
     }
@@ -640,48 +634,6 @@ MeshData makeFlutedShaft(double height, double r0, double r1, double entasis, in
         m.addTriangle(Vec3(0, 0, height), P(i, segZ), P(i + 1, segZ));  // top cap
         m.addTriangle(Vec3(0, 0, 0), P(i + 1, 0), P(i, 0));             // bottom cap
     }
-    return m;
-}
-
-MeshData makeRoundWall(double R, double H, int segAz, int segZ, const std::vector<WallOpening>& openings) {
-    MeshData m;
-    auto P = [&](int i, int j) {
-        double az = 2 * Pi * i / segAz;
-        return Vec3(R * std::sin(az), R * std::cos(az), H * j / segZ);
-    };
-    for (int i = 0; i < segAz; ++i)
-        for (int j = 0; j < segZ; ++j) {
-            double azMid = 2 * Pi * (i + 0.5) / segAz, zMid = H * (j + 0.5) / segZ;
-            bool open = false;
-            for (const auto& o : openings) {
-                double dAz = std::remainder(azMid - o.azimuth, 2 * Pi);
-                if (std::abs(dAz) * R < 0.5 * o.width && zMid > o.sill && zMid < o.top) open = true;
-            }
-            if (!open) m.addQuad(P(i, j), P(i, j + 1), P(i + 1, j + 1), P(i + 1, j));
-        }
-    return m;
-}
-
-MeshData makeDome(double R, int segAz, int segEl, double slitAz, double slitWidth, double slitTop) {
-    MeshData m;
-    auto P = [&](int i, int j) {
-        double az = 2 * Pi * i / segAz, el = 0.5 * Pi * j / segEl;
-        return Vec3(R * std::cos(el) * std::sin(az), R * std::cos(el) * std::cos(az), R * std::sin(el));
-    };
-    for (int i = 0; i < segAz; ++i)
-        for (int j = 0; j < segEl; ++j) {
-            if (slitWidth > 0) {
-                double azMid = 2 * Pi * (i + 0.5) / segAz;
-                double dAz = std::remainder(azMid - slitAz, 2 * Pi);
-                double elMid = 0.5 * Pi * (j + 0.5) / segEl;
-                // The slit keeps a constant linear width, so its angular width grows toward the zenith.
-                double halfW = std::asin(std::min(1.0, 0.5 * slitWidth / std::max(1e-9, R * std::cos(elMid))));
-                if (std::abs(dAz) < halfW && elMid < slitTop) continue;
-            }
-            Vec3 a = P(i, j), b = P(i + 1, j), c = P(i + 1, j + 1), d = P(i, j + 1);
-            if (j + 1 == segEl) m.addTriangle(a, b, c);  // c == d at the zenith
-            else m.addQuad(a, b, c, d);
-        }
     return m;
 }
 
@@ -768,19 +720,8 @@ int buildFractalStatue(World& w, const std::string& name, double radius, int dep
     int body = w.addBody(name, "fractal-statue", assembly, xf);
     uint32_t inside = w.addRegion(name + ".stone", w.medium("opaque"), body);
     // Pedestal.
-    MeshData ped;
-    {
-        double hw = radius * 0.9, h = radius * 0.8;
-        Vec3 c[8];
-        for (int i = 0; i < 8; ++i) c[i] = {(i & 1) ? hw : -hw, (i & 2) ? hw : -hw, (i & 4) ? 0.0 : -h};
-        ped.addQuad(c[0], c[2], c[3], c[1]);
-        ped.addQuad(c[4], c[5], c[7], c[6]);
-        ped.addQuad(c[0], c[1], c[5], c[4]);
-        ped.addQuad(c[2], c[6], c[7], c[3]);
-        ped.addQuad(c[0], c[4], c[6], c[2]);
-        ped.addQuad(c[1], c[3], c[7], c[5]);
-        orientOutward(ped);
-    }
+    const double hw = radius * 0.9;
+    const MeshData ped = makeBoxMesh({-hw, -hw, -radius * 0.8}, {hw, hw, 0});
     w.addBoundary(body, "pedestal", std::make_shared<MeshShape>(ped.positions, ped.triangles, "pedestal"),
                   Transform::translate({0, 0, -radius * 1e-6}), kOutside, inside, pedestalOptics);
     static const Vec3 dirs[6] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};

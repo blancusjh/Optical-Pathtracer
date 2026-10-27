@@ -1,0 +1,7 @@
+Name: ETH: Tellurium with Lunarium
+Author: ETH Library_Collections
+Licence: CC Attribution
+URL: https://sketchfab.com/3d-models/tellurium_lunarium-e4c9f36a40f3479885f27380f8286b2d
+Downloaded: 2026-09-29
+Format: glTF (separate textures)
+Attribution required (CC BY): credit the author and link the source.

@@ -1,0 +1,18 @@
+{
+  "engine": "optical-world-engine 0.1.0",
+  "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+  "scene": {"path": "scenes/the_invisible_window.owe", "fnv1a64": "8c3a7985c23b1cca", "edits": []},
+  "detector": {"name": "Wall", "description": "ideal observer 'Wall' 960x600, fovY=60 deg, pupil diameter=2 mm, focus=0.864000 m, pixel filter gaussian(0.4)", "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ", "pixel_response": "square * gaussian(sigma 0.400000 px)"},
+  "observer_pose": {"position_m": [0.45000000000000001, -0.38, 1.1000000000000001], "look_at_m": [1.2256164802, 0, 1.1000000000000001], "up": [0, 0, 1], "fov_deg": 59.999999999999993, "pupil_radius_m": 0.001, "focus_distance_m": 0.86399999999999999, "width": 960, "height": 600},
+  "integrator": "sppm",
+  "sampling": {"wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm", "fresnel": "stochastic branch selection", "nee": true, "mis": "power heuristic", "russian_roulette_depth": 6, "fresnel_floor": 0, "photons": {"radius_pixels": 2.000000, "alpha": 0.666667, "per_pixel_and_iteration": 16.000000, "wavelengths": "shared by every path and photon of an iteration"}},
+  "seed": 7,
+  "samples_per_pixel": 128,
+  "passes": 1,
+  "max_depth": 10,
+  "display": {"exposure_ev": -15, "auto_exposure": false, "auto_gain_ev": 0, "white_balance_kelvin": 5800, "tone": "agx"},
+  "render_seconds": 1559.86,
+  "statistics": {"paths": 1253376000, "segments": 6646665101, "region_inconsistencies": 26, "leaks": 0, "first_inconsistency": {"boundary": "ShutterAbove.surface", "ray_region": "ambient[air]", "expected_region": "ShutterAbove.interior[opaque]", "previous_boundary": "Check.pixels", "position_m": [-0.00099997520446776234, 0.098667259216308589, 2.000000035762787], "segment_origin_m": [1.2256164669990539, -0.039739553928375249, 1.154738897830248], "segment_direction": [-0.81989502906799316, 0.092513896524906158, 0.56498950719833374], "previous_primitive": 0, "primitive": 214}},
+  "mean_Y": 1372.25,
+  "world": {"media": [{"name": "air", "index": "ciddor-air", "n_d": 1.00028}, {"name": "opaque", "index": "constant(1)", "n_d": 1}, {"name": "PMMA", "index": "sellmeier(B1=1.1819 C1=0.011313)", "n_d": 1.49062}], "regions": 29, "boundaries": 34, "bodies": 30, "assemblies": 0}
+}

@@ -1,0 +1,12 @@
+[  2%] Building CXX object CMakeFiles/owe_engine.dir/src/owe/render/record.cpp.o
+[  4%] Linking CXX static library libowe_engine.a
+[ 42%] Built target owe_engine
+[ 46%] Built target owe_backend_cpu
+[ 53%] Built target owe_backend_gpu
+[ 59%] Built target owe
+[ 61%] Building CXX object CMakeFiles/owe_cli.dir/apps/owe.cpp.o
+[ 63%] Building CXX object CMakeFiles/owe_tests.dir/tests/test_gpu.cpp.o
+[ 65%] Linking CXX executable owe_tests
+[ 95%] Built target owe_tests
+[ 97%] Linking CXX executable owe
+[100%] Built target owe_cli

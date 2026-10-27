@@ -26,6 +26,8 @@ add_library(owe_engine STATIC
   src/owe/core/medium.cpp
   src/owe/scene/bvh.cpp
   src/owe/scene/geometry.cpp
+  src/owe/scene/mesh.cpp
+  src/owe/scene/obj.cpp
   src/owe/scene/gltf.cpp
   src/owe/scene/world.cpp
   src/owe/scene/detector.cpp
@@ -38,6 +40,9 @@ add_library(owe_engine STATIC
   src/owe/analysis/inspect.cpp
   src/owe/loader/scene_parser.cpp
   src/owe/loader/scene_loader.cpp
+  src/owe/loader/loader_bodies.cpp
+  src/owe/loader/loader_detectors.cpp
+  src/owe/loader/loader_materials.cpp
   src/owe/render/exposure.cpp
   src/owe/render/output.cpp
   src/owe/render/record.cpp
@@ -86,6 +91,8 @@ if(OWE_GPU)
     src/owe/backends/gpu/gpu_accel.cpp
     src/owe/backends/gpu/gpu_backend.cpp
     src/owe/backends/gpu/gpu_renderer.cpp
+    src/owe/backends/gpu/gpu_renderer_passes.cpp
+    src/owe/backends/gpu/gpu_renderer_film.cpp
     src/owe/backends/gpu/vulkan_context.cpp)
   target_link_libraries(owe_backend_gpu PRIVATE owe_volk)
   if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -109,6 +116,7 @@ if(OWE_GPU)
   owe_add_kernel(owe_backend_gpu ${_kernels}/vcm_camera_kernel.slang owe_kernel_vcm_camera)
   owe_add_kernel(owe_backend_gpu ${_kernels}/vcm_camera_kernel.slang owe_kernel_vcm_camera_rq RAY_QUERY)
   owe_add_kernel(owe_backend_gpu ${_kernels}/vcm_grid_kernel.slang owe_kernel_vcm_grid)
+  owe_add_kernel(owe_backend_gpu ${_kernels}/film_kernel.slang owe_kernel_film)
 else()
   target_sources(owe_backend_gpu PRIVATE src/owe/backends/gpu/gpu_unavailable.cpp)
 endif()
@@ -149,6 +157,7 @@ add_executable(owe_tests
   tests/test_references.cpp
   tests/test_shading.cpp
   tests/test_vcm.cpp
+  tests/test_far_visibility.cpp
   tests/test_models.cpp
 )
 target_link_libraries(owe_tests PRIVATE owe)
@@ -160,6 +169,19 @@ if(OWE_GPU)
   set_tests_properties(backends_software_traversal PROPERTIES ENVIRONMENT "OWE_GPU_RAY_QUERY=0")
 endif()
 add_test(NAME layering COMMAND ${CMAKE_COMMAND} -DROOT=${CMAKE_SOURCE_DIR} -P ${CMAKE_SOURCE_DIR}/cmake/CheckLayers.cmake)
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+add_test(NAME python_tools COMMAND ${Python3_EXECUTABLE} -m unittest discover -s tools -p test_*.py
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+add_test(NAME documentation_links COMMAND ${Python3_EXECUTABLE} tools/check_docs.py
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+add_test(NAME python_scene_assets COMMAND ${Python3_EXECUTABLE} -m unittest discover -s tools/scene_assets -p test_*.py
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+if(OWE_GPU)
+  add_test(NAME gpu_transport COMMAND owe_tests gpu_contact_ backends_surface_sensor_respects_exact_opaque_contact
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+  set_tests_properties(gpu_transport PROPERTIES TIMEOUT 1800
+    ENVIRONMENT "OWE_REQUIRE_GPU=1;OWE_GPU_RAY_QUERY=0")
+endif()
 if(OWE_VIEWER)
   if(ZLIB_FOUND)
     add_executable(owe_viewer_display_tests tests/viewer_display.cpp apps/viewer.cpp)

@@ -3,6 +3,8 @@
 #include <sstream>
 #include <stdexcept>
 
+#include "owe/core/shared/optics.hpp"
+
 namespace owe {
 
 double Image::meanY() const {
@@ -88,39 +90,6 @@ bool IdealObserver::generate(double px, double py, Rng& rng, Ray& ray, double& w
     return true;
 }
 
-bool IdealObserver::connect(const Vec3& x, Rng& rng, Vec3& q, int& px, int& py, double& factor) const {
-    q = position;
-    if (pupilRadius > 0) {
-        Draw2 u(rng);
-        Vec2 d = sampleUniformDiskConcentric(u.u1, u.u2);
-        q = position + (right_ * d.x + up_ * d.y) * pupilRadius;
-    }
-    Vec3 w = x - q;
-    double dist2 = lengthSq(w);
-    if (dist2 <= 0) return false;
-    Vec3 om = w / std::sqrt(dist2);
-    double c = dot(om, fwd_);
-    if (c <= 1e-9) return false;
-    double sx, sy;
-    if (pupilRadius > 0 && std::isfinite(focusDistance)) {
-        Vec3 F = q + om * (focusDistance / c);
-        sx = dot(F - position, right_) / focusDistance;
-        sy = dot(F - position, up_) / focusDistance;
-    } else {
-        sx = dot(om, right_) / c;
-        sy = dot(om, up_) / c;
-    }
-    Vec2 o = filterOffset(rng);  // a direction just outside the field still reaches the border pixels
-    double fx = (sx / tanX_ + 1) * 0.5 * width + o.x;
-    double fy = (1 - sy / tanY_) * 0.5 * height + o.y;
-    if (fx < 0 || fy < 0 || fx >= width || fy >= height) return false;
-    px = int(fx);
-    py = int(fy);
-    double pixelArea = (2 * tanX_ / width) * (2 * tanY_ / height);
-    factor = 1.0 / (dist2 * pixelArea * c * c * c);
-    return true;
-}
-
 // ---------------------------------------------------------------- SurfaceSensor
 
 std::string SurfaceSensor::describe() const {
@@ -137,7 +106,6 @@ void SurfaceSensor::prepare(const World& world) {
     if (optics.type != SurfaceType::Detector && !(optics.type == SurfaceType::Diffuse && optics.detector >= 0))
         throw std::runtime_error("sensor '" + name + "' boundary is not a detector surface");
     toWorld_ = b.toWorld;
-    toLocal_ = b.toLocal;
     normal_ = normalize(toWorld_.vector(Vec3(0, 0, 1)));
     region = b.front;
 }
@@ -164,16 +132,8 @@ bool SurfaceSensor::generate(double px, double py, Rng& rng, Ray& ray, double& w
         if (!useAim) dir = Frame(normal_).toWorld(sampleCosineHemisphere(u.u1, u.u2));
         double cosS = dot(dir, normal_);
         if (cosS <= 0) { weight = 0; return false; }
-        // Solid-angle density of a direction under uniform sampling of a disk ⟂ aimNormal.
-        auto diskPdf = [&](const Vec3& center, double radius, bool generatingDisk) {
-            double dn = dot(dir, aimNormal);
-            if (std::abs(dn) <= 1e-12) return 0.0;
-            double t = dot(center - p, aimNormal) / dn;
-            if (t <= 0 || (!generatingDisk && lengthSq(p + dir * t - center) > radius * radius)) return 0.0;
-            return t * t / (std::abs(dn) * Pi * radius * radius);
-        };
-        double pdfW = (1 - focusShare) * diskPdf(aimCenter, aimRadius, useAim && !useFocus);
-        if (focusShare > 0) pdfW += focusShare * diskPdf(focusCenter, focusRadius, useAim && useFocus);
+        double pdfW = (1 - focusShare) * diskAimPdf(p, dir, aimCenter, aimNormal, aimRadius, useAim && !useFocus);
+        if (focusShare > 0) pdfW += focusShare * diskAimPdf(p, dir, focusCenter, aimNormal, focusRadius, useAim && useFocus);
         pdfW = aimShare * pdfW + (1 - aimShare) * cosS * InvPi;
         if (!(pdfW > 0)) { weight = 0; return false; }
         weight = cosS / pdfW;
@@ -183,23 +143,8 @@ bool SurfaceSensor::generate(double px, double py, Rng& rng, Ray& ray, double& w
         dir = f.toWorld(sampleCosineHemisphere(u.u1, u.u2));
         weight = Pi;
     }
-    ray = Ray{offsetOrigin(p, normal_, dir), dir};
-    return true;
-}
-
-bool SurfaceSensor::pixelOfHit(const SurfaceHit& hit, Rng& rng, int& px, int& py, double& pixelArea) const {
-    Vec3 pl = hit.pLocal;
-    double fx = (pl.x / halfX + 1) * 0.5 * width;
-    double fy = (1 - pl.y / halfY) * 0.5 * height;
-    if (flipX) fx = width - fx;
-    if (flipY) fy = height - fy;
-    Vec2 o = filterOffset(rng);
-    fx += o.x;
-    fy += o.y;
-    if (fx < 0 || fy < 0 || fx >= width || fy >= height) return false;
-    px = int(fx);
-    py = int(fy);
-    pixelArea = (2 * halfX / width) * (2 * halfY / height);
+    ray = Ray{p, dir, boundaryIndex, region, normal_};
+    ray.forwardOnly = true;  // authored sensor plane: strictly past matter is outside its launch hemisphere
     return true;
 }
 

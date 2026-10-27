@@ -8,9 +8,10 @@
 #include <string>
 #include <vector>
 
-#include "owe/scene/bvh.hpp"
 #include "owe/core/math.hpp"
 #include "owe/core/sampling.hpp"
+#include "owe/core/shared/surfaces.hpp"
+#include "owe/scene/bvh.hpp"
 
 namespace owe {
 
@@ -19,6 +20,7 @@ struct LocalHit {
     Vec3 p;
     Vec3 n;  // unit geometric normal, oriented to the shape's front side
     uint32_t prim = 0;
+    double error = 0;  // normal displacement left by a numerical surface solve
 };
 
 class Shape {
@@ -27,6 +29,10 @@ public:
     virtual bool intersect(const Ray& r, double tmin, double tmax, LocalHit& h) const = 0;
     virtual AABB bounds() const = 0;
     virtual std::string describe() const = 0;
+
+    // Analytic shapes use orientation to identify a face; meshes refine by topology.
+    virtual bool sameFace(uint32_t first, uint32_t second) const { return true; }
+    virtual uint32_t sampledPrimitive(double u) const { return 0; }
 
     // Emitter sampling support.
     virtual bool canSample() const { return false; }
@@ -63,8 +69,6 @@ public:
     bool canSample() const override { return isFlat(); }
     double area() const override { return Pi * (rMax_ * rMax_ - rMin_ * rMin_); }
     void sampleArea(double u1, double u2, double u3, Vec3& p, Vec3& n) const override;
-
-    double clearSemiDiameter = 0;  // annotation only (0 = unspecified)
 
 private:
     bool intersectQuadric(const Ray& r, double tmin, double tmax, LocalHit& h) const;
@@ -140,7 +144,8 @@ private:
 // Plane z = 0 trimmed by an aperture. Normal +z.
 class PlaneShape : public Shape {
 public:
-    enum class Aperture { Disk, Rect, Ellipse, DiskHole };
+    enum class Aperture { Disk, Rect, Ellipse, DiskHole };  // the order of shared/surfaces.hpp's kAp*
+    PlaneShape(Aperture ap, double a, double b, double hx = 0, double hy = 0) : ap_(ap), a_(a), b_(b), hx_(hx), hy_(hy) {}
     static std::shared_ptr<PlaneShape> disk(double rMax, double rMin = 0);
     // Disk of radius rMax with a circular hole of radius holeR centred at (hx, hy).
     static std::shared_ptr<PlaneShape> diskWithHole(double rMax, double holeR, double hx, double hy);
@@ -310,6 +315,8 @@ public:
     const std::vector<std::array<uint32_t, 3>>& triangles() const { return tris_; }
     const Bvh& bvh() const { return bvh_; }
     const std::vector<double>& areaCdf() const { return cdf_; }
+    bool sameFace(uint32_t a, uint32_t b) const override;
+    uint32_t sampledPrimitive(double u) const override;
     const std::vector<Corners>& shadingNormals() const { return normals_; }  // empty: flat
     const std::vector<UvCorners>& uvs() const { return uvs_; }                // empty: none
 
@@ -339,6 +346,7 @@ struct MeshData {
     // image (a path, empty if none). Empty for OBJ files and builders.
     std::vector<uint32_t> part;
     std::vector<std::string> partNames, partImages;
+    std::vector<std::string> partNormalImages, partRoughnessImages;  // glTF normal, metallic-roughness (empty: none)
     void addTriangle(const Vec3& a, const Vec3& b, const Vec3& c);
     void addQuad(const Vec3& a, const Vec3& b, const Vec3& c, const Vec3& d);  // CCW
     void append(const MeshData& o, const Transform& xf);

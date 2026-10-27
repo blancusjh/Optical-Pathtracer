@@ -1,0 +1,589 @@
+{
+  "scope": "Diagnostic warm light-render check after the scalar adapter; not a v1.0 comparison",
+  "candidate_revision": "d4b60c1",
+  "runs": [
+    {
+      "variant": "before",
+      "repeat": 1,
+      "native": {
+        "engine": "optical-world-engine 0.1.0",
+        "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+        "scene": {
+          "path": "scenes/glass/glass_of_water.owe",
+          "fnv1a64": "9cc6cd4c519c95fb",
+          "edits": []
+        },
+        "detector": {
+          "name": "Eye",
+          "description": "ideal observer 'Eye' 128x96, fovY=34 deg, pupil diameter=3 mm, focus=0.340000 m, pixel filter gaussian(0.4)",
+          "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ",
+          "pixel_response": "square * gaussian(sigma 0.400000 px)"
+        },
+        "observer_pose": {
+          "position_m": [
+            0.02,
+            -0.34,
+            0.115
+          ],
+          "look_at_m": [
+            0,
+            0,
+            0.07
+          ],
+          "up": [
+            0,
+            0,
+            1
+          ],
+          "fov_deg": 34,
+          "pupil_radius_m": 0.0015,
+          "focus_distance_m": 0.34,
+          "width": 128,
+          "height": 96
+        },
+        "integrator": "light",
+        "sampling": {
+          "wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm",
+          "fresnel": "stochastic branch selection",
+          "nee": true,
+          "mis": "power heuristic",
+          "russian_roulette_depth": 6,
+          "fresnel_floor": 0
+        },
+        "seed": 7,
+        "samples_per_pixel": 64,
+        "passes": 4,
+        "max_depth": 10,
+        "display": {
+          "exposure_ev": 0,
+          "auto_exposure": true,
+          "auto_gain_ev": -1.31968,
+          "white_balance_kelvin": 0,
+          "tone": "agx"
+        },
+        "render_seconds": 0.0679924,
+        "statistics": {
+          "paths": 786432,
+          "segments": 934617,
+          "region_inconsistencies": 0,
+          "leaks": 0
+        },
+        "mean_Y": 0.372524,
+        "world": {
+          "media": [
+            {
+              "name": "air",
+              "index": "ciddor-air",
+              "n_d": 1.00028
+            },
+            {
+              "name": "opaque",
+              "index": "constant(1)",
+              "n_d": 1
+            },
+            {
+              "name": "N-BK7",
+              "index": "sellmeier(B1=1.03961 C1=0.0060007, B2=0.231792 C2=0.0200179, B3=1.01047 C3=103.561) rel. air",
+              "n_d": 1.51722
+            },
+            {
+              "name": "water",
+              "index": "sellmeier(B1=0.568403 C1=0.00510183, B2=0.172618 C2=0.0182115, B3=0.0208619 C3=0.0262072, B4=0.113075 C4=10.6979)",
+              "n_d": 1.3334
+            }
+          ],
+          "regions": 6,
+          "boundaries": 21,
+          "bodies": 11,
+          "assemblies": 0
+        }
+      }
+    },
+    {
+      "variant": "before",
+      "repeat": 2,
+      "native": {
+        "engine": "optical-world-engine 0.1.0",
+        "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+        "scene": {
+          "path": "scenes/glass/glass_of_water.owe",
+          "fnv1a64": "9cc6cd4c519c95fb",
+          "edits": []
+        },
+        "detector": {
+          "name": "Eye",
+          "description": "ideal observer 'Eye' 128x96, fovY=34 deg, pupil diameter=3 mm, focus=0.340000 m, pixel filter gaussian(0.4)",
+          "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ",
+          "pixel_response": "square * gaussian(sigma 0.400000 px)"
+        },
+        "observer_pose": {
+          "position_m": [
+            0.02,
+            -0.34,
+            0.115
+          ],
+          "look_at_m": [
+            0,
+            0,
+            0.07
+          ],
+          "up": [
+            0,
+            0,
+            1
+          ],
+          "fov_deg": 34,
+          "pupil_radius_m": 0.0015,
+          "focus_distance_m": 0.34,
+          "width": 128,
+          "height": 96
+        },
+        "integrator": "light",
+        "sampling": {
+          "wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm",
+          "fresnel": "stochastic branch selection",
+          "nee": true,
+          "mis": "power heuristic",
+          "russian_roulette_depth": 6,
+          "fresnel_floor": 0
+        },
+        "seed": 7,
+        "samples_per_pixel": 64,
+        "passes": 4,
+        "max_depth": 10,
+        "display": {
+          "exposure_ev": 0,
+          "auto_exposure": true,
+          "auto_gain_ev": -1.31968,
+          "white_balance_kelvin": 0,
+          "tone": "agx"
+        },
+        "render_seconds": 0.0680054,
+        "statistics": {
+          "paths": 786432,
+          "segments": 934617,
+          "region_inconsistencies": 0,
+          "leaks": 0
+        },
+        "mean_Y": 0.372524,
+        "world": {
+          "media": [
+            {
+              "name": "air",
+              "index": "ciddor-air",
+              "n_d": 1.00028
+            },
+            {
+              "name": "opaque",
+              "index": "constant(1)",
+              "n_d": 1
+            },
+            {
+              "name": "N-BK7",
+              "index": "sellmeier(B1=1.03961 C1=0.0060007, B2=0.231792 C2=0.0200179, B3=1.01047 C3=103.561) rel. air",
+              "n_d": 1.51722
+            },
+            {
+              "name": "water",
+              "index": "sellmeier(B1=0.568403 C1=0.00510183, B2=0.172618 C2=0.0182115, B3=0.0208619 C3=0.0262072, B4=0.113075 C4=10.6979)",
+              "n_d": 1.3334
+            }
+          ],
+          "regions": 6,
+          "boundaries": 21,
+          "bodies": 11,
+          "assemblies": 0
+        }
+      }
+    },
+    {
+      "variant": "before",
+      "repeat": 3,
+      "native": {
+        "engine": "optical-world-engine 0.1.0",
+        "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+        "scene": {
+          "path": "scenes/glass/glass_of_water.owe",
+          "fnv1a64": "9cc6cd4c519c95fb",
+          "edits": []
+        },
+        "detector": {
+          "name": "Eye",
+          "description": "ideal observer 'Eye' 128x96, fovY=34 deg, pupil diameter=3 mm, focus=0.340000 m, pixel filter gaussian(0.4)",
+          "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ",
+          "pixel_response": "square * gaussian(sigma 0.400000 px)"
+        },
+        "observer_pose": {
+          "position_m": [
+            0.02,
+            -0.34,
+            0.115
+          ],
+          "look_at_m": [
+            0,
+            0,
+            0.07
+          ],
+          "up": [
+            0,
+            0,
+            1
+          ],
+          "fov_deg": 34,
+          "pupil_radius_m": 0.0015,
+          "focus_distance_m": 0.34,
+          "width": 128,
+          "height": 96
+        },
+        "integrator": "light",
+        "sampling": {
+          "wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm",
+          "fresnel": "stochastic branch selection",
+          "nee": true,
+          "mis": "power heuristic",
+          "russian_roulette_depth": 6,
+          "fresnel_floor": 0
+        },
+        "seed": 7,
+        "samples_per_pixel": 64,
+        "passes": 4,
+        "max_depth": 10,
+        "display": {
+          "exposure_ev": 0,
+          "auto_exposure": true,
+          "auto_gain_ev": -1.31968,
+          "white_balance_kelvin": 0,
+          "tone": "agx"
+        },
+        "render_seconds": 0.0681599,
+        "statistics": {
+          "paths": 786432,
+          "segments": 934617,
+          "region_inconsistencies": 0,
+          "leaks": 0
+        },
+        "mean_Y": 0.372524,
+        "world": {
+          "media": [
+            {
+              "name": "air",
+              "index": "ciddor-air",
+              "n_d": 1.00028
+            },
+            {
+              "name": "opaque",
+              "index": "constant(1)",
+              "n_d": 1
+            },
+            {
+              "name": "N-BK7",
+              "index": "sellmeier(B1=1.03961 C1=0.0060007, B2=0.231792 C2=0.0200179, B3=1.01047 C3=103.561) rel. air",
+              "n_d": 1.51722
+            },
+            {
+              "name": "water",
+              "index": "sellmeier(B1=0.568403 C1=0.00510183, B2=0.172618 C2=0.0182115, B3=0.0208619 C3=0.0262072, B4=0.113075 C4=10.6979)",
+              "n_d": 1.3334
+            }
+          ],
+          "regions": 6,
+          "boundaries": 21,
+          "bodies": 11,
+          "assemblies": 0
+        }
+      }
+    },
+    {
+      "variant": "scalar",
+      "repeat": 1,
+      "native": {
+        "engine": "optical-world-engine 0.1.0",
+        "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+        "scene": {
+          "path": "scenes/glass/glass_of_water.owe",
+          "fnv1a64": "9cc6cd4c519c95fb",
+          "edits": []
+        },
+        "detector": {
+          "name": "Eye",
+          "description": "ideal observer 'Eye' 128x96, fovY=34 deg, pupil diameter=3 mm, focus=0.340000 m, pixel filter gaussian(0.4)",
+          "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ",
+          "pixel_response": "square * gaussian(sigma 0.400000 px)"
+        },
+        "observer_pose": {
+          "position_m": [
+            0.02,
+            -0.34,
+            0.115
+          ],
+          "look_at_m": [
+            0,
+            0,
+            0.07
+          ],
+          "up": [
+            0,
+            0,
+            1
+          ],
+          "fov_deg": 34,
+          "pupil_radius_m": 0.0015,
+          "focus_distance_m": 0.34,
+          "width": 128,
+          "height": 96
+        },
+        "integrator": "light",
+        "sampling": {
+          "wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm",
+          "fresnel": "stochastic branch selection",
+          "nee": true,
+          "mis": "power heuristic",
+          "russian_roulette_depth": 6,
+          "fresnel_floor": 0
+        },
+        "seed": 7,
+        "samples_per_pixel": 64,
+        "passes": 4,
+        "max_depth": 10,
+        "display": {
+          "exposure_ev": 0,
+          "auto_exposure": true,
+          "auto_gain_ev": -1.31968,
+          "white_balance_kelvin": 0,
+          "tone": "agx"
+        },
+        "render_seconds": 0.0667386,
+        "statistics": {
+          "paths": 786432,
+          "segments": 934617,
+          "region_inconsistencies": 0,
+          "leaks": 0
+        },
+        "mean_Y": 0.372524,
+        "world": {
+          "media": [
+            {
+              "name": "air",
+              "index": "ciddor-air",
+              "n_d": 1.00028
+            },
+            {
+              "name": "opaque",
+              "index": "constant(1)",
+              "n_d": 1
+            },
+            {
+              "name": "N-BK7",
+              "index": "sellmeier(B1=1.03961 C1=0.0060007, B2=0.231792 C2=0.0200179, B3=1.01047 C3=103.561) rel. air",
+              "n_d": 1.51722
+            },
+            {
+              "name": "water",
+              "index": "sellmeier(B1=0.568403 C1=0.00510183, B2=0.172618 C2=0.0182115, B3=0.0208619 C3=0.0262072, B4=0.113075 C4=10.6979)",
+              "n_d": 1.3334
+            }
+          ],
+          "regions": 6,
+          "boundaries": 21,
+          "bodies": 11,
+          "assemblies": 0
+        }
+      }
+    },
+    {
+      "variant": "scalar",
+      "repeat": 2,
+      "native": {
+        "engine": "optical-world-engine 0.1.0",
+        "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+        "scene": {
+          "path": "scenes/glass/glass_of_water.owe",
+          "fnv1a64": "9cc6cd4c519c95fb",
+          "edits": []
+        },
+        "detector": {
+          "name": "Eye",
+          "description": "ideal observer 'Eye' 128x96, fovY=34 deg, pupil diameter=3 mm, focus=0.340000 m, pixel filter gaussian(0.4)",
+          "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ",
+          "pixel_response": "square * gaussian(sigma 0.400000 px)"
+        },
+        "observer_pose": {
+          "position_m": [
+            0.02,
+            -0.34,
+            0.115
+          ],
+          "look_at_m": [
+            0,
+            0,
+            0.07
+          ],
+          "up": [
+            0,
+            0,
+            1
+          ],
+          "fov_deg": 34,
+          "pupil_radius_m": 0.0015,
+          "focus_distance_m": 0.34,
+          "width": 128,
+          "height": 96
+        },
+        "integrator": "light",
+        "sampling": {
+          "wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm",
+          "fresnel": "stochastic branch selection",
+          "nee": true,
+          "mis": "power heuristic",
+          "russian_roulette_depth": 6,
+          "fresnel_floor": 0
+        },
+        "seed": 7,
+        "samples_per_pixel": 64,
+        "passes": 4,
+        "max_depth": 10,
+        "display": {
+          "exposure_ev": 0,
+          "auto_exposure": true,
+          "auto_gain_ev": -1.31968,
+          "white_balance_kelvin": 0,
+          "tone": "agx"
+        },
+        "render_seconds": 0.0674738,
+        "statistics": {
+          "paths": 786432,
+          "segments": 934617,
+          "region_inconsistencies": 0,
+          "leaks": 0
+        },
+        "mean_Y": 0.372524,
+        "world": {
+          "media": [
+            {
+              "name": "air",
+              "index": "ciddor-air",
+              "n_d": 1.00028
+            },
+            {
+              "name": "opaque",
+              "index": "constant(1)",
+              "n_d": 1
+            },
+            {
+              "name": "N-BK7",
+              "index": "sellmeier(B1=1.03961 C1=0.0060007, B2=0.231792 C2=0.0200179, B3=1.01047 C3=103.561) rel. air",
+              "n_d": 1.51722
+            },
+            {
+              "name": "water",
+              "index": "sellmeier(B1=0.568403 C1=0.00510183, B2=0.172618 C2=0.0182115, B3=0.0208619 C3=0.0262072, B4=0.113075 C4=10.6979)",
+              "n_d": 1.3334
+            }
+          ],
+          "regions": 6,
+          "boundaries": 21,
+          "bodies": 11,
+          "assemblies": 0
+        }
+      }
+    },
+    {
+      "variant": "scalar",
+      "repeat": 3,
+      "native": {
+        "engine": "optical-world-engine 0.1.0",
+        "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+        "scene": {
+          "path": "scenes/glass/glass_of_water.owe",
+          "fnv1a64": "9cc6cd4c519c95fb",
+          "edits": []
+        },
+        "detector": {
+          "name": "Eye",
+          "description": "ideal observer 'Eye' 128x96, fovY=34 deg, pupil diameter=3 mm, focus=0.340000 m, pixel filter gaussian(0.4)",
+          "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ",
+          "pixel_response": "square * gaussian(sigma 0.400000 px)"
+        },
+        "observer_pose": {
+          "position_m": [
+            0.02,
+            -0.34,
+            0.115
+          ],
+          "look_at_m": [
+            0,
+            0,
+            0.07
+          ],
+          "up": [
+            0,
+            0,
+            1
+          ],
+          "fov_deg": 34,
+          "pupil_radius_m": 0.0015,
+          "focus_distance_m": 0.34,
+          "width": 128,
+          "height": 96
+        },
+        "integrator": "light",
+        "sampling": {
+          "wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm",
+          "fresnel": "stochastic branch selection",
+          "nee": true,
+          "mis": "power heuristic",
+          "russian_roulette_depth": 6,
+          "fresnel_floor": 0
+        },
+        "seed": 7,
+        "samples_per_pixel": 64,
+        "passes": 4,
+        "max_depth": 10,
+        "display": {
+          "exposure_ev": 0,
+          "auto_exposure": true,
+          "auto_gain_ev": -1.31968,
+          "white_balance_kelvin": 0,
+          "tone": "agx"
+        },
+        "render_seconds": 0.0673052,
+        "statistics": {
+          "paths": 786432,
+          "segments": 934617,
+          "region_inconsistencies": 0,
+          "leaks": 0
+        },
+        "mean_Y": 0.372524,
+        "world": {
+          "media": [
+            {
+              "name": "air",
+              "index": "ciddor-air",
+              "n_d": 1.00028
+            },
+            {
+              "name": "opaque",
+              "index": "constant(1)",
+              "n_d": 1
+            },
+            {
+              "name": "N-BK7",
+              "index": "sellmeier(B1=1.03961 C1=0.0060007, B2=0.231792 C2=0.0200179, B3=1.01047 C3=103.561) rel. air",
+              "n_d": 1.51722
+            },
+            {
+              "name": "water",
+              "index": "sellmeier(B1=0.568403 C1=0.00510183, B2=0.172618 C2=0.0182115, B3=0.0208619 C3=0.0262072, B4=0.113075 C4=10.6979)",
+              "n_d": 1.3334
+            }
+          ],
+          "regions": 6,
+          "boundaries": 21,
+          "bodies": 11,
+          "assemblies": 0
+        }
+      }
+    }
+  ],
+  "speedup": 1.0104033566500061
+}

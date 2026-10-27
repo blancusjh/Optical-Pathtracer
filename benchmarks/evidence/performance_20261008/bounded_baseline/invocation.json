@@ -1,0 +1,99 @@
+{
+  "schema": 2,
+  "provenance": {
+    "code": {
+      "binary_sha256": "fc909789c3b5b8dbcd3d11617a4a8ee79144f3398561c2c45f7ddeef2b589c6b",
+      "source_sha256": "0976d1430649bec33b7d7ccfe58f9def7ca88d124a147ddabb2d59689b8fe4b0",
+      "git_head": "07092cfbd50f2558a07be0bd783e2c3f4485eabe"
+    },
+    "host": {
+      "platform": "Linux-7.2.7-arch1-1-x86_64-with-glibc2.44",
+      "machine": "x86_64",
+      "cpu": "",
+      "logical_cpus": 16,
+      "backend_inventory": "cpu (reference) \u2014 the reference transport on host threads; IEEE-754 double, bitwise reproducible\n  integrators: path, light, hybrid\n  [0] 12th Gen Intel(R) Core(TM) i7-12650H \u2014 cpu, 16 hardware threads\ngpu \u2014 portable GPU: Vulkan compute with Slang kernels (NVIDIA, AMD, Intel; Apple silicon via MoltenVK); float32, camera-relative\n  integrators: path, light, hybrid, sppm, bdpt, vcm\n  [0] Intel(R) Graphics (ADL GT2) \u2014 integrated, Vulkan 1.4.354\n  [1] NVIDIA GeForce RTX 4060 Laptop GPU \u2014 discrete, Vulkan 1.4.351, ray queries\n",
+      "nvidia_driver_inventory": {
+        "status": "available",
+        "devices": [
+          {
+            "index": "0",
+            "uuid": "GPU-827caec2-6f67-a1f6-4a68-4da0180a00c3",
+            "name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+            "driver_version": "615.71.09",
+            "pci.bus_id": "00000000:01:00.0"
+          }
+        ]
+      },
+      "environment": {
+        "CUDA_PATH": "/opt/cuda"
+      }
+    }
+  },
+  "options": {
+    "only": [
+      "the_lens",
+      "prism_in_sunlight",
+      "the_peacock_lamp"
+    ],
+    "suite": "performance",
+    "include_scans": false,
+    "backend": "gpu",
+    "device": 1,
+    "binary": "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/out/performance_20261008/owe_baseline",
+    "output": "out/performance_20261008/bounded_baseline",
+    "reference_dir": null,
+    "reference_spp": 256,
+    "reference_integrator": null,
+    "integrators": null,
+    "budgets": [
+      16,
+      64
+    ],
+    "seed": 1,
+    "reference_seed": 1000,
+    "threads": 0,
+    "passes": 1,
+    "resolution": null,
+    "quick": false,
+    "rescore": false,
+    "baseline": null,
+    "target_error": null,
+    "time": "transport",
+    "goal_speedup": 4.0,
+    "list": false
+  },
+  "cases": [
+    {
+      "name": "the_lens",
+      "path": "scenes/the_lens.owe",
+      "detector": "Eye",
+      "suite": "canonical",
+      "integrator": "path",
+      "max_depth": 64,
+      "resolution": "256x192"
+    },
+    {
+      "name": "prism_in_sunlight",
+      "path": "scenes/prism_in_sunlight.owe",
+      "detector": "Eye",
+      "suite": "canonical",
+      "integrator": "path",
+      "max_depth": 64,
+      "resolution": "256x192"
+    },
+    {
+      "name": "the_peacock_lamp",
+      "path": "scenes/the_peacock_lamp.owe",
+      "detector": "Room",
+      "integrator": "vcm",
+      "max_depth": 16,
+      "suite": "scans",
+      "resolution": "960x600"
+    }
+  ],
+  "budgets": [
+    16,
+    64
+  ],
+  "reference_spp": 256
+}

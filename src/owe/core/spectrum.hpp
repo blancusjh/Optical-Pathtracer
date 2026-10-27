@@ -7,30 +7,22 @@
 #include <vector>
 
 #include "owe/core/math.hpp"
+#include "owe/core/shared/spectra.hpp"
 
 namespace owe {
 
-constexpr double LambdaMin = 360.0;  // nm
-constexpr double LambdaMax = 830.0;  // nm
-
-// CIE 1931 2° colour matching functions (Wyman, Sloan & Shirley 2013 multi-lobe fit).
-double cieX(double lambdaNm);
-double cieY(double lambdaNm);
-double cieZ(double lambdaNm);
-// ∫ ȳ(λ) dλ over [LambdaMin, LambdaMax] for the fit above.
+// ∫ ȳ(λ) dλ over [LambdaMin, LambdaMax] for the colour matching fit (shared/spectra.hpp).
 double cieYIntegral();
-
-// Importance sampling of visible wavelengths (pdf ∝ 1/cosh²(0.0072(λ-538))).
-double sampleVisibleWavelength(double u);
-double visibleWavelengthPdf(double lambdaNm);
-
-// Planck spectral radiance B(λ,T) in W·m⁻²·sr⁻¹·m⁻¹ for λ in nm.
-double planck(double lambdaNm, double kelvin);
 
 struct XYZ {
     double x = 0, y = 0, z = 0;
 };
+// CIE XYZ → linear sRGB (D65).
+constexpr double kXyzToLinearSRGB[3][3] = {
+    {3.2404542, -1.5371385, -0.4985314}, {-0.9692660, 1.8760108, 0.0415560}, {0.0556434, -0.2040259, 1.0572252}};
 void xyzToLinearSRGB(const XYZ& c, double rgb[3]);
+// The luminance of a linear sRGB (Rec. 709) colour.
+inline double luminanceRec709(double r, double g, double b) { return 0.2126 * r + 0.7152 * g + 0.0722 * b; }
 
 // A spectral distribution. Immutable after construction and cheap to copy.
 class Spectrum {
@@ -43,6 +35,16 @@ public:
     static Spectrum blackbody(double kelvin, double y = 1.0);
     // Piecewise-linear tabulation; clamped outside the table.
     static Spectrum tabulated(std::vector<double> lambdas, std::vector<double> values);
+    // A function of wavelength f(λ) tabulated every `step` nm over the visible range.
+    template <class F>
+    static Spectrum sampled(F f, double step) {
+        std::vector<double> ls, vs;
+        for (double l = LambdaMin; l <= LambdaMax; l += step) {
+            ls.push_back(l);
+            vs.push_back(f(l));
+        }
+        return tabulated(std::move(ls), std::move(vs));
+    }
     // Smooth reflectance built from a partition of unity, so any rgb in [0,1]³
     // stays a physically valid reflectance in [0,1] at every wavelength.
     static Spectrum rgbReflectance(double r, double g, double b);
@@ -75,8 +77,6 @@ private:
     std::shared_ptr<const std::vector<double>> lambdas_, values_;
 };
 
-// Partition-of-unity basis used by rgbReflectance/rgbIlluminant.
-void rgbBasis(double lambdaNm, double& br, double& bg, double& bb);
 // The calibrated weights of the three basis spectra for linear sRGB (r, g, b): a linear map A·rgb
 // (Spectrum::rgbReflectance clamps them to [0, 1], rgbIlluminant to ≥ 0).
 void rgbToBasisWeights(double r, double g, double b, double w[3]);

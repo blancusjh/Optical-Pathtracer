@@ -316,7 +316,9 @@ def observatory():
         brass.branch([add(center,(.144*math.cos(a),.144*math.sin(a),.004)),add(center,((.155 if k%6 else .16)*math.cos(a),(.155 if k%6 else .16)*math.sin(a),.004))],[.0009,.0009],5)
     brass.branch([(1.62,3.22,.97),(1.62,3.22,1.32)],[.003,.003],8)
     # Reference-inspired instrument cabinet at the north-west wall.
-    for z in (.12,.92,1.70,2.42): walnut[1].box((-2.1,3.22,z),(1.42,.43,.08),.012)
+    # Shelves fit between the stiles' inner faces (-2.7775, -1.4225).
+    # Overlong shelves duplicate the coplanar back faces with different woods.
+    for z in (.12,.92,1.70,2.42): walnut[1].box((-2.1,3.22,z),(1.355,.43,.08),.012)
     for x in (-2.82,-1.38): walnut[3].box((x,3.22,1.27),(.085,.43,2.50),.012)
     leather=m.palette('Library_bindings',(.24,.105,.075),5,.16)
     parchment=m.part('Parchment_edges',(.64,.56,.39))

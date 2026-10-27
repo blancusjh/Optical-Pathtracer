@@ -1,0 +1,6 @@
+Name: Pocket sextant
+Author: Virtual Museums of Małopolska
+Licence: CC0 Public Domain
+URL: https://sketchfab.com/3d-models/pocket_sextant-45cf60e598904f26ac8c9f8401e711a7
+Downloaded: 2026-09-29
+Format: glTF (separate textures)

@@ -16,6 +16,8 @@
 #include "owe/scene/geometry.hpp"
 #include "owe/scene/image.hpp"
 #include "owe/core/medium.hpp"
+#include "owe/core/shared/environment.hpp"
+#include "owe/core/shared/textures.hpp"
 #include "owe/core/spectrum.hpp"
 
 namespace owe {
@@ -45,8 +47,6 @@ struct Texture {
         return r;
     }
 };
-double valueNoise3(const Vec3& p);
-double fbm3(const Vec3& p, int octaves);
 
 // What happens to light at a boundary.
 enum class SurfaceType {
@@ -76,6 +76,13 @@ struct StainedGlass {
     int stone = -1;  // optics index of the opaque material where the mask says stone
 };
 
+// A data image (not colour: read raw, without sRGB decoding) placed like a texture image.
+struct ImageMap {
+    std::shared_ptr<const ImageRGB> image;
+    Texture::Mapping mapping = Texture::Mapping::Planar;
+    double scale = 1;
+};
+
 struct SurfaceOptics {
     std::string name;
     SurfaceType type = SurfaceType::Dielectric;
@@ -87,6 +94,14 @@ struct SurfaceOptics {
     // whose slopes tilt the shading normal (paper grain, a concrete's pores, hammered metal).
     double reliefScale = 0, reliefDepth = 0;
     int reliefOctaves = 3;
+    // Image maps (GPU): a tangent-space normal map (OpenGL convention: green toward +v up the
+    // picture; DirectX flips it), scaled by normalStrength, tilts the shading normal; a roughness
+    // map gives the GGX α as the square of a channel's value (perceptual roughness, as glTF and
+    // Poly Haven store it).
+    ImageMap normalImage, roughnessImage;
+    double normalStrength = 1;
+    bool normalDirectX = false;
+    int roughnessChannel = 1;  // 0 r, 1 g (glTF's metallic-roughness), 2 b
     Spectrum reflectance = Spectrum::constant(1.0);       // diffuse albedo / mirror reflectance
     Texture texture;                                      // overrides reflectance (diffuse) or tint (conductor)
     ConductorSpectrum conductor;                          // Conductor only
@@ -167,6 +182,7 @@ struct Environment {
         std::vector<double> conditional;  // H × (W + 1) column CDFs
         std::vector<double> rowWeight;    // H: each row's total weight
         double total = 0;
+        double luminance = 0;             // ∫ Y dω over the map (before mapScale)
     } mapDist;
     void prepareMap();  // builds mapDist
     void mapFrame(Vec3& e1, Vec3& e2) const;
@@ -191,6 +207,10 @@ struct Environment {
     }
     double radiance(const Vec3& dir, double lambdaNm) const { return sky(dir, lambdaNm) + sun(dir, lambdaNm); }
     double sunSolidAngle() const { return 2 * Pi * (1 - std::cos(sunAngularRadius)); }
+    // A direction toward a uniform point of the sun's disc.
+    Vec3 sampleSun(double u1, double u2) const {
+        return Frame(sunDir).toWorld(sampleUniformCone(u1, u2, std::cos(sunAngularRadius)));
+    }
 };
 
 struct SurfaceHit {
@@ -201,6 +221,8 @@ struct SurfaceHit {
     Vec3 nLocal;
     uint32_t boundary = kNone;
     uint32_t prim = 0;
+    double error = 0;  // carried uncertainty of the ray and shape frame at this anchor
+    bool ambiguousContact = false;
 };
 
 // A light that next-event estimation can sample.
@@ -220,9 +242,11 @@ public:
     uint32_t medium(const std::string& name);
     uint32_t addRegion(const std::string& name, uint32_t medium, int body = -1);
     uint32_t addOptics(const SurfaceOptics& o);
-    uint32_t dielectricOptics(double roughness = 0);
-    uint32_t absorberOptics();
-    uint32_t nullOptics();
+    // The shared unnamed optics of a type (and roughness): found, or added once.
+    uint32_t anonymousOptics(SurfaceType type, double roughness = 0);
+    uint32_t dielectricOptics(double roughness = 0) { return anonymousOptics(SurfaceType::Dielectric, roughness); }
+    uint32_t absorberOptics() { return anonymousOptics(SurfaceType::Absorber); }
+    uint32_t nullOptics() { return anonymousOptics(SurfaceType::Null); }
     int addEmission(const Emission& e);
     int addAssembly(const std::string& name, int parent, const Transform& xf);
     int addBody(const std::string& name, const std::string& kind, int assembly, const Transform& xf, uint32_t ambient = kOutside);
@@ -232,7 +256,6 @@ public:
     // Bodies added while set are immersed in `region` (their outside is that region, e.g. stones on a
     // seabed are surrounded by water); kOutside restores the ambient region.
     void setImmersion(uint32_t region) { immersion_ = region; }
-    uint32_t immersion() const { return immersion_; }
     // Exit pupils of afocal instruments (telescopes): where an eye receives their light, on the
     // axis of the instrument's assembly (light leaves along +z). A sampling hint for observers
     // (IdealObserver::prepare); transport never reads it.
@@ -250,6 +273,9 @@ public:
 
     // --- Queries ---
     bool intersect(const Ray& ray, double tmax, SurfaceHit& hit) const;
+    Ray spawnRay(const SurfaceHit& hit, const Vec3& dir, uint32_t region) const {
+        return Ray{hit.p, dir, hit.boundary, region, hit.n, hit.prim, hit.error};
+    }
     uint32_t locate(const Vec3& p) const;  // region containing p
     Transform assemblyToWorld(int assembly) const;
     Transform bodyToWorld(int body) const;
@@ -272,7 +298,6 @@ public:
     std::vector<Assembly>& assemblies() { return assemblies_; }
     int findBody(const std::string& name) const;
     int findAssembly(const std::string& name) const;
-    int findRegion(const std::string& name) const;
 
     Environment env;
     uint32_t ambientRegion() const { return 0; }
@@ -312,10 +337,10 @@ private:
     double envPower_ = 0;
     int environmentLight_ = -1;
     double computeEnvironmentPower() const;
+    void buildLightTable();
     std::vector<int> lightOfBoundary_;
     std::vector<ExitPupil> exitPupils_;
     uint32_t immersion_ = kOutside;
-    bool built_ = false;
 };
 
 }  // namespace owe

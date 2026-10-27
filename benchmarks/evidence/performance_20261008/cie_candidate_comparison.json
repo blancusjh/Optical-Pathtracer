@@ -1,0 +1,221 @@
+{
+  "date": "2026-10-08",
+  "scope": "Frozen GPU CIE camera cache versus frozen integrated diffuse/planetary baseline. Candidate binary also contains an unrelated CPU contact prototype; all embedded non-camera GPU kernels are byte-identical.",
+  "device": "NVIDIA RTX 4060 Laptop GPU, Vulkan device1, hardware ray queries",
+  "settings": {
+    "scene": "scenes/the_peacock_lamp.owe",
+    "detector": "Room",
+    "resolution": "960x600",
+    "integrator": "vcm",
+    "max_depth": 16,
+    "seed": 1,
+    "texture_budget_mb": 2048
+  },
+  "runs": {
+    "cie_profile16": {
+      "seconds": 15.1519,
+      "statistics": {
+        "paths": 18432000,
+        "segments": 114051169,
+        "region_inconsistencies": 116278,
+        "leaks": 0
+      },
+      "error": {
+        "rel_mse": 0.9320785268691618,
+        "rel_mse_no_glints": 0.8911581102935741,
+        "mean_ratio": 0.8988955288547369
+      },
+      "command": [
+        "out/performance_20261008/owe_cie_candidate",
+        "render",
+        "scenes/the_peacock_lamp.owe",
+        "--backend",
+        "gpu",
+        "--device",
+        "1",
+        "--detector",
+        "Room",
+        "--integrator",
+        "vcm",
+        "--resolution",
+        "960x600",
+        "--spp",
+        "16",
+        "--max-depth",
+        "16",
+        "--seed",
+        "1",
+        "--out",
+        "out/performance_20261008/cie_profile16"
+      ],
+      "profile": "1",
+      "wall_seconds": 33.651808454000275,
+      "peak_host_rss_bytes": 2781347840,
+      "rss_method": "isolated_resource_children_maxrss",
+      "returncode": 0,
+      "device_samples": {
+        "before": "index, name, temperature.gpu, clocks.current.graphics [MHz], clocks.current.memory [MHz], utilization.gpu [%]\n0, NVIDIA GeForce RTX 4060 Laptop GPU, 60, 1470 MHz, 7001 MHz, 3 %",
+        "after": "index, temperature.gpu, clocks.current.graphics [MHz], clocks.current.memory [MHz], utilization.gpu [%]\n0, 59, 1470 MHz, 7001 MHz, 3 %"
+      }
+    },
+    "cie_off16": {
+      "seconds": 15.1529,
+      "statistics": {
+        "paths": 18432000,
+        "segments": 114051169,
+        "region_inconsistencies": 116278,
+        "leaks": 0
+      },
+      "error": {
+        "rel_mse": 0.932302895300603,
+        "rel_mse_no_glints": 0.8913754532249106,
+        "mean_ratio": 0.8987992825606723
+      },
+      "command": [
+        "out/performance_20261008/owe_cie_candidate",
+        "render",
+        "scenes/the_peacock_lamp.owe",
+        "--backend",
+        "gpu",
+        "--device",
+        "1",
+        "--detector",
+        "Room",
+        "--integrator",
+        "vcm",
+        "--resolution",
+        "960x600",
+        "--spp",
+        "16",
+        "--max-depth",
+        "16",
+        "--seed",
+        "1",
+        "--out",
+        "out/performance_20261008/cie_off16"
+      ],
+      "profile": "0",
+      "wall_seconds": 33.44399728400094,
+      "peak_host_rss_bytes": 2781691904,
+      "rss_method": "isolated_resource_children_maxrss",
+      "returncode": 0,
+      "device_samples": {
+        "before": "index, temperature.gpu, clocks.current.graphics [MHz], clocks.current.memory [MHz], utilization.gpu [%]\n0, 59, 1470 MHz, 7001 MHz, 3 %",
+        "after": "index, temperature.gpu, clocks.current.graphics [MHz], clocks.current.memory [MHz], utilization.gpu [%]\n0, 60, 1470 MHz, 7001 MHz, 3 %"
+      }
+    },
+    "cie_off64": {
+      "seconds": 53.2466,
+      "statistics": {
+        "paths": 73728000,
+        "segments": 456252136,
+        "region_inconsistencies": 466568,
+        "leaks": 0
+      },
+      "error": {
+        "rel_mse": 4.021471561094774,
+        "rel_mse_no_glints": 0.26264381495392275,
+        "mean_ratio": 0.8870876179101983
+      },
+      "command": [
+        "out/performance_20261008/owe_cie_candidate",
+        "render",
+        "scenes/the_peacock_lamp.owe",
+        "--backend",
+        "gpu",
+        "--device",
+        "1",
+        "--detector",
+        "Room",
+        "--integrator",
+        "vcm",
+        "--resolution",
+        "960x600",
+        "--spp",
+        "64",
+        "--max-depth",
+        "16",
+        "--seed",
+        "1",
+        "--out",
+        "out/performance_20261008/cie_off64"
+      ],
+      "profile": "0",
+      "wall_seconds": 71.55052237400014,
+      "peak_host_rss_bytes": 2783666176,
+      "rss_method": "isolated_resource_children_maxrss",
+      "returncode": 0,
+      "device_samples": {
+        "before": "index, temperature.gpu, clocks.current.graphics [MHz], clocks.current.memory [MHz], utilization.gpu [%]\n0, 60, 1470 MHz, 7001 MHz, 3 %",
+        "during": "index, temperature.gpu, clocks.current.graphics [MHz], clocks.current.memory [MHz], utilization.gpu [%]\n0, 72, 2085 MHz, 8001 MHz, 99 %",
+        "after": "index, temperature.gpu, clocks.current.graphics [MHz], clocks.current.memory [MHz], utilization.gpu [%]\n0, 58, 1470 MHz, 7001 MHz, 3 %"
+      }
+    },
+    "cie_paired_baseline64": {
+      "seconds": 55.2653,
+      "statistics": {
+        "paths": 73728000,
+        "segments": 456252136,
+        "region_inconsistencies": 466568,
+        "leaks": 0
+      },
+      "error": {
+        "rel_mse": 4.021726593897628,
+        "rel_mse_no_glints": 0.26293295491819896,
+        "mean_ratio": 0.8870590817976993
+      },
+      "command": [
+        "out/performance_20261008/owe_integrated_baseline",
+        "render",
+        "scenes/the_peacock_lamp.owe",
+        "--backend",
+        "gpu",
+        "--device",
+        "1",
+        "--detector",
+        "Room",
+        "--integrator",
+        "vcm",
+        "--resolution",
+        "960x600",
+        "--spp",
+        "64",
+        "--max-depth",
+        "16",
+        "--seed",
+        "1",
+        "--out",
+        "out/performance_20261008/cie_paired_baseline64"
+      ],
+      "profile": "0",
+      "wall_seconds": 73.56740292500035,
+      "peak_host_rss_bytes": 2782527488,
+      "rss_method": "isolated_resource_children_maxrss",
+      "returncode": 0,
+      "device_samples": {
+        "before": "index, temperature.gpu, clocks.current.graphics [MHz], clocks.current.memory [MHz], utilization.gpu [%]\n0, 58, 1470 MHz, 7001 MHz, 3 %",
+        "during": "index, temperature.gpu, clocks.current.graphics [MHz], clocks.current.memory [MHz], utilization.gpu [%]\n0, 73, 2085 MHz, 8001 MHz, 100 %",
+        "after": "index, temperature.gpu, clocks.current.graphics [MHz], clocks.current.memory [MHz], utilization.gpu [%]\n0, 62, 1470 MHz, 7001 MHz, 3 %"
+      }
+    }
+  },
+  "limitations": [
+    "Single candidate capture per budget and one fresh paired64 baseline; no timing distribution.",
+    "Finite256-spp reference and persistent lead-contact inconsistencies; nonmonotonic full-image error at64spp prevents time-to-target claim.",
+    "CPU contact prototype present in candidate executable; GPU comparisons only.",
+    "No CIE software traversal suite run yet; future integrated software regression remains required."
+  ],
+  "recent_baseline": {
+    "16": {
+      "seconds": 15.798
+    },
+    "64": {
+      "seconds": 55.2453
+    }
+  },
+  "paired64": {
+    "speedup": 1.0379122798450982,
+    "time_reduction_fraction": 0.03652744126965746,
+    "counts_match": true
+  }
+}

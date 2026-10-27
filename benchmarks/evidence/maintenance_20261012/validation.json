@@ -1,0 +1,56 @@
+{
+  "date": "2026-10-13",
+  "engine_source_revision": "d4b60c151c156c0fdfb722fd15392c778521f4fd",
+  "tests_binary_sha256": "90fc970a562ddcd080c5e1352ed86c354924c772aa5d5a432cda26054b8a5014",
+  "renderer_binary_sha256": "670cdefbdbd9db96f2ae107b216b8d2347326493d1f7e54feb42efbbe0d06f1b",
+  "checks": [
+    {
+      "command": "OWE_REQUIRE_GPU=1 build/owe_tests",
+      "passed": 158,
+      "total": 158,
+      "log": "hardware_final.log",
+      "scope": "Final shaders and renderer; GPU required, hardware traversal where available."
+    },
+    {
+      "command": "OWE_REQUIRE_GPU=1 OWE_GPU_RAY_QUERY=0 build/owe_tests gpu_contact_ gpu_planetary_ backends_far_ backends_surface_sensor_ vcm_cache_ vcm_cached_ gpu_film_",
+      "passed": 16,
+      "total": 16,
+      "log": "software_final.log",
+      "scope": "Final shaders and renderer; required software traversal."
+    },
+    {
+      "command": "ctest --test-dir build -R \"layering|python|documentation|viewer\" --output-on-failure",
+      "passed": 7,
+      "total": 7,
+      "log": "tooling_viewer_final.log",
+      "python_tool_tests": 46,
+      "python_asset_tests": 3
+    },
+    {
+      "command": "ctest --test-dir /tmp/owe-maintenance-cpu --output-on-failure",
+      "passed": 5,
+      "total": 5,
+      "log": "cpu_only_ctest.log",
+      "scope": "Clean Release GPU-disabled build before shader calling-convention/film-precision corrections and extra gallery preflight tests; those GPU shaders are excluded from this configuration."
+    }
+  ],
+  "final_source_revision": "50197685cc052c92493ec8f856428a277f851dbc",
+  "final_renderer_binary_sha256": "308fdaba1e136ea4ac93edc31538152b7711431216b604649b639045509dbe27",
+  "final_tests_binary_sha256": "e2e30f598076ccb85d210e421c45e9e998636f79d4214ca294288003a680cb89",
+  "final_layout_checks": {
+    "hardware_passed": 2,
+    "software_passed": 1,
+    "hardware_log": "film_layout_hardware.log",
+    "software_log": "film_layout_software.log",
+    "shader_sha256": "a4567d5654106e9082f35fd3eb858c944a87b76bea054d4bbd125a9fd59472a4",
+    "shader_identical": true,
+    "pfm_byte_identical": true,
+    "native_metadata_identical_except_timing": true,
+    "profile": "film_layout_profile.log",
+    "readbacks_per_four_pass_render": 4,
+    "previous_readbacks": 8,
+    "cpu_only_build": "final_cpu_build.log",
+    "tooling_viewer_groups_passed": 7,
+    "tooling_viewer_log": "final_checks.log"
+  }
+}

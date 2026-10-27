@@ -17,7 +17,6 @@ struct SpotResult {
     double rmsBest = 0;           // RMS spot radius at best focus (m)
     double rmsParaxial = 0;       // RMS spot radius at the paraxial image plane (m)
     double centroidY = 0;         // at the paraxial image plane (m)
-    std::vector<Vec2> spot;       // positions at the paraxial image plane relative to the centroid
     // Afocal systems: the emerging beam is (ideally) collimated.
     double apparentAngle = 0;     // mean emerging direction (rad)
     double angularRms = 0;        // RMS angular spread of the emerging beam (rad)

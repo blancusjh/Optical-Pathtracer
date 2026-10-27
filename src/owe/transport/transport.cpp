@@ -1,6 +1,6 @@
 #include "owe/transport/transport.hpp"
 
-#include "owe/transport/optics.hpp"
+#include "owe/core/shared/optics.hpp"
 
 namespace owe {
 
@@ -12,7 +12,25 @@ struct LightSample {
     Spec4 Le;
     double pdf = 0;  // solid angle, including light selection
     uint32_t boundary = kNone;
+    SurfaceHit endpoint;
+    uint32_t region = kNone;
 };
+
+double sampledAnchorError(const Boundary& boundary, const Vec3& local, const Vec3& world) {
+    return contactError(std::max({maxAbsComponent(world), maxAbsComponent(local), maxAbsComponent(boundary.toWorld.t),
+                  maxAbsComponent(boundary.shape->bounds().extent())}));
+}
+
+// A point drawn on an emitting boundary, with the anchor its visibility queries need.
+SurfaceHit emitterPoint(const Boundary& b, uint32_t boundary, const Vec3& pLocal, const Vec3& nLocal, double u3) {
+    SurfaceHit e;
+    e.p = b.toWorld.point(pLocal);
+    e.n = normalize(b.toWorld.vector(nLocal));
+    e.boundary = boundary;
+    e.prim = b.shape->sampledPrimitive(u3);
+    e.error = sampledAnchorError(b, pLocal, e.p);
+    return e;
+}
 
 bool sampleLightFrom(const World& w, const Vec3& p, const Wavelengths& wl, Rng& rng, LightSample& ls) {
     if (w.lights().empty()) return false;
@@ -21,39 +39,33 @@ bool sampleLightFrom(const World& w, const Vec3& p, const Wavelengths& wl, Rng& 
     const LightEntry& L = w.lights()[li];
     double u1 = rng.uniform(), u2 = rng.uniform(), u3 = rng.uniform();
     if (L.kind == LightEntry::Kind::Sun) {
-        double cosMax = std::cos(w.env.sunAngularRadius);
-        Frame f(w.env.sunDir);
-        ls.wi = f.toWorld(sampleUniformCone(u1, u2, cosMax));
-        ls.dist = Inf;
+        ls.wi = w.env.sampleSun(u1, u2);
         ls.Le = wl.eval(w.env.sunRadiance);
         ls.pdf = sel / w.env.sunSolidAngle();
-        ls.boundary = kNone;
         return true;
     }
     if (L.kind == LightEntry::Kind::Environment) {
         double pdfDir;
         if (!w.env.sampleMap(u1, u2, ls.wi, pdfDir)) return false;
-        ls.dist = Inf;
         for (int i = 0; i < NW; ++i) ls.Le[i] = w.env.sky(ls.wi, wl.lambda[size_t(i)]);
         ls.pdf = sel * pdfDir;
-        ls.boundary = kNone;
         return true;
     }
     const Boundary& b = w.boundaries()[L.boundary];
     Vec3 pL, nL;
     double pdfW;
     if (!b.shape->sampleFrom(b.toLocal.point(p), u1, u2, u3, pL, nL, pdfW)) return false;
-    Vec3 pW = b.toWorld.point(pL);
-    Vec3 nW = normalize(b.toWorld.vector(nL));
-    Vec3 d = pW - p;
+    ls.endpoint = emitterPoint(b, L.boundary, pL, nL, u3);
+    Vec3 d = ls.endpoint.p - p;
     ls.dist = length(d);
     if (!(ls.dist > 0)) return false;
     ls.wi = d / ls.dist;
     const Emission& e = w.emissions()[b.emission];
-    double cosL = dot(nW, -ls.wi);
+    double cosL = dot(ls.endpoint.n, -ls.wi);
     ls.Le = ((cosL > 0 && e.front) || (cosL < 0 && e.back)) ? wl.eval(e.radiance) : Spec4(0.0);
     ls.pdf = sel * pdfW;
     ls.boundary = L.boundary;
+    ls.region = cosL > 0 ? b.front : b.back;
     return true;
 }
 
@@ -75,9 +87,55 @@ void maskTerminated(const Wavelengths& wl, Spec4& beta) {
         if (wl.pdf[size_t(i)] == 0) beta[i] = 0;
 }
 
-void pushVertex(PathRecord* rec, const Vec3& p, const Vec3& dOut, EventKind ev, uint32_t boundary, uint32_t from,
-                uint32_t to, double nI, double nT, double cosI, double cosT, double R, double T, double opl, double beta) {
-    if (!rec) return;
+// What the medium of the current region does to a segment of length seg (Inf: unbounded): a
+// scattering point at t < seg, distance-sampled with the hero's extinction (the secondaries
+// reweighted), or passage with Beer–Lambert attenuation. End: the path cannot go on (an unbounded
+// segment through absorbing or scattering matter).
+enum class MediumEvent { Pass, Scatter, End };
+MediumEvent sampleMedium(const Medium& m, const Wavelengths& wl, double seg, Rng& rng, Spec4& beta, double& t) {
+    if (m.scatters()) {
+        Spec4 sT = sigmaT(m, wl);
+        t = -std::log(1 - rng.uniform()) / sT[0];
+        if (t < seg) {
+            double pdf0 = sT[0] * std::exp(-sT[0] * t);
+            for (int i = 0; i < NW; ++i)
+                beta[i] *= m.scattering.eval(wl.lambda[size_t(i)]) * std::exp(-sT[i] * t) / pdf0;
+            return MediumEvent::Scatter;
+        }
+        if (std::isinf(seg)) return MediumEvent::End;
+        double pass0 = std::exp(-sT[0] * seg);
+        for (int i = 0; i < NW; ++i) beta[i] *= std::exp(-sT[i] * seg) / pass0;
+    } else if (m.absorbs()) {
+        if (std::isinf(seg)) return MediumEvent::End;
+        for (int i = 0; i < NW; ++i) beta[i] *= std::exp(-m.absorption.eval(wl.lambda[size_t(i)]) * seg);
+    }
+    return MediumEvent::Pass;
+}
+
+// The sides of a boundary met along d. A ray arriving from a region other than the boundary's on
+// that side is counted as an inconsistency and continues from the boundary's region.
+struct Crossing {
+    uint32_t inc, other;  // the region the ray must arrive from, and the one beyond
+    bool fromFront;
+};
+Crossing meetBoundary(const World& w, const SurfaceHit& hit, const Ray& ray, uint32_t& region, uint32_t previous,
+                      TransportStats& st) {
+    const Boundary& b = w.boundaries()[hit.boundary];
+    Crossing c;
+    c.fromFront = dot(ray.d, hit.n) < 0;
+    c.inc = c.fromFront ? b.front : b.back;
+    c.other = c.fromFront ? b.back : b.front;
+    if (c.inc != region || hit.ambiguousContact) {
+        st.noteInconsistency({hit.boundary, region, c.inc, previous, hit.p, ray.o, ray.d, ray.departedPrimitive, hit.prim});
+        region = c.inc;
+    }
+    return c;
+}
+
+// Appends an event to an inspection record (nothing without one); the caller adds its optics.
+PathVertex* record(PathRecord* rec, EventKind ev, const Vec3& p, const Vec3& dOut, double opl, double beta,
+                   uint32_t boundary = kNone, uint32_t from = kNone, uint32_t to = kNone, double nI = 0, double nT = 0) {
+    if (!rec) return nullptr;
     PathVertex v;
     v.p = p;
     v.dOut = dOut;
@@ -87,13 +145,22 @@ void pushVertex(PathRecord* rec, const Vec3& p, const Vec3& dOut, EventKind ev, 
     v.regionTo = to;
     v.nI = nI;
     v.nT = nT;
-    v.thetaI = std::acos(clampd(cosI, -1, 1));
-    v.thetaT = std::acos(clampd(cosT, -1, 1));
-    v.R = R;
-    v.T = T;
     v.opl = opl;
     v.beta = beta;
     rec->v.push_back(v);
+    return &rec->v.back();
+}
+// A scattering event's angles and Fresnel split.
+void recordScatter(PathVertex* v, const ScatterSample& s) {
+    if (!v) return;
+    v->thetaI = std::acos(clamp(s.cosI, -1, 1));
+    v->thetaT = std::acos(clamp(s.cosT, -1, 1));
+    v->R = s.R;
+    v->T = s.T;
+}
+// Where an escaping ray is drawn: beyond the world.
+Vec3 escapePoint(const World& w, const Ray& ray) {
+    return ray.o + ray.d * (2 * w.sceneRadius() + length(ray.o - w.sceneCenter()));
 }
 
 }  // namespace
@@ -127,17 +194,66 @@ static Interface atWavelength(const Interface& base, const World& w, const Surfa
     return it;
 }
 
-Spec4 Tracer::transmittance(Vec3 o, uint32_t region, const Vec3& dir, double dist, const Wavelengths& wl,
-                            uint32_t* finalRegion) const {
+namespace {
+
+// f(wo = −d, wi) at every live wavelength of the interface `base` (the hero's); heroPdf: the hero's
+// pdf of sampling wi.
+Spec4 evalScatterSpectral(const Interface& base, const World& w, const SurfaceHit& hit, const Wavelengths& wl,
+                          const Vec3& d, const Vec3& wi, TransportMode mode, double& heroPdf) {
+    Spec4 f;
+    heroPdf = 0;
+    for (int i = 0; i < NW; ++i) {
+        if (wl.pdf[size_t(i)] == 0) continue;
+        double pdf;
+        f[i] = evalScatter(i == 0 ? base : atWavelength(base, w, hit, wl.lambda[size_t(i)]), d, wi, mode, pdf);
+        if (i == 0) heroPdf = pdf;
+    }
+    return f;
+}
+
+// At a dispersive dielectric the secondary wavelengths would refract elsewhere: they end, and the
+// hero carries the path for all four.
+void terminateIfDispersive(const Interface& it, const World& w, const SurfaceHit& hit, Wavelengths& wl, Spec4& beta) {
+    if (it.optics->type != SurfaceType::Dielectric || wl.secondaryTerminated()) return;
+    for (int i = 1; i < NW; ++i)
+        if (wl.pdf[size_t(i)] != 0 && isDispersive(it, atWavelength(it, w, hit, wl.lambda[size_t(i)]))) {
+            wl.terminateSecondary();
+            maskTerminated(wl, beta);
+            return;
+        }
+}
+
+// The throughput after scattering sample s, drawn at the hero wavelength, at every live wavelength.
+void weighScatter(Spec4& beta, const Interface& it, const World& w, const SurfaceHit& hit, const Wavelengths& wl,
+                  const Vec3& d, const ScatterSample& s, TransportMode mode) {
+    beta[0] *= s.weight;
+    for (int i = 1; i < NW; ++i)
+        if (wl.pdf[size_t(i)] != 0)
+            beta[i] *= secondaryScatterWeight(atWavelength(it, w, hit, wl.lambda[size_t(i)]), d, s, mode);
+}
+
+}  // namespace
+
+Spec4 Tracer::transmittance(const Endpoint& start, const Vec3& dir, double dist, const Wavelengths& wl,
+                            uint32_t* finalRegion, const Endpoint* endpoint) const {
+    uint32_t region = start.region;
     Spec4 Tr(1.0);
+    Ray ray{start.p, dir, start.boundary, region, start.normal, start.primitive, start.error};
     double remaining = dist;
-    double margin = std::isinf(dist) ? 0 : 1e-7 * dist + 1e-12;
+    const double endError = endpoint ? std::max(endpoint->error, contactError(
+        std::max({dist, maxAbsComponent(endpoint->p), maxAbsComponent(start.p)}))) : 0;
+    const double margin = std::isinf(dist) || endpoint ? 0 : 1e-7 * dist + 1e-12;
+    auto finish = [&](const Spec4& value) {
+        if (finalRegion) *finalRegion = region;
+        return value;
+    };
     for (int guard = 0; guard < 256; ++guard) {
         SurfaceHit h;
-        double tmax = std::isinf(remaining) ? Inf : remaining - margin;
-        if (tmax <= 0) break;
-        bool found = world_.intersect(Ray{o, dir}, tmax, h);
-        double seg = found ? h.t : remaining;
+        double tmax = std::isinf(remaining) ? Inf : (endpoint ? remaining + endError : remaining - margin);
+        if (tmax <= 0) return finish(Tr);
+        ray.regionHint = region;
+        bool found = world_.intersect(ray, tmax, h);
+        double seg = found ? std::min(h.t, remaining) : remaining;
         const Medium& m = world_.mediumOf(region);
         if (m.absorbs() || m.scatters()) {
             if (std::isinf(seg)) return Spec4(0.0);
@@ -145,17 +261,50 @@ Spec4 Tracer::transmittance(Vec3 o, uint32_t region, const Vec3& dir, double dis
         }
         if (!found) {
             if (std::isinf(dist) && region != world_.ambientRegion()) return Spec4(0.0);
-            if (finalRegion) *finalRegion = region;
-            return Tr;
+            return finish(Tr);
         }
+        bool endpointFace = endpoint && h.boundary == endpoint->boundary;
+        if (endpointFace)
+            endpointFace = world_.boundaries()[h.boundary].shape->sameFace(endpoint->primitive, h.prim);
+        if (endpointFace && !h.ambiguousContact &&
+            std::abs(h.t - remaining) <= endError && dot(h.n, endpoint->normal) > 0 && region == endpoint->region)
+            return finish(Tr);  // exclude only the destination's own face, never its neighborhood
+        // A broad numerical query can discover matter beyond the source. The source-local
+        // forward proof checked the actual open segment.
+        if (endpoint && dot(h.p - endpoint->p, dir) > 0) return finish(Tr);
         const Boundary& b = world_.boundaries()[h.boundary];
+        uint32_t incident = dot(dir, h.n) < 0 ? b.front : b.back;
+        if (incident != region || h.ambiguousContact) return Spec4(0.0);
         if (world_.optics()[b.optics].type != SurfaceType::Null) return Spec4(0.0);
         region = dot(dir, h.n) < 0 ? b.back : b.front;
-        o = offsetOrigin(h.p, h.n, dir);
+        ray = world_.spawnRay(h, dir, region);
         if (!std::isinf(remaining)) remaining -= h.t;
     }
-    if (finalRegion) *finalRegion = region;
-    return Tr;
+    // Exhausting the progress guard is not evidence that the remaining segment is clear.
+    return finish(Spec4(0.0));
+}
+
+Spec4 Tracer::connectionTransmittance(Endpoint source, const Endpoint& target, const Wavelengths& wl) const {
+    const Vec3 delta = source.p - target.p;
+    const double distance = length(delta);
+    if (!(distance > 0)) return Spec4(0.0);
+    const Vec3 direction = delta / distance;
+    const double error = contactError(std::max({distance, maxAbsComponent(source.p), maxAbsComponent(target.p)}));
+    if (source.boundary != kNone) {
+        const Boundary& b = world_.boundaries()[source.boundary];
+        source.error = std::max(source.error, sampledAnchorError(b, b.toLocal.point(source.p), source.p));
+    }
+    // Check the source neighborhood before excluding its own face in the reciprocal walk.
+    SurfaceHit contact;
+    Ray proof{source.p, -direction, source.boundary, source.region, source.normal, source.primitive, source.error};
+    proof.forwardOnly = true;
+    if (world_.intersect(proof, std::max(error, source.error), contact)) {
+        if (contact.ambiguousContact || world_.optics()[world_.boundaries()[contact.boundary].optics].type != SurfaceType::Null)
+            return Spec4(0.0);
+    }
+    uint32_t arrival = kNone;
+    Spec4 tr = transmittance(target, direction, distance, wl, &arrival, &source);
+    return arrival == source.region ? tr : Spec4(0.0);
 }
 
 double Tracer::lightPdf(const Vec3& ref, const SurfaceHit& hit) const {
@@ -178,524 +327,221 @@ Spec4 Tracer::directLighting(const SurfaceHit& hit, const Interface* surface, co
     Spec4 f;
     double pdfScatter = 0, cosFactor = 1;
     uint32_t startRegion = region;
-    Vec3 origin = hit.p;
     if (!surface) {
-        double ph = hgPhase(dot(-d, ls.wi), g);
-        f = Spec4(ph);
-        pdfScatter = ph;
+        pdfScatter = hgPhase(dot(-d, ls.wi), g);
+        f = Spec4(pdfScatter);
     } else {
-        const Interface& base = *surface;
-        for (int i = 0; i < NW; ++i) {
-            if (wl.pdf[size_t(i)] == 0) continue;
-            Interface it = i == 0 ? base : atWavelength(base, world_, hit, wl.lambda[size_t(i)]);
-            double pdf;
-            f[i] = evalScatter(it, d, ls.wi, TransportMode::Radiance, pdf);
-            if (i == 0) pdfScatter = pdf;
-        }
+        f = evalScatterSpectral(*surface, world_, hit, wl, d, ls.wi, TransportMode::Radiance, pdfScatter);
         if (f.isZero()) return Spec4(0.0);
         cosFactor = std::abs(dot(ls.wi, hit.n));
         const Boundary& b = world_.boundaries()[hit.boundary];
         startRegion = dot(ls.wi, hit.n) > 0 ? b.front : b.back;
-        origin = offsetOrigin(hit.p, hit.n, ls.wi);
     }
-    Spec4 Tr = transmittance(origin, startRegion, ls.wi, ls.dist, wl);
+    const Endpoint start = surface ? Endpoint(hit, startRegion) : Endpoint(hit.p, startRegion);
+    const Spec4 Tr = std::isfinite(ls.dist)
+        ? connectionTransmittance(Endpoint(ls.endpoint, ls.region), start, wl)
+        : transmittance(start, ls.wi, Inf, wl);
     if (Tr.isZero()) return Spec4(0.0);
     double w = powerHeuristic(ls.pdf, pdfScatter);
     if (source) *source = ls.boundary == kNone ? std::string("sun") : world_.boundaryLabel(ls.boundary);
     return f * Tr * ls.Le * (cosFactor * w / ls.pdf);
 }
 
-Spec4 Tracer::radiance(Ray ray, uint32_t region, Wavelengths& wl, Rng& rng, TransportStats& st, PathRecord* rec) const {
-    Spec4 L(0.0), beta(1.0);
+struct Tracer::CameraPath {
+    Ray ray;
+    uint32_t region;
     uint32_t lastBoundary = kNone;
-    maskTerminated(wl, beta);
-    double opl = 0;
+    PathRecord* rec;
+    Spec4 L = Spec4(0.0), beta = Spec4(1.0);
     bool specular = true;
-    double prevPdf = 0;
-    Vec3 prevP = ray.o;
-    const double hero = wl.hero();
-    // Caustic-partition bookkeeping (see setCausticPartition).
-    int scatterEvents = 0, nonDeltaEvents = 0, deltaSinceNonDelta = 0;
-    bool firstIsNonDelta = false;
-    auto ownedByLightTracing = [&] {
-        return partition_ && nonDeltaEvents == 1 && firstIsNonDelta && deltaSinceNonDelta >= 1;
-    };
-    auto noteScatter = [&](bool delta) {
-        if (delta) ++deltaSinceNonDelta;
-        else {
-            if (scatterEvents == 0) firstIsNonDelta = true;
-            ++nonDeltaEvents;
-            deltaSinceNonDelta = 0;
-        }
-        ++scatterEvents;
-    };
-    st.paths++;
-    if (rec) {
-        rec->lambda = hero;
-        pushVertex(rec, ray.o, ray.d, EventKind::Camera, kNone, region, region, 0, 0, 1, 1, 0, 0, 0, 1);
-    }
-    auto contribute = [&](size_t vertex, const Spec4& value, const std::string& src, bool nee) {
+    double prevPdf = 0, opl = 0;
+    Vec3 prevP;
+
+    CameraPath(const Ray& r, uint32_t reg, PathRecord* record) : ray(r), region(reg), rec(record), prevP(r.o) {}
+    void contribute(size_t vertex, const Spec4& value, const std::string& src, bool nee) {
         L += value;
         if (rec && value.sum() > 0) rec->c.push_back(PathContribution{vertex, value, src, nee});
-    };
+    }
+    // The last recorded vertex (0 without a record), and a pointer to it.
+    size_t lastVertex() const { return rec ? rec->v.size() - 1 : 0; }
+    PathVertex* vertex() const { return rec ? &rec->v.back() : nullptr; }
+    // Russian roulette against the throughput; false when the path ends.
+    bool survives(Rng& rng) {
+        double q = std::min(1.0, beta.maxValue());
+        if (rng.uniform() >= q) return false;
+        beta *= 1 / q;
+        return true;
+    }
+};
+
+// A scattering event in the medium at distance t: next-event estimation from there, then a new
+// direction from the phase function.
+bool Tracer::scatterInMedium(const Medium& med, double nMed, double t, int depth, Wavelengths& wl, Rng& rng,
+                             CameraPath& path) const {
+    Vec3 p = path.ray.at(t);
+    path.opl += nMed * t;
+    record(path.rec, EventKind::Scatter, p, path.ray.d, path.opl, path.beta[0], kNone, path.region, path.region, nMed, nMed);
+    if (depth >= maxDepth_) return false;
+    SurfaceHit mh;
+    mh.p = p;
+    std::string src;
+    Spec4 dl = directLighting(mh, nullptr, path.ray.d, wl, rng, path.rec ? &src : nullptr, med.g, path.region);
+    if (!dl.isZero()) path.contribute(path.lastVertex(), path.beta * dl, src, true);
+    Vec3 wi;
+    Draw2 u(rng);
+    path.prevPdf = sampleHg(-path.ray.d, med.g, u.u1, u.u2, wi);
+    path.specular = false;
+    path.prevP = p;
+    path.ray = Ray{p, wi};
+    return depth < rrDepth_ || path.survives(rng);
+}
+
+// The sky and the sun met leaving the world, weighted against next-event estimation unless the
+// last scatter was specular.
+void Tracer::skyMet(const Wavelengths& wl, double nMed, CameraPath& path) const {
+    const Ray& ray = path.ray;
+    Spec4 sky, sun;
+    for (int i = 0; i < NW; ++i) {
+        sky[i] = world_.env.sky(ray.d, wl.lambda[size_t(i)]);
+        sun[i] = world_.env.sun(ray.d, wl.lambda[size_t(i)]);
+    }
+    double w = (path.specular || sun.isZero()) ? 1.0 : powerHeuristic(path.prevPdf, sunPdf());
+    // An environment map is also a light for next-event estimation: MIS.
+    const int envLight = world_.environmentLight();
+    double wSky = 1;
+    if (envLight >= 0 && !path.specular)
+        wSky = powerHeuristic(path.prevPdf, world_.lightSelectPdf(size_t(envLight)) * world_.env.mapPdf(ray.d));
+    record(path.rec, EventKind::Escape, escapePoint(world_, ray), ray.d, path.opl, path.beta[0], kNone, path.region,
+           path.region, nMed, nMed);
+    path.contribute(path.lastVertex(), path.beta * (sky * wSky + sun * w), sun.isZero() ? "sky" : "sun+sky", false);
+}
+
+// Emission met at hit, weighted against next-event estimation unless the last scatter was specular.
+void Tracer::emissionMet(const SurfaceHit& hit, bool fromFront, const Wavelengths& wl, CameraPath& path) const {
+    const Boundary& b = world_.boundaries()[hit.boundary];
+    if (b.emission < 0) return;
+    const Emission& e = world_.emissions()[b.emission];
+    if (!(fromFront ? e.front : e.back)) return;
+    double w = 1;
+    if (!path.specular) {
+        double pl = lightPdf(path.prevP, hit);
+        if (pl > 0) w = powerHeuristic(path.prevPdf, pl);
+    }
+    // The emitter's label only names the contribution in a recorded path (no allocation otherwise).
+    path.contribute(path.lastVertex(), path.beta * wl.eval(e.radiance) * w,
+                    path.rec ? world_.boundaryLabel(hit.boundary) : std::string(), false);
+}
+
+// At a scattering surface: next-event estimation (unless it is specular), then a scattering sample
+// that may cross into the region `other`.
+bool Tracer::scatterAtSurface(const SurfaceHit& hit, const SurfaceOptics& o, uint32_t other, int depth,
+                              Wavelengths& wl, Rng& rng, CameraPath& path) const {
+    PathVertex* v = path.vertex();
+    const size_t vIndex = path.lastVertex();
+    const uint32_t inc = path.region;
+    Interface it = makeInterface(hit, wl.hero());
+    terminateIfDispersive(it, world_, hit, wl, path.beta);
+    if (!o.isDelta()) {
+        std::string src;
+        Spec4 dl = directLighting(hit, &it, path.ray.d, wl, rng, path.rec ? &src : nullptr, 0, path.region);
+        if (!dl.isZero()) path.contribute(vIndex, path.beta * dl, src, true);
+    }
+    ScatterSample s;
+    Draw3 u(rng);
+    bool ok = sampleScatter(it, path.ray.d, u.u1, u.u2, u.u3, TransportMode::Radiance, s);
+    if (v) {
+        v->event = ok ? s.event : EventKind::Absorb;
+        v->dOut = ok ? s.wi : path.ray.d;
+        v->regionTo = ok && s.transmitted ? other : inc;
+        v->beta = ok ? path.beta[0] * s.weight : 0;
+        recordScatter(v, s);
+    }
+    if (!ok || s.weight <= 0) return false;
+    weighScatter(path.beta, it, world_, hit, wl, path.ray.d, s, TransportMode::Radiance);
+    if (s.transmitted) path.region = other;
+    path.specular = s.delta;
+    path.prevPdf = s.pdf;
+    path.prevP = hit.p;
+    path.ray = world_.spawnRay(hit, s.wi, path.region);
+    if (depth >= rrDepth_ && !path.survives(rng)) {
+        record(path.rec, EventKind::Terminate, path.ray.o, path.ray.d, path.opl, 0, kNone, path.region, path.region);
+        return false;
+    }
+    return true;
+}
+
+Spec4 Tracer::radiance(Ray ray, uint32_t region, Wavelengths& wl, Rng& rng, TransportStats& st, PathRecord* rec) const {
+    CameraPath path(ray, region, rec);
+    maskTerminated(wl, path.beta);
+    const double hero = wl.hero();
+    st.paths++;
+    if (rec) rec->lambda = hero;
+    record(rec, EventKind::Camera, ray.o, ray.d, 0, 1, kNone, region, region);
 
     for (int depth = 0;; ++depth) {
         SurfaceHit hit;
-        bool found = world_.intersect(ray, Inf, hit);
+        path.ray.regionHint = path.region;
+        bool found = world_.intersect(path.ray, Inf, hit);
         st.segments++;
-        const Medium& med = world_.mediumOf(region);
-        double nMed = med.n(hero);
-        double seg = found ? hit.t : Inf;
-
-        if (med.scatters()) {
-            // Distance sampling with the hero's extinction; secondaries are reweighted.
-            Spec4 sT = sigmaT(med, wl);
-            double t = -std::log(1 - rng.uniform()) / sT[0];
-            if (t < seg) {
-                Vec3 p = ray.at(t);
-                opl += nMed * t;
-                double pdf0 = sT[0] * std::exp(-sT[0] * t);
-                for (int i = 0; i < NW; ++i)
-                    beta[i] *= med.scattering.eval(wl.lambda[size_t(i)]) * std::exp(-sT[i] * t) / pdf0;
-                pushVertex(rec, p, ray.d, EventKind::Scatter, kNone, region, region, nMed, nMed, 1, 1, 0, 0, opl, beta[0]);
-                if (depth >= maxDepth_) break;
-                SurfaceHit mh;
-                mh.p = p;
-                std::string src;
-                Spec4 dl = directLighting(mh, nullptr, ray.d, wl, rng, rec ? &src : nullptr, med.g, region);
-                if (!dl.isZero()) contribute(rec ? rec->v.size() - 1 : 0, beta * dl, src, true);
-                Vec3 wi;
-                Draw2 u(rng);
-                double ph = sampleHg(-ray.d, med.g, u.u1, u.u2, wi);
-                prevPdf = ph;
-                specular = false;
-                prevP = p;
-                noteScatter(false);
-                ray = Ray{p, wi};
-                if (depth >= rrDepth_) {
-                    double q = std::min(1.0, beta.maxValue());
-                    if (rng.uniform() >= q) break;
-                    beta *= 1 / q;
-                }
-                continue;
-            }
-            if (std::isinf(seg)) break;
-            double pass0 = std::exp(-sT[0] * seg);
-            for (int i = 0; i < NW; ++i) beta[i] *= std::exp(-sT[i] * seg) / pass0;
-        } else if (med.absorbs()) {
-            if (!found) break;  // infinite path through an absorbing medium
-            for (int i = 0; i < NW; ++i) beta[i] *= std::exp(-med.absorption.eval(wl.lambda[size_t(i)]) * seg);
+        const Medium& med = world_.mediumOf(path.region);
+        const double nMed = med.n(hero);
+        double t;
+        const MediumEvent event = sampleMedium(med, wl, found ? hit.t : Inf, rng, path.beta, t);
+        if (event == MediumEvent::End) break;
+        if (event == MediumEvent::Scatter) {
+            if (!scatterInMedium(med, nMed, t, depth, wl, rng, path)) break;
+            continue;
         }
-
         if (!found) {
-            if (region == world_.ambientRegion() && !ownedByLightTracing()) {
-                Spec4 sky, sun;
-                for (int i = 0; i < NW; ++i) {
-                    sky[i] = world_.env.sky(ray.d, wl.lambda[size_t(i)]);
-                    sun[i] = world_.env.sun(ray.d, wl.lambda[size_t(i)]);
-                }
-                double w = (specular || sun.isZero()) ? 1.0 : powerHeuristic(prevPdf, sunPdf());
-                // An environment map is also a light for next-event estimation: MIS.
-                const int envLight = world_.environmentLight();
-                double wSky = 1;
-                if (envLight >= 0 && !specular)
-                    wSky = powerHeuristic(prevPdf, world_.lightSelectPdf(size_t(envLight)) * world_.env.mapPdf(ray.d));
-                if (rec)
-                    pushVertex(rec, ray.o + ray.d * (2 * world_.sceneRadius() + length(ray.o - world_.sceneCenter())),
-                               ray.d, EventKind::Escape, kNone, region, region, nMed, nMed, 1, 1, 0, 0, opl, beta[0]);
-                contribute(rec ? rec->v.size() - 1 : 0, beta * (sky * wSky + sun * w), sun.isZero() ? "sky" : "sun+sky", false);
-            } else if (region != world_.ambientRegion()) {
-                st.leaks++;
-            }
+            if (path.region == world_.ambientRegion()) skyMet(wl, nMed, path);
+            else st.leaks++;
             break;
         }
 
-        opl += nMed * hit.t;
-        const Boundary& b = world_.boundaries()[hit.boundary];
-        bool fromFront = dot(ray.d, hit.n) < 0;
-        uint32_t inc = fromFront ? b.front : b.back;
-        uint32_t other = fromFront ? b.back : b.front;
-        if (inc != region) {
-            st.noteInconsistency(hit.boundary, region, inc, lastBoundary, hit.p);
-            region = inc;
-        }
-        const SurfaceOptics& o = world_.optics()[b.optics];
-        lastBoundary = hit.boundary;
-        size_t vIndex = rec ? rec->v.size() : 0;
-        if (rec) pushVertex(rec, hit.p, ray.d, EventKind::None, hit.boundary, inc, inc, nMed, world_.indexOf(other, hero),
-                            1, 1, 0, 0, opl, beta[0]);
-
-        // Emission.
-        if (b.emission >= 0) {
-            const Emission& e = world_.emissions()[b.emission];
-            if (((fromFront && e.front) || (!fromFront && e.back)) && !ownedByLightTracing()) {
-                double w = 1;
-                if (!specular) {
-                    double pl = lightPdf(prevP, hit);
-                    if (pl > 0) w = powerHeuristic(prevPdf, pl);
-                }
-                // The emitter's label only names the contribution in a recorded path (no allocation otherwise).
-                contribute(vIndex, beta * wl.eval(e.radiance) * w, rec ? world_.boundaryLabel(hit.boundary) : std::string(), false);
-            }
-        }
-
+        path.opl += nMed * hit.t;
+        const Crossing c = meetBoundary(world_, hit, path.ray, path.region, path.lastBoundary, st);
+        if (hit.ambiguousContact) break;
+        const SurfaceOptics& o = world_.optics()[world_.boundaries()[hit.boundary].optics];
+        path.lastBoundary = hit.boundary;
+        PathVertex* v = rec ? record(rec, EventKind::None, hit.p, path.ray.d, path.opl, path.beta[0], hit.boundary, c.inc,
+                                     c.inc, nMed, world_.indexOf(c.other, hero))
+                            : nullptr;
+        emissionMet(hit, c.fromFront, wl, path);
         if (o.type == SurfaceType::Null) {
-            if (rec) { rec->v[vIndex].event = EventKind::Pass; rec->v[vIndex].regionTo = other; rec->v[vIndex].T = 1; }
-            region = other;
-            ray.o = offsetOrigin(hit.p, hit.n, ray.d);
+            if (v) { v->event = EventKind::Pass; v->regionTo = c.other; v->T = 1; }
+            path.region = c.other;
+            path.ray = world_.spawnRay(hit, path.ray.d, path.region);
             if (depth >= 4 * maxDepth_) break;
             continue;
         }
         if (o.type == SurfaceType::Absorber || o.type == SurfaceType::Detector) {
-            if (rec) rec->v[vIndex].event = o.type == SurfaceType::Detector ? EventKind::Detect : EventKind::Absorb;
+            if (v) v->event = o.type == SurfaceType::Detector ? EventKind::Detect : EventKind::Absorb;
             break;
         }
         if (depth >= maxDepth_) {
-            if (rec) rec->v[vIndex].event = EventKind::Terminate;
+            if (v) v->event = EventKind::Terminate;
             break;
         }
-
-        Interface it = makeInterface(hit, hero);
-        if (o.type == SurfaceType::Dielectric && !wl.secondaryTerminated()) {
-            for (int i = 1; i < NW; ++i)
-                if (wl.pdf[size_t(i)] != 0 && isDispersive(it, atWavelength(it, world_, hit, wl.lambda[size_t(i)]))) {
-                    wl.terminateSecondary();
-                    maskTerminated(wl, beta);
-                    break;
-                }
-        }
-        if (!o.isDelta()) {
-            std::string src;
-            Spec4 dl = directLighting(hit, &it, ray.d, wl, rng, rec ? &src : nullptr, 0, region);
-            if (!dl.isZero()) contribute(vIndex, beta * dl, src, true);
-        }
-        ScatterSample s;
-        Draw3 u(rng);
-        bool ok = sampleScatter(it, ray.d, u.u1, u.u2, u.u3, TransportMode::Radiance, s);
-        if (rec) {
-            PathVertex& v = rec->v[vIndex];
-            v.event = ok ? s.event : EventKind::Absorb;
-            v.dOut = ok ? s.wi : ray.d;
-            v.regionTo = ok && s.transmitted ? other : inc;
-            v.thetaI = std::acos(clampd(s.cosI, 0, 1));
-            v.thetaT = std::acos(clampd(s.cosT, 0, 1));
-            v.R = s.R;
-            v.T = s.T;
-            v.beta = ok ? beta[0] * s.weight : 0;
-        }
-        if (!ok || s.weight <= 0) break;
-        beta[0] *= s.weight;
-        for (int i = 1; i < NW; ++i)
-            if (wl.pdf[size_t(i)] != 0)
-                beta[i] *= secondaryScatterWeight(atWavelength(it, world_, hit, wl.lambda[size_t(i)]), ray.d, s,
-                                                  TransportMode::Radiance);
-        if (s.transmitted) region = other;
-        specular = s.delta;
-        prevPdf = s.pdf;
-        prevP = hit.p;
-        noteScatter(s.delta);
-        ray = Ray{offsetOrigin(hit.p, hit.n, s.wi), s.wi};
-        if (depth >= rrDepth_) {
-            double q = std::min(1.0, beta.maxValue());
-            if (rng.uniform() >= q) {
-                if (rec) pushVertex(rec, ray.o, ray.d, EventKind::Terminate, kNone, region, region, 0, 0, 1, 1, 0, 0, opl, 0);
-                break;
-            }
-            beta *= 1 / q;
-        }
+        if (!scatterAtSurface(hit, o, c.other, depth, wl, rng, path)) break;
     }
     if (rec) rec->wavelengths = wl;
-    return L;
-}
-
-void Tracer::traceParticle(const Detector& det, Wavelengths wl, Rng& rng, Film& film, TransportStats& st,
-                           PathRecord* rec) const {
-    const World& w = world_;
-    double skyPower = w.environmentPower();
-    double lightPower = w.lights().empty() ? 0.0 : w.totalLightPower();
-    if (skyPower + lightPower <= 0) return;
-    st.paths++;
-    const double hero = wl.hero();
-    double pSky = skyPower / (skyPower + lightPower);
-    auto deposit = [&](int px, int py, const Spec4& value) {
-        XYZ c = wl.toXYZ(value);
-        film.add(px, py, c.x, c.y, c.z);
-    };
-    Ray ray;
-    uint32_t region;
-    Spec4 beta;
-    uint32_t emitterBoundary = kNone;
-    bool fromSky = rng.uniform() < pSky;
-    size_t li = 0;
-    if (!fromSky) li = w.pickLight(rng.uniform());
-    // An environment map is both the sky and a light in the list: either way the photon is a sky
-    // photon, emitted with the combined probability of the two choices.
-    const int envLight = w.environmentLight();
-    if (!fromSky && int(li) == envLight) fromSky = true;
-    const double pSkyPhoton = pSky + (envLight >= 0 ? (1 - pSky) * w.lightSelectPdf(size_t(envLight)) : 0.0);
-    if (fromSky || w.lights()[li].kind == LightEntry::Kind::Sun) {
-        // Distant emission (sky dome or sun): pick a direction, then a disk covering the world.
-        double R = w.sceneRadius() * 1.001;
-        Vec3 toward;  // direction from which the light arrives
-        double pdfDir, sel;
-        if (fromSky) {
-            Draw2 u(rng);
-            if (w.env.skyModel == Environment::Sky::Map) {
-                // The map's own distribution (luminance × sin θ).
-                if (!w.env.sampleMap(u.u1, u.u2, toward, pdfDir)) return;
-            } else {
-                toward = sampleUniformSphere(u.u1, u.u2);
-                pdfDir = 1 / (4 * Pi);
-            }
-            for (int i = 0; i < NW; ++i) beta[i] = w.env.sky(toward, wl.lambda[size_t(i)]);
-            sel = pSkyPhoton;
-        } else {
-            double cosMax = std::cos(w.env.sunAngularRadius);
-            Frame f(w.env.sunDir);
-            Draw2 u(rng);
-            toward = f.toWorld(sampleUniformCone(u.u1, u.u2, cosMax));
-            pdfDir = 1 / w.env.sunSolidAngle();
-            beta = wl.eval(w.env.sunRadiance);
-            sel = (1 - pSky) * w.lightSelectPdf(li);
-        }
-        Vec3 dir = -toward;
-        Vec3 a1, a2;
-        orthonormalBasis(dir, a1, a2);
-        Draw2 ud(rng);
-        Vec2 dk = sampleUniformDiskConcentric(ud.u1, ud.u2);
-        Vec3 o = w.sceneCenter() - dir * (1.01 * R) + (a1 * dk.x + a2 * dk.y) * R;
-        ray = Ray{o, dir};
-        region = w.ambientRegion();
-        beta *= Pi * R * R / (pdfDir * sel);
-    } else {
-        double sel = (1 - pSky) * w.lightSelectPdf(li);
-        const LightEntry& L = w.lights()[li];
-        const Boundary& b = w.boundaries()[L.boundary];
-        const Emission& e = w.emissions()[b.emission];
-        Spec4 Le = wl.eval(e.radiance);
-        Vec3 pL, nL;
-        Draw3 ua(rng);
-        b.shape->sampleArea(ua.u1, ua.u2, ua.u3, pL, nL);
-        Vec3 p = b.toWorld.point(pL), n = normalize(b.toWorld.vector(nL));
-        double pdfA = 1.0 / b.shape->area();
-        // Emitter seen directly by a virtual observer (path tracing owns this under the partition).
-        if (det.isVirtual() && !partition_) {
-            Vec3 q;
-            int px, py;
-            double factor;
-            if (det.connect(p, rng, q, px, py, factor)) {
-                Vec3 wv = q - p;
-                double dist = length(wv);
-                Vec3 wc = wv / dist;
-                double cosL = dot(n, wc);
-                if ((cosL > 0 && e.front) || (cosL < 0 && e.back)) {
-                    uint32_t startRegion = cosL > 0 ? b.front : b.back, endRegion = kNone;
-                    Spec4 Tr = transmittance(offsetOrigin(p, n, wc), startRegion, wc, dist, wl, &endRegion);
-                    if (!Tr.isZero() && endRegion == det.region)
-                        deposit(px, py, Le * Tr * (std::abs(cosL) * factor / (sel * pdfA)));
-                }
-            }
-        }
-        double sidePdf = 1;
-        bool front = e.front;
-        if (e.front && e.back) {
-            front = rng.uniform() < 0.5;
-            sidePdf = 0.5;
-        }
-        Vec3 ns = front ? n : -n;
-        Frame f(ns);
-        Draw2 uc(rng);
-        Vec3 dir = f.toWorld(sampleCosineHemisphere(uc.u1, uc.u2));
-        // β = Le·cos / (sel · pdfA · sidePdf · cos/π)
-        beta = Le * (Pi / (sel * pdfA * sidePdf));
-        ray = Ray{offsetOrigin(p, n, dir), dir};
-        region = front ? b.front : b.back;
-        emitterBoundary = L.boundary;
-    }
-    maskTerminated(wl, beta);
-    if (beta.isZero()) return;
-    if (rec) {
-        rec->lambda = hero;
-        pushVertex(rec, ray.o, ray.d, EventKind::Emit, emitterBoundary, region, region, 0, 0, 1, 1, 0, 0, 0, beta[0]);
-    }
-    double opl = 0;
-    uint32_t lastBoundary = emitterBoundary;
-    int targetBoundary = det.boundary();
-    int nonDeltaEvents = 0, deltaEvents = 0;
-    // Under the caustic partition, connect only at the first non-specular vertex after ≥1 specular one.
-    auto mayConnect = [&] { return !partition_ || (nonDeltaEvents == 0 && deltaEvents >= 1); };
-    // surface: the hit's interface at the hero wavelength (null for medium scattering).
-    auto connect = [&](const SurfaceHit& hit, const Interface* surface, const Vec3& d, double g) {
-        if (!det.isVirtual()) return;
-        Vec3 q;
-        int px, py;
-        double factor;
-        if (!det.connect(hit.p, rng, q, px, py, factor)) return;
-        Vec3 wv = q - hit.p;
-        double dist = length(wv);
-        Vec3 wc = wv / dist;
-        Spec4 f;
-        double cosX = 1;
-        Vec3 origin = hit.p;
-        uint32_t startRegion = region;
-        if (!surface) {
-            f = Spec4(hgPhase(dot(-d, wc), g));
-        } else {
-            const Interface& base = *surface;
-            for (int i = 0; i < NW; ++i) {
-                if (wl.pdf[size_t(i)] == 0) continue;
-                double pdfDummy;
-                f[i] = evalScatter(i == 0 ? base : atWavelength(base, w, hit, wl.lambda[size_t(i)]), d, wc,
-                                   TransportMode::Importance, pdfDummy);
-            }
-            if (f.isZero()) return;
-            cosX = std::abs(dot(wc, hit.n));
-            const Boundary& b = w.boundaries()[hit.boundary];
-            startRegion = dot(wc, hit.n) > 0 ? b.front : b.back;
-            origin = offsetOrigin(hit.p, hit.n, wc);
-        }
-        uint32_t endRegion = kNone;
-        Spec4 Tr = transmittance(origin, startRegion, wc, dist, wl, &endRegion);
-        if (Tr.isZero() || endRegion != det.region) return;
-        deposit(px, py, beta * f * Tr * (cosX * factor));
-    };
-
-    for (int depth = 0;; ++depth) {
-        SurfaceHit hit;
-        bool found = w.intersect(ray, Inf, hit);
-        st.segments++;
-        const Medium& med = w.mediumOf(region);
-        double nMed = med.n(hero);
-        double seg = found ? hit.t : Inf;
-        if (med.scatters()) {
-            Spec4 sT = sigmaT(med, wl);
-            double t = -std::log(1 - rng.uniform()) / sT[0];
-            if (t < seg) {
-                Vec3 p = ray.at(t);
-                opl += nMed * t;
-                double pdf0 = sT[0] * std::exp(-sT[0] * t);
-                for (int i = 0; i < NW; ++i)
-                    beta[i] *= med.scattering.eval(wl.lambda[size_t(i)]) * std::exp(-sT[i] * t) / pdf0;
-                pushVertex(rec, p, ray.d, EventKind::Scatter, kNone, region, region, nMed, nMed, 1, 1, 0, 0, opl, beta[0]);
-                SurfaceHit mh;
-                mh.p = p;
-                if (mayConnect()) connect(mh, nullptr, ray.d, med.g);
-                ++nonDeltaEvents;
-                if (partition_) break;  // nothing further can be connected
-                if (depth >= maxDepth_) break;
-                Vec3 wi;
-                Draw2 u(rng);
-                sampleHg(-ray.d, med.g, u.u1, u.u2, wi);
-                ray = Ray{p, wi};
-                if (depth >= rrDepth_) {
-                    const double q = 0.95;  // any survival probability in (0,1] is unbiased
-                    if (rng.uniform() >= q) break;
-                    beta *= 1 / q;
-                }
-                continue;
-            }
-            if (std::isinf(seg)) break;
-            double pass0 = std::exp(-sT[0] * seg);
-            for (int i = 0; i < NW; ++i) beta[i] *= std::exp(-sT[i] * seg) / pass0;
-        } else if (med.absorbs()) {
-            if (!found) break;
-            for (int i = 0; i < NW; ++i) beta[i] *= std::exp(-med.absorption.eval(wl.lambda[size_t(i)]) * seg);
-        }
-        if (!found) {
-            pushVertex(rec, ray.o + ray.d * (2 * w.sceneRadius() + length(ray.o - w.sceneCenter())), ray.d,
-                       EventKind::Escape, kNone, region, region, nMed, nMed, 1, 1, 0, 0, opl, beta[0]);
-            break;
-        }
-        opl += nMed * hit.t;
-        const Boundary& b = w.boundaries()[hit.boundary];
-        bool fromFront = dot(ray.d, hit.n) < 0;
-        uint32_t inc = fromFront ? b.front : b.back;
-        uint32_t other = fromFront ? b.back : b.front;
-        if (inc != region) {
-            st.noteInconsistency(hit.boundary, region, inc, lastBoundary, hit.p);
-            region = inc;
-        }
-        const SurfaceOptics& o = w.optics()[b.optics];
-        lastBoundary = hit.boundary;
-        if (o.type == SurfaceType::Null) {
-            pushVertex(rec, hit.p, ray.d, EventKind::Pass, hit.boundary, inc, other, nMed, w.indexOf(other, hero), 1, 1, 0,
-                       1, opl, beta[0]);
-            region = other;
-            ray.o = offsetOrigin(hit.p, hit.n, ray.d);
-            if (depth >= 4 * maxDepth_) break;
-            continue;
-        }
-        // A diffuse measurement screen records incident flux and then scatters the reflected
-        // fraction. An absorbing detector records flux and terminates the path as before.
-        if (fromFront && int(hit.boundary) == targetBoundary) {
-            int px, py;
-            double area;
-            if (det.pixelOfHit(hit, rng, px, py, area)) deposit(px, py, beta * (1 / area));
-        }
-        if (o.type == SurfaceType::Detector) {
-            pushVertex(rec, hit.p, ray.d, EventKind::Detect, hit.boundary, inc, inc, nMed, nMed, 1, 1, 0, 0, opl, beta[0]);
-            break;
-        }
-        if (o.type == SurfaceType::Absorber) {
-            pushVertex(rec, hit.p, ray.d, EventKind::Absorb, hit.boundary, inc, inc, nMed, nMed, 1, 1, 0, 0, opl, beta[0]);
-            break;
-        }
-        Interface it = makeInterface(hit, hero);
-        if (!o.isDelta()) {
-            if (mayConnect()) connect(hit, &it, ray.d, 0);
-            ++nonDeltaEvents;
-            if (partition_) break;  // later vertices are owned by path tracing
-        }
-        if (depth >= maxDepth_) break;
-        if (o.type == SurfaceType::Dielectric && !wl.secondaryTerminated()) {
-            for (int i = 1; i < NW; ++i)
-                if (wl.pdf[size_t(i)] != 0 && isDispersive(it, atWavelength(it, world_, hit, wl.lambda[size_t(i)]))) {
-                    wl.terminateSecondary();
-                    maskTerminated(wl, beta);
-                    break;
-                }
-        }
-        ScatterSample s;
-        Draw3 u(rng);
-        bool ok = sampleScatter(it, ray.d, u.u1, u.u2, u.u3, TransportMode::Importance, s);
-        pushVertex(rec, hit.p, ok ? s.wi : ray.d, ok ? s.event : EventKind::Absorb, hit.boundary, inc,
-                   ok && s.transmitted ? other : inc, nMed, w.indexOf(other, hero), s.cosI, s.cosT, s.R, s.T, opl,
-                   ok ? beta[0] * s.weight : 0);
-        if (!ok || s.weight <= 0) break;
-        double w0 = s.weight;
-        beta[0] *= s.weight;
-        for (int i = 1; i < NW; ++i)
-            if (wl.pdf[size_t(i)] != 0)
-                beta[i] *= secondaryScatterWeight(atWavelength(it, w, hit, wl.lambda[size_t(i)]), ray.d, s,
-                                                  TransportMode::Importance);
-        if (s.delta) ++deltaEvents;
-        if (s.transmitted) region = other;
-        ray = Ray{offsetOrigin(hit.p, hit.n, s.wi), s.wi};
-        if (depth >= rrDepth_) {
-            // Particles carry flux, so roulette against the per-event throughput.
-            double q = std::min(1.0, w0);
-            if (q < 1) {
-                if (rng.uniform() >= q) break;
-                beta *= 1 / q;
-            }
-        }
-    }
+    return path.L;
 }
 
 PathRecord Tracer::walk(Ray ray, uint32_t region, double lambda, WalkMode mode, Rng& rng, int maxEvents) const {
     PathRecord rec;
     rec.lambda = lambda;
     double beta = 1, opl = 0;
-    pushVertex(&rec, ray.o, ray.d, EventKind::Emit, kNone, region, region, world_.indexOf(region, lambda),
-               world_.indexOf(region, lambda), 1, 1, 0, 0, 0, 1);
+    record(&rec, EventKind::Emit, ray.o, ray.d, 0, 1, kNone, region, region, world_.indexOf(region, lambda),
+           world_.indexOf(region, lambda));
     for (int ev = 0; ev < maxEvents; ++ev) {
         SurfaceHit hit;
+        ray.regionHint = region;
         bool found = world_.intersect(ray, Inf, hit);
         const Medium& med = world_.mediumOf(region);
         double nMed = med.n(lambda);
         if (!found) {
-            pushVertex(&rec, ray.o + ray.d * (2 * world_.sceneRadius() + length(ray.o - world_.sceneCenter())), ray.d,
-                       EventKind::Escape, kNone, region, region, nMed, nMed, 1, 1, 0, 0, opl, beta);
+            record(&rec, EventKind::Escape, escapePoint(world_, ray), ray.d, opl, beta, kNone, region, region, nMed, nMed);
             return rec;
         }
         if (med.absorbs()) beta *= std::exp(-med.absorption.eval(lambda) * hit.t);
@@ -708,9 +554,9 @@ PathRecord Tracer::walk(Ray ray, uint32_t region, double lambda, WalkMode mode, 
         const SurfaceOptics& o = world_.optics()[b.optics];
         double n2 = world_.indexOf(other, lambda);
         if (o.type == SurfaceType::Null) {
-            pushVertex(&rec, hit.p, ray.d, EventKind::Pass, hit.boundary, inc, other, nMed, n2, 1, 1, 0, 1, opl, beta);
+            record(&rec, EventKind::Pass, hit.p, ray.d, opl, beta, hit.boundary, inc, other, nMed, n2)->T = 1;
             region = other;
-            ray.o = offsetOrigin(hit.p, hit.n, ray.d);
+            ray = world_.spawnRay(hit, ray.d, region);
             continue;
         }
         if (o.type == SurfaceType::Absorber || o.type == SurfaceType::Detector ||
@@ -718,8 +564,8 @@ PathRecord Tracer::walk(Ray ray, uint32_t region, double lambda, WalkMode mode, 
             EventKind k = o.type == SurfaceType::Detector ? EventKind::Detect
                           : o.type == SurfaceType::Diffuse  ? EventKind::Diffuse
                                                              : EventKind::Absorb;
-            double ci = std::abs(dot(ray.d, hit.n));
-            pushVertex(&rec, hit.p, ray.d, k, hit.boundary, inc, inc, nMed, n2, ci, ci, 0, 0, opl, beta);
+            PathVertex* v = record(&rec, k, hit.p, ray.d, opl, beta, hit.boundary, inc, inc, nMed, n2);
+            v->thetaI = v->thetaT = std::acos(clamp(std::abs(dot(ray.d, hit.n)), -1, 1));
             return rec;
         }
         Interface it = makeInterface(hit, lambda);
@@ -737,14 +583,14 @@ PathRecord Tracer::walk(Ray ray, uint32_t region, double lambda, WalkMode mode, 
             Draw3 u(rng);
             ok = sampleScatter(it, ray.d, u.u1, u.u2, u.u3, TransportMode::Importance, s);
         }
-        pushVertex(&rec, hit.p, ok ? s.wi : ray.d, ok ? s.event : EventKind::Absorb, hit.boundary, inc,
-                   ok && s.transmitted ? other : inc, nMed, n2, s.cosI, s.cosT, s.R, s.T, opl, ok ? beta * s.weight : 0);
+        recordScatter(record(&rec, ok ? s.event : EventKind::Absorb, hit.p, ok ? s.wi : ray.d, opl, ok ? beta * s.weight : 0,
+                             hit.boundary, inc, ok && s.transmitted ? other : inc, nMed, n2), s);
         if (!ok) return rec;
         beta *= s.weight;
         if (s.transmitted) region = other;
-        ray = Ray{offsetOrigin(hit.p, hit.n, s.wi), s.wi};
+        ray = world_.spawnRay(hit, s.wi, region);
     }
-    pushVertex(&rec, ray.o, ray.d, EventKind::Terminate, kNone, region, region, 0, 0, 1, 1, 0, 0, opl, beta);
+    record(&rec, EventKind::Terminate, ray.o, ray.d, opl, beta, kNone, region, region);
     return rec;
 }
 

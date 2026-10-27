@@ -1,0 +1,478 @@
+{
+  "schema": 1,
+  "entries": [
+    {
+      "name": "the_lens",
+      "scene": "scenes/the_lens.owe",
+      "arguments": [
+        "--spp",
+        "512",
+        "--backend",
+        "gpu"
+      ],
+      "opt_in": false,
+      "rights": "cleared"
+    },
+    {
+      "name": "prism_in_sunlight",
+      "scene": "scenes/prism_in_sunlight.owe",
+      "arguments": [
+        "--spp",
+        "1024",
+        "--backend",
+        "gpu"
+      ],
+      "opt_in": false,
+      "rights": "cleared"
+    },
+    {
+      "name": "glass_of_water",
+      "scene": "scenes/glass/glass_of_water.owe",
+      "arguments": [
+        "--spp",
+        "512",
+        "--backend",
+        "gpu"
+      ],
+      "opt_in": false,
+      "rights": "cleared"
+    },
+    {
+      "name": "glass_in_sunlight",
+      "scene": "scenes/glass/glass_in_sunlight.owe",
+      "arguments": [
+        "--spp",
+        "1024",
+        "--passes",
+        "8",
+        "--integrator",
+        "vcm",
+        "--backend",
+        "gpu"
+      ],
+      "opt_in": false,
+      "rights": "cleared"
+    },
+    {
+      "name": "tea_glass",
+      "scene": "scenes/glass/tea_glass.owe",
+      "arguments": [
+        "--spp",
+        "1024",
+        "--passes",
+        "8",
+        "--integrator",
+        "vcm",
+        "--backend",
+        "gpu",
+        "--set",
+        "Eye.position=(0,-0.25,0.30)",
+        "--set",
+        "Eye.look_at=(0,-0.08,0.02)",
+        "--set",
+        "Eye.fov=62deg",
+        "--set",
+        "Eye.focus=0.33"
+      ],
+      "opt_in": false,
+      "rights": "cleared"
+    },
+    {
+      "name": "the_shallows",
+      "scene": "scenes/the_shallows.owe",
+      "arguments": [
+        "--spp",
+        "512",
+        "--backend",
+        "gpu"
+      ],
+      "opt_in": false,
+      "rights": "cleared"
+    },
+    {
+      "name": "study_room",
+      "scene": "scenes/the_study.owe",
+      "arguments": [
+        "--detector",
+        "Room",
+        "--spp",
+        "512",
+        "--backend",
+        "gpu"
+      ],
+      "opt_in": false,
+      "rights": "cleared"
+    },
+    {
+      "name": "study_eyepiece",
+      "scene": "scenes/the_study.owe",
+      "arguments": [
+        "--detector",
+        "Eyepiece",
+        "--spp",
+        "512",
+        "--backend",
+        "gpu"
+      ],
+      "opt_in": false,
+      "rights": "cleared"
+    },
+    {
+      "name": "bench_sensor",
+      "scene": "scenes/optical_bench.owe",
+      "arguments": [
+        "--spp",
+        "4000"
+      ],
+      "opt_in": false,
+      "rights": "cleared"
+    },
+    {
+      "name": "bench_overview",
+      "scene": "scenes/optical_bench.owe",
+      "arguments": [
+        "--detector",
+        "Eye",
+        "--integrator",
+        "hybrid",
+        "--spp",
+        "256",
+        "--backend",
+        "gpu"
+      ],
+      "opt_in": false,
+      "rights": "cleared"
+    },
+    {
+      "name": "camera_obscura_wall",
+      "scene": "scenes/camera_obscura.owe",
+      "arguments": [
+        "--spp",
+        "512"
+      ],
+      "opt_in": false,
+      "rights": "cleared"
+    },
+    {
+      "name": "observatory_room",
+      "scene": "scenes/the_observatory.owe",
+      "arguments": [
+        "--detector",
+        "Room",
+        "--spp",
+        "4096",
+        "--passes",
+        "8",
+        "--integrator",
+        "path",
+        "--backend",
+        "gpu"
+      ],
+      "opt_in": false,
+      "rights": "cleared"
+    },
+    {
+      "name": "observatory_desk",
+      "scene": "scenes/the_observatory.owe",
+      "arguments": [
+        "--detector",
+        "Desk",
+        "--spp",
+        "4096",
+        "--passes",
+        "8",
+        "--integrator",
+        "path",
+        "--backend",
+        "gpu"
+      ],
+      "opt_in": false,
+      "rights": "cleared"
+    },
+    {
+      "name": "kunstkammer_room",
+      "scene": "scenes/the_kunstkammer.owe",
+      "arguments": [
+        "--detector",
+        "Room",
+        "--integrator",
+        "path",
+        "--spp",
+        "2048",
+        "--max-depth",
+        "12",
+        "--seed",
+        "1",
+        "--resolution",
+        "960x600",
+        "--backend",
+        "gpu",
+        "--passes",
+        "1",
+        "--threads",
+        "0"
+      ],
+      "opt_in": true,
+      "rights": "cleared",
+      "review_note": "Review current native image, sampling noise, contacts, and scene provenance before promotion."
+    },
+    {
+      "name": "kunstkammer_table",
+      "scene": "scenes/the_kunstkammer.owe",
+      "arguments": [
+        "--detector",
+        "Table",
+        "--integrator",
+        "path",
+        "--spp",
+        "2048",
+        "--max-depth",
+        "12",
+        "--seed",
+        "1",
+        "--resolution",
+        "960x600",
+        "--backend",
+        "gpu"
+      ],
+      "opt_in": true,
+      "rights": "cleared",
+      "review_note": "Review current native image, sampling noise, contacts, and scene provenance before promotion."
+    },
+    {
+      "name": "kunstkammer_armour",
+      "scene": "scenes/the_kunstkammer.owe",
+      "arguments": [
+        "--detector",
+        "Armour",
+        "--integrator",
+        "path",
+        "--spp",
+        "2048",
+        "--max-depth",
+        "12",
+        "--seed",
+        "1",
+        "--resolution",
+        "960x600",
+        "--backend",
+        "gpu"
+      ],
+      "opt_in": true,
+      "rights": "cleared",
+      "review_note": "Review current native image, sampling noise, contacts, and scene provenance before promotion."
+    },
+    {
+      "name": "kunstkammer_book",
+      "scene": "scenes/the_kunstkammer.owe",
+      "arguments": [
+        "--detector",
+        "Book",
+        "--integrator",
+        "path",
+        "--spp",
+        "1024",
+        "--max-depth",
+        "12",
+        "--seed",
+        "1",
+        "--resolution",
+        "960x600",
+        "--backend",
+        "gpu"
+      ],
+      "opt_in": true,
+      "rights": "cleared",
+      "review_note": "Review current native image, sampling noise, contacts, and scene provenance before promotion."
+    },
+    {
+      "name": "gregorian_beside",
+      "scene": "scenes/the_gregorian.owe",
+      "arguments": [
+        "--detector",
+        "Beside",
+        "--integrator",
+        "path",
+        "--spp",
+        "2048",
+        "--max-depth",
+        "16",
+        "--seed",
+        "7",
+        "--resolution",
+        "960x600",
+        "--backend",
+        "gpu",
+        "--passes",
+        "1",
+        "--threads",
+        "0"
+      ],
+      "opt_in": true,
+      "rights": "cleared",
+      "review_note": "Review current native image, sampling noise, contacts, and scene provenance before promotion."
+    },
+    {
+      "name": "gregorian_eyepiece",
+      "scene": "scenes/the_gregorian.owe",
+      "arguments": [
+        "--detector",
+        "Eyepiece",
+        "--integrator",
+        "path",
+        "--spp",
+        "2048",
+        "--max-depth",
+        "16",
+        "--seed",
+        "7",
+        "--resolution",
+        "960x600",
+        "--backend",
+        "gpu",
+        "--passes",
+        "1",
+        "--threads",
+        "0"
+      ],
+      "opt_in": true,
+      "rights": "cleared",
+      "review_note": "Review current native image, sampling noise, contacts, and scene provenance before promotion."
+    },
+    {
+      "name": "gregorian_naked",
+      "scene": "scenes/the_gregorian.owe",
+      "arguments": [
+        "--detector",
+        "Naked",
+        "--integrator",
+        "path",
+        "--spp",
+        "256",
+        "--max-depth",
+        "16",
+        "--seed",
+        "7",
+        "--resolution",
+        "960x600",
+        "--backend",
+        "gpu",
+        "--passes",
+        "1",
+        "--threads",
+        "0"
+      ],
+      "opt_in": true,
+      "rights": "cleared",
+      "review_note": "Review current native image, sampling noise, contacts, and scene provenance before promotion."
+    },
+    {
+      "name": "peacock_lamp_room",
+      "scene": "scenes/the_peacock_lamp.owe",
+      "arguments": [
+        "--detector",
+        "Room",
+        "--integrator",
+        "vcm",
+        "--spp",
+        "512",
+        "--max-depth",
+        "16",
+        "--seed",
+        "17",
+        "--resolution",
+        "960x600",
+        "--backend",
+        "gpu",
+        "--passes",
+        "1",
+        "--threads",
+        "0"
+      ],
+      "opt_in": true,
+      "rights": "cleared",
+      "review_note": "Review current native image, sampling noise, contacts, and scene provenance before promotion."
+    },
+    {
+      "name": "peacock_lamp_shade",
+      "scene": "scenes/the_peacock_lamp.owe",
+      "arguments": [
+        "--detector",
+        "Shade",
+        "--integrator",
+        "vcm",
+        "--spp",
+        "512",
+        "--max-depth",
+        "16",
+        "--seed",
+        "17",
+        "--resolution",
+        "960x600",
+        "--backend",
+        "gpu"
+      ],
+      "opt_in": true,
+      "rights": "cleared",
+      "review_note": "Review current native image, sampling noise, contacts, and scene provenance before promotion."
+    },
+    {
+      "name": "invisible_window_room",
+      "scene": "scenes/the_invisible_window.owe",
+      "arguments": [
+        "--detector",
+        "Room",
+        "--integrator",
+        "sppm",
+        "--spp",
+        "64",
+        "--max-depth",
+        "10",
+        "--seed",
+        "7",
+        "--resolution",
+        "960x600",
+        "--backend",
+        "gpu",
+        "--photons",
+        "16",
+        "--passes",
+        "1",
+        "--threads",
+        "0"
+      ],
+      "opt_in": true,
+      "rights": "cleared",
+      "review_note": "Review current native image, sampling noise, contacts, and scene provenance before promotion."
+    },
+    {
+      "name": "invisible_window_wall",
+      "scene": "scenes/the_invisible_window.owe",
+      "arguments": [
+        "--detector",
+        "Wall",
+        "--integrator",
+        "sppm",
+        "--spp",
+        "128",
+        "--max-depth",
+        "10",
+        "--seed",
+        "7",
+        "--resolution",
+        "960x600",
+        "--backend",
+        "gpu",
+        "--photons",
+        "16",
+        "--passes",
+        "1",
+        "--threads",
+        "0"
+      ],
+      "opt_in": true,
+      "rights": "cleared",
+      "review_note": "Review current native image, sampling noise, contacts, and scene provenance before promotion."
+    }
+  ]
+}

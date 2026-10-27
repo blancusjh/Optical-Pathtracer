@@ -204,37 +204,21 @@ void buildSubtree(std::vector<Prim>& p, const Range& r, uint32_t maxLeaf, int de
     buildSubtree(p, right, maxLeaf, depth + 1, out);
 }
 
-}  // namespace
+// An upper node of a large build: split level by level, or the root of a subtree built whole.
+struct Upper {
+    Range range;
+    int left = -1, right = -1;  // upper nodes
+    int task = -1;              // or: a subtree built whole
+    bool leaf = false;
+    uint32_t axis = 0;
+    int depth = 0;
+};
 
-// Large inputs: the upper levels are split level by level (siblings in parallel), the subtrees
-// below them are built on all threads, and everything is laid out depth-first with one copy per
-// node. Each split is the same function of the same records, so the hierarchy (and the primitive
-// order) is identical to a sequential build.
-void Bvh::build(const std::vector<AABB>& primBounds, uint32_t maxLeaf) {
-    nodes_.clear();
-    order_.resize(primBounds.size());
-    if (primBounds.empty()) return;
-    const size_t N = primBounds.size();
-    std::vector<Prim> p(N);
-    parallelFor(N, 1 << 16, [&](size_t begin, size_t end) {
-        for (size_t i = begin; i < end; ++i) p[i] = {primBounds[i], uint32_t(i)};
-    });
-    Range root;
-    root.begin = 0;
-    root.end = uint32_t(N);
-    bound(p, root);
-
-    struct Upper {
-        Range range;
-        int left = -1, right = -1;  // upper nodes
-        int task = -1;              // or: a subtree built whole
-        bool leaf = false;
-        uint32_t axis = 0;
-        int depth = 0;
-    };
+// The upper levels, split level by level with siblings in parallel, down to ranges small enough to
+// be built whole (their upper nodes listed in `tasks`).
+std::vector<Upper> splitUpperLevels(std::vector<Prim>& p, const Range& root, uint32_t maxLeaf, std::vector<int>& tasks) {
     std::vector<Upper> upper{Upper{root}};
     std::vector<int> frontier{0};
-    std::vector<int> tasks;  // upper nodes whose subtrees are built whole
     while (!frontier.empty()) {
         std::vector<int> open, next;
         for (int u : frontier) {
@@ -269,8 +253,12 @@ void Bvh::build(const std::vector<AABB>& primBounds, uint32_t maxLeaf) {
         }
         frontier = std::move(next);
     }
+    return upper;
+}
 
-    // The subtrees, largest first, on every thread.
+// The subtrees built whole, largest first, on every thread.
+std::vector<std::vector<BvhNode>> buildSubtrees(std::vector<Prim>& p, const std::vector<Upper>& upper,
+                                                const std::vector<int>& tasks, uint32_t maxLeaf) {
     std::vector<std::vector<BvhNode>> built(tasks.size());
     std::vector<size_t> byCost(tasks.size());
     std::iota(byCost.begin(), byCost.end(), size_t(0));
@@ -286,35 +274,63 @@ void Bvh::build(const std::vector<AABB>& primBounds, uint32_t maxLeaf) {
             buildSubtree(p, u.range, maxLeaf, u.depth, built[byCost[k]]);
         }
     });
+    return built;
+}
 
+// Upper node ui and everything below it, depth-first into `nodes` (one copy per node).
+void layOut(const std::vector<Upper>& upper, const std::vector<std::vector<BvhNode>>& built, int ui,
+            std::vector<BvhNode>& nodes) {
+    const Upper& u = upper[size_t(ui)];
+    if (u.task >= 0) {
+        const uint32_t base = uint32_t(nodes.size());
+        for (BvhNode node : built[size_t(u.task)]) {
+            if (node.count == 0) node.start += base;
+            nodes.push_back(node);
+        }
+        return;
+    }
+    const uint32_t idx = uint32_t(nodes.size());
+    nodes.emplace_back();
+    nodes[idx].box = u.range.box;
+    if (u.leaf) {
+        nodes[idx].start = u.range.begin;
+        nodes[idx].count = u.range.end - u.range.begin;
+        return;
+    }
+    nodes[idx].axis = u.axis;
+    layOut(upper, built, u.left, nodes);
+    nodes[idx].start = uint32_t(nodes.size());
+    layOut(upper, built, u.right, nodes);
+}
+
+}  // namespace
+
+// Large inputs: the upper levels are split level by level (siblings in parallel), the subtrees
+// below them are built on all threads, and everything is laid out depth-first with one copy per
+// node. Each split is the same function of the same records, so the hierarchy (and the primitive
+// order) is identical to a sequential build.
+void Bvh::build(const std::vector<AABB>& primBounds, uint32_t maxLeaf) {
+    nodes_.clear();
+    order_.resize(primBounds.size());
+    if (primBounds.empty()) return;
+    const size_t N = primBounds.size();
+    std::vector<Prim> p(N);
+    parallelFor(N, 1 << 16, [&](size_t begin, size_t end) {
+        for (size_t i = begin; i < end; ++i) p[i] = {primBounds[i], uint32_t(i)};
+    });
+    Range root;
+    root.begin = 0;
+    root.end = uint32_t(N);
+    bound(p, root);
+
+    std::vector<int> tasks;
+    const std::vector<Upper> upper = splitUpperLevels(p, root, maxLeaf, tasks);
+    const auto built = buildSubtrees(p, upper, tasks, maxLeaf);
     size_t total = 0;
     for (const Upper& u : upper) total += u.task < 0 ? 1 : 0;
     for (const auto& b : built) total += b.size();
     nodes_.reserve(total);
-    auto emit = [&](auto&& self, int ui) -> void {
-        const Upper& u = upper[size_t(ui)];
-        if (u.task >= 0) {
-            const uint32_t base = uint32_t(nodes_.size());
-            for (BvhNode node : built[size_t(u.task)]) {
-                if (node.count == 0) node.start += base;
-                nodes_.push_back(node);
-            }
-            return;
-        }
-        const uint32_t idx = uint32_t(nodes_.size());
-        nodes_.emplace_back();
-        nodes_[idx].box = u.range.box;
-        if (u.leaf) {
-            nodes_[idx].start = u.range.begin;
-            nodes_[idx].count = u.range.end - u.range.begin;
-            return;
-        }
-        nodes_[idx].axis = u.axis;
-        self(self, u.left);
-        nodes_[idx].start = uint32_t(nodes_.size());
-        self(self, u.right);
-    };
-    emit(emit, 0);
+    layOut(upper, built, 0, nodes_);
     parallelFor(N, 1 << 16, [&](size_t begin, size_t end) {
         for (size_t i = begin; i < end; ++i) order_[i] = p[i].index;
     });

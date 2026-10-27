@@ -1,0 +1,72 @@
+[
+  {
+    "id": "kunstkammer",
+    "model": "Hosek-Wilkie 2012, Blender Cycles GPU",
+    "reference": "https://cgg.mff.cuni.cz/projects/SkylightModelling/",
+    "license": "Project-generated radiance data; no third-party photograph",
+    "resolution": [
+      4096,
+      2048
+    ],
+    "sun_elevation_deg": 16,
+    "sun_azimuth_deg": 250,
+    "sun_direction_xyz": [
+      -0.9032905223173859,
+      -0.32877086301829905,
+      0.27563735581699916
+    ],
+    "environment_rotation_deg": 0,
+    "solar_disc_in_map": false,
+    "turbidity": 2.4,
+    "model_ground_albedo": 0.18,
+    "terrain_reflectance": [
+      0.08500000089406967,
+      0.11999999731779099,
+      0.04500000178813934
+    ],
+    "diffuse_horizontal_to_direct_normal_ratio": 0.1,
+    "raw_horizontal_irradiance": 0.14465146730367773,
+    "radiance_scale": 5.638410021529893,
+    "direct_normal_irradiance": 8.1560428287406,
+    "sky_horizontal_irradiance": 0.8156042828740602,
+    "files": [
+      "assets/daylight/kunstkammer_hosek_raw.hdr",
+      "assets/daylight/kunstkammer_sun_aligned.hdr"
+    ]
+  },
+  {
+    "id": "invisible_window",
+    "model": "Hosek-Wilkie 2012, Blender Cycles GPU",
+    "reference": "https://cgg.mff.cuni.cz/projects/SkylightModelling/",
+    "license": "Project-generated radiance data; no third-party photograph",
+    "resolution": [
+      4096,
+      2048
+    ],
+    "sun_elevation_deg": 90,
+    "sun_azimuth_deg": 0,
+    "sun_direction_xyz": [
+      0.0,
+      6.123233995736766e-17,
+      1.0
+    ],
+    "environment_rotation_deg": 0,
+    "solar_disc_in_map": false,
+    "turbidity": 2.4,
+    "model_ground_albedo": 0.18,
+    "terrain_reflectance": [
+      0.08500000089406967,
+      0.11999999731779099,
+      0.04500000178813934
+    ],
+    "diffuse_horizontal_to_direct_normal_ratio": 0.1,
+    "raw_horizontal_irradiance": 0.23860868325671641,
+    "radiance_scale": 50291.816759133275,
+    "direct_normal_irradiance": 120000.64175484852,
+    "sky_horizontal_irradiance": 12000.064175484853,
+    "files": [
+      "assets/daylight/invisible_window_hosek_raw.hdr",
+      "assets/daylight/invisible_window_sun_aligned.hdr"
+    ]
+  }
+]

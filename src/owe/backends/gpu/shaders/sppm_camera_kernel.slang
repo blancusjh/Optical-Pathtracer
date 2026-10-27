@@ -4,6 +4,7 @@
 // over the iterations of a pass; the visible point goes to g_vp for the photons.
 #define OWE_SPPM 1
 #include "detector.slang"
+#include "kernel.slang"
 #include "transport.slang"
 #include "sppm.slang"
 
@@ -19,8 +20,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
         ps.stats = 0;
     }
     // One stream per (pixel, iteration); every path of the iteration shares its wavelengths.
-    Rng rng;
-    rng.seed(hashCombine(pack64(pc.seedLo, pc.seedHi) ^ 0x3c6ef372fe94f82bULL, uint64_t(pixel)), uint64_t(pc.pass));
+    Rng rng = pathStream(0x3c6ef372fe94f82bULL, uint64_t(pixel));
     // The pixel's wavelength group this iteration.
     const uint group = uint(mixBits(pack64(pixel, pc.pass) ^ 0x2545f4914f6cdd1dULL) % uint64_t(wavelengthGroups()));
     Wavelengths wl = Wavelengths.sample(groupRotation(group));
@@ -42,7 +42,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
             if (s.misc.x == 0) {
                 // The pixel's first visible point sets its initial radius: a few pixel footprints at
                 // the distance the path travelled (unfolded through its specular events).
-                s.misc.x = max(initialRadiusPerMetre() * path.pathLength, asfloat(pc.pad0));
+                s.misc.x = max(initialRadiusPerMetre() * path.pathLength, pc.initialRadiusFloor);
                 g_sppm[pixel] = s;
             }
             vp.p = float4(path.vpP.xyz, s.misc.x);
@@ -53,12 +53,7 @@ void main(uint3 tid : SV_DispatchThreadID) {
         }
     }
     g_vp[pixel] = vp;
-    if (isfinite(c.x + c.y + c.z)) {
-        precise float3 y = c - ps.comp.xyz;
-        precise float3 t = ps.acc.xyz + y;
-        ps.comp.xyz = (t - ps.acc.xyz) - y;
-        ps.acc.xyz = t;
-    }
+    accumulate(ps, c);
     ps.stats = stats;
     g_pixels[pixel] = ps;
 }

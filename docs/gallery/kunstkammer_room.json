@@ -1,0 +1,18 @@
+{
+  "engine": "optical-world-engine 0.1.0",
+  "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+  "scene": {"path": "scenes/the_kunstkammer.owe", "fnv1a64": "be6b2d81abf5c5b2", "edits": []},
+  "detector": {"name": "Room", "description": "ideal observer 'Room' 960x600, fovY=58 deg, pupil diameter=3 mm, focus=5.350000 m, pixel filter gaussian(0.4)", "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ", "pixel_response": "square * gaussian(sigma 0.400000 px)"},
+  "observer_pose": {"position_m": [-1.3, -4.7000000000000002, 1.6000000000000001], "look_at_m": [0.29999999999999999, 0.5, 1.6000000000000001], "up": [0, 0, 1], "fov_deg": 58.000000000000007, "pupil_radius_m": 0.0015, "focus_distance_m": 5.3499999999999996, "width": 960, "height": 600},
+  "integrator": "path",
+  "sampling": {"wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm", "fresnel": "stochastic branch selection", "nee": true, "mis": "power heuristic", "russian_roulette_depth": 6, "fresnel_floor": 0},
+  "seed": 1,
+  "samples_per_pixel": 2048,
+  "passes": 1,
+  "max_depth": 12,
+  "display": {"exposure_ev": 1, "auto_exposure": false, "auto_gain_ev": 0, "white_balance_kelvin": 5200, "tone": "agx"},
+  "render_seconds": 629.193,
+  "statistics": {"paths": 1179648000, "segments": 7723275117, "region_inconsistencies": 337, "leaks": 0, "first_inconsistency": {"boundary": "DoorWall.surface", "ray_region": "ambient[air]"}},
+  "mean_Y": 0.0429199,
+  "world": {"media": [{"name": "air", "index": "ciddor-air", "n_d": 1.00028}, {"name": "opaque", "index": "constant(1)", "n_d": 1}], "regions": 206, "boundaries": 496, "bodies": 228, "assemblies": 1}
+}

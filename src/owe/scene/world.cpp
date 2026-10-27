@@ -22,118 +22,27 @@ const char* surfaceTypeName(SurfaceType t) {
 
 // ---------------------------------------------------------------- textures
 
-double valueNoise3(const Vec3& p) {
-    double fx = std::floor(p.x), fy = std::floor(p.y), fz = std::floor(p.z);
-    int ix = int(fx), iy = int(fy), iz = int(fz);
-    double tx = p.x - fx, ty = p.y - fy, tz = p.z - fz;
-    auto s = [](double t) { return t * t * (3 - 2 * t); };
-    tx = s(tx); ty = s(ty); tz = s(tz);
-    // Lattice value h(x,y,z) = hashCombine(hashCombine(x, y), z). hashCombine(a, b) mixes b on its
-    // own first, so the y and z mixes are shared between corners (16 mixes instead of 32).
-    constexpr uint64_t C = 0x9e3779b97f4a7c15ULL;
-    uint64_t my[2], mz[2];
-    for (int k = 0; k < 2; ++k) {
-        my[k] = mixBits(uint64_t(uint32_t(iy + k))) + C;
-        mz[k] = mixBits(uint64_t(uint32_t(iz + k))) + C;
-    }
-    double r = 0;
-    for (int c = 0; c < 8; ++c) {
-        int dx = c & 1, dy = (c >> 1) & 1, dz = (c >> 2) & 1;
-        double w = (dx ? tx : 1 - tx) * (dy ? ty : 1 - ty) * (dz ? tz : 1 - tz);
-        uint64_t k = mixBits(mixBits(uint64_t(uint32_t(ix + dx)) ^ my[dy]) ^ mz[dz]);
-        r += w * (double(k >> 11) * (1.0 / 9007199254740992.0));
-    }
-    return r;
-}
-
-double fbm3(const Vec3& p, int octaves) {
-    double sum = 0, amp = 0.5, norm = 0;
-    Vec3 q = p;
-    for (int i = 0; i < octaves; ++i) {
-        sum += amp * valueNoise3(q);
-        norm += amp;
-        amp *= 0.5;
-        q = q * 2.03 + Vec3(17.1, 5.3, 9.7);
-    }
-    return sum / norm;
-}
-
 void Texture::weights(const Vec3& p, const Vec3& n, double w[3]) const {
     // The spatial pattern is independent of wavelength: it is computed once per hit as mixing
     // weights of the spectra a, b, c.
-    w[0] = 1; w[1] = 0; w[2] = 0;
-    switch (kind) {
-        case Kind::None: return;
-        case Kind::Image: {
-            if (!image) return;
-            Vec3 c;
-            // Centred: an image of the sheet's size fills the sheet (and tiles beyond it).
-            if (mapping != Mapping::Triplanar) {
-                c = image->bilinear(0.5 + p.x / scale, 0.5 - p.y / scale);
-            } else {
-                // Triplanar: projections along x, y and z blended by the normal's fourth powers.
-                Vec3 a{std::pow(std::abs(n.x), 4), std::pow(std::abs(n.y), 4), std::pow(std::abs(n.z), 4)};
-                const double sum = a.x + a.y + a.z;
-                a = a / (sum > 0 ? sum : 1);
-                c = image->bilinear(0.5 + p.y / scale, 0.5 - p.z / scale) * a.x +
-                    image->bilinear(0.5 + p.x / scale, 0.5 - p.z / scale) * a.y +
-                    image->bilinear(0.5 + p.x / scale, 0.5 - p.y / scale) * a.z;
-            }
-            w[0] = std::clamp(c.x, 0.0, 1.0);
-            w[1] = std::clamp(c.y, 0.0, 1.0);
-            w[2] = std::clamp(c.z, 0.0, 1.0);
-            return;
+    Vec3 c(1, 0, 0);
+    if (kind == Kind::Image && image) {
+        // Centred: an image of the sheet's size fills the sheet (and tiles beyond it).
+        if (mapping != Mapping::Triplanar) {
+            c = image->bilinear(0.5 + p.x / scale, 0.5 - p.y / scale);
+        } else {
+            const Vec3 a = triplanarWeights(n);
+            c = image->bilinear(0.5 + p.y / scale, 0.5 - p.z / scale) * a.x +
+                image->bilinear(0.5 + p.x / scale, 0.5 - p.z / scale) * a.y +
+                image->bilinear(0.5 + p.x / scale, 0.5 - p.y / scale) * a.z;
         }
-        case Kind::Checker: {
-            Vec3 q = p / scale;
-            long s = long(std::floor(q.x + 1e-9)) + long(std::floor(q.y + 1e-9)) + long(std::floor(q.z + 1e-9));
-            if (s & 1) { w[0] = 0; w[1] = 1; }
-            return;
-        }
-        case Kind::Noise: {
-            double t = clampd((fbm3(p / scale, 6) - 0.25) * 2.0, 0, 1);
-            w[0] = 1 - t; w[1] = t;
-            return;
-        }
-        case Kind::Rings: {
-            double r = std::sqrt(p.x * p.x + p.z * p.z) / scale + param * fbm3(p / scale, 4);
-            double t = 0.5 + 0.5 * std::sin(2 * Pi * r);
-            t = t * t;
-            w[0] = 1 - t; w[1] = t;
-            return;
-        }
-        case Kind::Bands: {
-            double z = p.z / scale + param * (fbm3(Vec3(p.x, p.y, p.z * 4) / scale, 5) - 0.5);
-            double t = 0.5 + 0.5 * std::sin(2 * Pi * z) * (0.6 + 0.4 * std::sin(2 * Pi * z * 0.37 + 1.3));
-            double mix = clampd(fbm3(Vec3(0, 0, z * 3.1), 3) * 1.4 - 0.2, 0, 1);
-            w[0] = (1 - t) * (1 - 0.35 * mix); w[1] = t * (1 - 0.35 * mix); w[2] = 0.35 * mix;
-            return;
-        }
-        case Kind::Radial: {
-            double r = std::sqrt(p.x * p.x + p.y * p.y) / scale;
-            double t = clampd(fbm3(Vec3(r * 3.0, 0.5, 0.5), 6) * 1.6 - 0.3, 0, 1);
-            w[0] = 1 - t; w[1] = t;
-            return;
-        }
-        case Kind::Marble: {
-            Vec3 q = p / scale;
-            double v = std::abs(std::sin(q.x * 0.9 + q.y * 0.5 + q.z * 0.3 + param * 6 * fbm3(q * 0.7, 6)));
-            double t = std::pow(1 - v, 6);  // thin dark veins
-            double base = 0.94 + 0.06 * fbm3(q * 3.0, 4);
-            w[0] = base * (1 - t); w[1] = t;
-            return;
-        }
-        case Kind::Terrain: {
-            // Grass on gentle slopes, rock on steep ones, snow above the snow line.
-            double jitter = (fbm3(p / scale, 5) - 0.5);
-            double slope = 1 - std::abs(n.z);
-            double rock = clampd((slope + 0.3 * jitter - 0.25) * 6, 0, 1);
-            double snow = 0;
-            if (param > 0) snow = clampd((p.z - param + 40 * jitter) / 30.0, 0, 1) * clampd(1 - slope * 1.6, 0, 1);
-            w[0] = (1 - rock) * (1 - snow); w[1] = rock * (1 - snow); w[2] = snow;
-            return;
-        }
+        c = Vec3(saturate(c.x), saturate(c.y), saturate(c.z));
+    } else if (kind != Kind::None && kind != Kind::Image) {
+        c = proceduralWeights(uint(kind), scale, param, p, n);
     }
+    w[0] = c.x;
+    w[1] = c.y;
+    w[2] = c.z;
 }
 
 double Texture::eval(const Vec3& p, const Vec3& n, double l) const {
@@ -157,29 +66,19 @@ double Environment::sky(const Vec3& dir, double l) const {
         case Sky::Map: {
             if (!map) return 0;
             const Vec3 c = mapRGB(dir);
-            double w[3], br, bg, bb;
-            rgbToBasisWeights(c.x, c.y, c.z, w);
-            rgbBasis(l, br, bg, bb);
-            static const double norm = rgbIlluminantNorm();
-            return mapScale * norm * (std::max(0.0, w[0]) * br + std::max(0.0, w[1]) * bg + std::max(0.0, w[2]) * bb) *
-                   planck(l, 6504.0) * 1e-13;
+            return mapScale * Spectrum::rgbIlluminant(c.x, c.y, c.z).eval(l);
         }
     }
     return 0;
 }
 
-void Environment::mapFrame(Vec3& e1, Vec3& e2) const {
-    Vec3 u = normalize(up);
-    e1 = std::abs(u.x) < 0.9 ? normalize(Vec3(1, 0, 0) - u * u.x) : normalize(Vec3(0, 1, 0) - u * u.y);
-    e2 = cross(u, e1);
-}
+void Environment::mapFrame(Vec3& e1, Vec3& e2) const { envMapFrame(normalize(up), e1, e2); }
 
 Vec3 Environment::mapRGB(const Vec3& dir) const {
     Vec3 e1, e2;
     mapFrame(e1, e2);
-    const double c = clampd(dot(dir, up), -1.0, 1.0);
-    const double phi = std::atan2(dot(dir, e2), dot(dir, e1)) - mapRotation;
-    return map->bilinear(phi / (2 * Pi), std::acos(c) / Pi);
+    const Vec2 uv = envMapUV(dir, up, e1, e2, mapRotation);
+    return map->bilinear(uv.x, uv.y);
 }
 
 void Environment::prepareMap() {
@@ -197,12 +96,13 @@ void Environment::prepareMap() {
         double* cdf = &mapDist.conditional[size_t(j) * (W + 1)];
         for (int i = 0; i < W; ++i) {
             const Vec3 c = map->texel(i, j);
-            const double y = std::max(0.0, 0.2126 * c.x + 0.7152 * c.y + 0.0722 * c.z);
+            const double y = std::max(0.0, luminanceRec709(c.x, c.y, c.z));
             cdf[i + 1] = cdf[i] + y * sinT;
         }
         mapDist.rowWeight[size_t(j)] = cdf[W];
         sum += cdf[W];
     }
+    mapDist.luminance = sum * (2 * Pi / W) * (Pi / H);  // texel solid angle = (2π/W)(π/H) sin θ
     // A floor of 0.1% of the mean keeps every direction with some radiance sampleable.
     const double floorW = 1e-3 * sum / (double(W) * H) + 1e-300;
     sum = 0;
@@ -236,15 +136,13 @@ bool Environment::sampleMap(double u1, double u2, Vec3& dir, double& pdf) const 
     int i = int(std::upper_bound(cdf, cdf + D.W + 1, b) - cdf) - 1;
     i = std::clamp(i, 0, D.W - 1);
     const double tCol = (b - cdf[i]) / std::max(cdf[i + 1] - cdf[i], 1e-300);
-    const double u = (i + clampd(tCol, 0.0, 1.0)) / D.W, v = (j + clampd(tRow, 0.0, 1.0)) / D.H;
-    const double theta = Pi * v, phi = 2 * Pi * u + mapRotation;
     Vec3 e1, e2;
     mapFrame(e1, e2);
-    const double st = std::sin(theta);
-    dir = (e1 * std::cos(phi) + e2 * std::sin(phi)) * st + normalize(up) * std::cos(theta);
+    double st;
+    dir = envMapDirection((i + clamp(tCol, 0.0, 1.0)) / D.W, (j + clamp(tRow, 0.0, 1.0)) / D.H, normalize(up), e1, e2,
+                          mapRotation, st);
     if (!(st > 0)) return false;
-    const double pCell = (cdf[i + 1] - cdf[i]) / D.total;
-    pdf = pCell * D.W * D.H / (2 * Pi * Pi * st);
+    pdf = envMapPdf((cdf[i + 1] - cdf[i]) / D.total, D.W, D.H, st);
     return pdf > 0;
 }
 
@@ -253,15 +151,13 @@ double Environment::mapPdf(const Vec3& dir) const {
     if (!(D.total > 0)) return 0;
     Vec3 e1, e2;
     mapFrame(e1, e2);
-    const double c = clampd(dot(dir, up), -1.0, 1.0);
+    const double c = clamp(dot(dir, up), -1.0, 1.0);
     const double st = std::sqrt(std::max(0.0, 1 - c * c));
     if (!(st > 0)) return 0;
-    double u = (std::atan2(dot(dir, e2), dot(dir, e1)) - mapRotation) / (2 * Pi);
-    u -= std::floor(u);
-    const double v = std::acos(c) / Pi;
-    const int i = std::clamp(int(u * D.W), 0, D.W - 1), j = std::clamp(int(v * D.H), 0, D.H - 1);
+    const Vec2 uv = envMapUV(dir, up, e1, e2, mapRotation);
+    const int i = std::clamp(int(uv.x * D.W), 0, D.W - 1), j = std::clamp(int(uv.y * D.H), 0, D.H - 1);
     const double* cdf = &D.conditional[size_t(j) * (D.W + 1)];
-    return (cdf[i + 1] - cdf[i]) / D.total * D.W * D.H / (2 * Pi * Pi * st);
+    return envMapPdf((cdf[i + 1] - cdf[i]) / D.total, D.W, D.H, st);
 }
 
 // ---------------------------------------------------------------- world
@@ -301,29 +197,12 @@ uint32_t World::addOptics(const SurfaceOptics& o) {
     return uint32_t(optics_.size() - 1);
 }
 
-uint32_t World::dielectricOptics(double roughness) {
+uint32_t World::anonymousOptics(SurfaceType type, double roughness) {
     for (size_t i = 0; i < optics_.size(); ++i)
-        if (optics_[i].type == SurfaceType::Dielectric && optics_[i].roughness == roughness && optics_[i].name.empty())
-            return uint32_t(i);
+        if (optics_[i].type == type && optics_[i].roughness == roughness && optics_[i].name.empty()) return uint32_t(i);
     SurfaceOptics o;
-    o.type = SurfaceType::Dielectric;
+    o.type = type;
     o.roughness = roughness;
-    return addOptics(o);
-}
-
-uint32_t World::absorberOptics() {
-    for (size_t i = 0; i < optics_.size(); ++i)
-        if (optics_[i].type == SurfaceType::Absorber && optics_[i].name.empty()) return uint32_t(i);
-    SurfaceOptics o;
-    o.type = SurfaceType::Absorber;
-    return addOptics(o);
-}
-
-uint32_t World::nullOptics() {
-    for (size_t i = 0; i < optics_.size(); ++i)
-        if (optics_[i].type == SurfaceType::Null && optics_[i].name.empty()) return uint32_t(i);
-    SurfaceOptics o;
-    o.type = SurfaceType::Null;
     return addOptics(o);
 }
 
@@ -399,8 +278,11 @@ void World::build() {
         }
     }
     bvh_.build(boxes, 2);
+    buildLightTable();
+}
 
-    // Lights.
+// Every light next-event estimation draws from, with its selection probability.
+void World::buildLightTable() {
     lights_.clear();
     lightOfBoundary_.assign(boundaries_.size(), -1);
     double radius = sceneRadius();
@@ -437,7 +319,7 @@ void World::build() {
     totalLightPower_ = total;
     lightCdf_.clear();
     lightPdf_.clear();
-    double share = env.hasSun && boundaryPower > 0 ? clampd(env.sunNeeShare, 0, 0.999) : 0;
+    double share = env.hasSun && boundaryPower > 0 ? clamp(env.sunNeeShare, 0, 0.999) : 0;
     // A star's physical area at astronomical distance must not starve nearby lamps.
     // Sample both groups with full support; MIS uses this same selection probability.
     if (distantPower > 0 && env.hasSun && share == 0) share = 0.5;
@@ -465,27 +347,13 @@ void World::build() {
         lightCdf_.push_back(acc);
     }
     if (!lightCdf_.empty()) lightCdf_.back() = 1.0;
-    built_ = true;
 }
 
 double World::computeEnvironmentPower() const {
     if (env.skyModel == Environment::Sky::None) return 0;
     if (env.skyModel == Environment::Sky::Map) {
-        // ∫ L_Y dω over the map (texel luminance × solid angle), times π R².
-        if (!env.map) return 0;
-        const int W = env.map->width, H = env.map->height;
-        double sum = 0;
-        static const double norm = rgbIlluminantNorm();
-        for (int j = 0; j < H; ++j) {
-            const double dOmega = (2 * Pi / W) * (Pi / H) * std::sin(Pi * (j + 0.5) / H);
-            for (int i = 0; i < W; ++i) {
-                const Vec3 c = env.map->texel(i, j);
-                sum += std::max(0.0, 0.2126 * c.x + 0.7152 * c.y + 0.0722 * c.z) * dOmega;
-            }
-        }
-        (void)norm;
-        const double R = sceneRadius();
-        return env.mapScale * sum * Pi * R * R;
+        const double R = sceneRadius();  // ∫ L_Y dω over the map, times π R²
+        return env.mapScale * env.mapDist.luminance * Pi * R * R;
     }
     // Average luminance over the sphere of directions, times π R² · 4π.
     double sum = 0;
@@ -513,35 +381,203 @@ double World::sceneRadius() const {
     return std::max(1e-3, 0.5 * length(bounds_.extent()));
 }
 
-bool World::intersect(const Ray& ray, double tmax, SurfaceHit& hit) const {
-    bool found = false;
-    double best = tmax;
-    LocalHit lh, bestLocal;
-    uint32_t bestB = kNone;
-    const RaySlabs rs(ray);
-    bvh_.traverse(ray, 0.0, best, [&](uint32_t i, double& tm) {
-        const Boundary& b = boundaries_[i];
-        // Leaves hold up to 16 overlapping boundaries (lens surfaces inside a tube); their own
-        // boxes reject most before the ray is carried into their frames.
-        double tEnter;
-        if (!rs.hit(b.worldBox, 0.0, tm, tEnter)) return;
-        Ray lr{b.toLocal.point(ray.o), b.toLocal.vector(ray.d)};
-        if (b.shape->intersect(lr, 0.0, tm, lh)) {
-            tm = lh.t;
-            bestLocal = lh;
-            bestB = i;
-            found = true;
+namespace {
+// Twofold doubles retain the low part of world-origin minus planet-centre subtraction. This
+// uses IEEE double and fma rather than long double, which is not wider on every supported host.
+struct Twofold { double hi, lo; };
+Twofold add(Twofold a, Twofold b) {
+    const double s = a.hi + b.hi, v = s - a.hi;
+    const double e = (a.hi - (s - v)) + (b.hi - v) + a.lo + b.lo;
+    const double h = s + e;
+    return {h, e - (h - s)};
+}
+Twofold mul(Twofold a, Twofold b) {
+    const double p = a.hi * b.hi;
+    const double e = std::fma(a.hi, b.hi, -p) + a.hi * b.lo + a.lo * b.hi + a.lo * b.lo;
+    const double h = p + e;
+    return {h, e - (h - p)};
+}
+double value(Twofold a) { return a.hi + a.lo; }
+
+// An independent compensated quadratic for near-surface spheres. The shape and its native
+// transform remain unchanged; coefficients are formed BEFORE subtraction is rounded to double.
+bool intersectNearSphere(const Boundary& b, const SphereShape& sphere, const Ray& ray, double tmin, double tmax,
+                         LocalHit& h) {
+    Twofold A{0,0}, B{0,0}, C{0,0};
+    const double radius = sphere.radius();
+    Twofold rel[3];
+    for (int k = 0; k < 3; ++k) {
+        rel[k] = add({ray.o[k], 0}, {-b.toWorld.t[k], 0});
+        A = add(A, mul({ray.d[k], 0}, {ray.d[k], 0}));
+        B = add(B, mul(rel[k], {ray.d[k], 0}));
+        C = add(C, mul(rel[k], rel[k]));
+    }
+    const Twofold r2 = mul({radius, 0}, {radius, 0});
+    C = add(C, {-r2.hi, -r2.lo});
+    const Twofold ac = mul(A, C);
+    const double disc = value(add(mul(B, B), {-ac.hi, -ac.lo}));
+    if (disc < 0) return false;
+    const double bv = value(B), av = value(A);
+    const double q = -bv - std::copysign(std::sqrt(disc), bv);
+    double t0 = q / av, t1 = q != 0 ? value(C) / q : t0;
+    if (t0 > t1) std::swap(t0, t1);
+    const double t = t0 > tmin && t0 < tmax ? t0 : t1;
+    if (!(t > tmin && t < tmax)) return false;
+    const Vec3 p = ray.at(t);
+    Vec3 n;
+    for (int k = 0; k < 3; ++k) n[k] = value(add(rel[k], mul({ray.d[k], 0}, {t, 0}))) / radius;
+    h.t = t;
+    h.p = b.toLocal.point(p);
+    h.n = normalize(b.toLocal.vector(n));
+    h.prim = 0;
+    return true;
+}
+bool needsNearSphere(const Boundary& b, const Ray& ray) {
+    const auto* sphere = dynamic_cast<const SphereShape*>(b.shape.get());
+    return sphere && sphere->radius() > 4096 * std::max(1e-9, std::abs(length(ray.o - b.toWorld.t) - sphere->radius()));
+}
+
+// One boundary's crossing offered to World::intersect.
+struct Candidate {
+    LocalHit lh;
+    double error = 0;     // its distance's uncertainty: the anchor's and the root's
+    bool matches = false; // met from the ray's region (or the ray has none)
+    bool nearSphere = false, unresolvedRoot = false;
+};
+
+// Boundary i's first crossing within (tmin, tm), in its frame: the anchor projected onto a departed
+// mesh face's own plane, and roots skipped while they are the departed face or a contact already
+// crossed in the outgoing direction. False when there is none.
+bool firstCrossing(const Boundary& b, uint32_t i, const Ray& ray, const RaySlabs& rs, double worldScale, double tm,
+                   Candidate& c) {
+    c.nearSphere = needsNearSphere(b, ray);
+    Ray lr{b.toLocal.point(ray.o), b.toLocal.vector(ray.d)};
+    // Transform arithmetic bounds the local uncertainty, not the old transport offset.
+    const double scale = c.nearSphere ? worldScale : std::max({worldScale, maxAbsComponent(lr.o),
+        maxAbsComponent(b.toWorld.t), maxAbsComponent(b.shape->bounds().extent())});
+    const double anchorError = std::max(ray.departureError, contactError(scale));
+    c.error = anchorError;
+    const auto* mesh = dynamic_cast<const MeshShape*>(b.shape.get());
+    const bool knownMeshDeparture = mesh && i == ray.departedBoundary && ray.departedPrimitive < mesh->triangleCount();
+    if (i == ray.departedBoundary) {
+        lr.departedPrimitive = ray.departedPrimitive;
+        lr.departedNormal = b.toLocal.vector(ray.departedNormal);
+    }
+    if (knownMeshDeparture) {
+        const auto& tri = mesh->triangles()[ray.departedPrimitive];
+        const auto& positions = mesh->positions();
+        const Vec3 normal = normalize(cross(positions[tri[1]] - positions[tri[0]], positions[tri[2]] - positions[tri[0]]));
+        lr.o -= normal * dot(lr.o - positions[tri[0]], normal);
+    }
+    lr.departureError = c.error;
+    const bool spawned = ray.departedBoundary != kNone;
+    // The native departing plane is known. Its past faces cannot be another
+    // contact, even when their distance is smaller than the anchor error.
+    double tmin = ray.forwardOnly || knownMeshDeparture ? std::nextafter(0.0, -Inf) : (spawned ? -c.error : 0.0);
+    double tEnter;
+    if (!rs.hit(b.worldBox, tmin, tm, tEnter)) return false;
+    auto solve = [&](double lo) {
+        c.lh.error = 0;
+        const bool solved = c.nearSphere ? intersectNearSphere(b, static_cast<const SphereShape&>(*b.shape), ray, lo, tm, c.lh)
+                                         : b.shape->intersect(lr, lo, tm, c.lh);
+        c.error = anchorError + c.lh.error;
+        return solved;
+    };
+    if (!solve(tmin)) return false;
+    Vec3 n;
+    auto incidence = [&] {
+        n = b.toWorld.vector(c.lh.n);
+        const uint32_t incident = dot(ray.d, n) < 0 ? b.front : b.back;
+        c.matches = ray.regionHint == kNone || incident == ray.regionHint;
+    };
+    incidence();
+    // At a contact already crossed in the outgoing direction, the opposite region is
+    // no longer incident. Retain the body's later root rather than excluding the body.
+    auto excludedRoot = [&] {
+        // A grazing ray amplifies a small anchor displacement into a larger
+        // root distance. Compare the displacement normal to the surface.
+        const bool ownNear = std::abs(c.lh.t * dot(ray.d, normalize(n))) <= c.error;
+        return spawned && ((std::abs(c.lh.t) <= c.error && !c.matches) ||
+            (ownNear && !mesh && i == ray.departedBoundary &&
+             (b.front == b.back || lengthSq(ray.departedNormal) > 0) &&
+             dot(ray.d, n) * dot(ray.d, ray.departedNormal) >= 0));
+    };
+    for (int retry = 0; excludedRoot(); ++retry) {
+        if (retry == 8) { c.unresolvedRoot = true; break; }
+        // Advance past only this root. A positive opposite face can be much
+        // closer than the uncertainty of the incoming surface anchor.
+        if (!solve(std::max(0.0, c.lh.t))) return false;
+        incidence();
+    }
+    return true;
+}
+
+// The candidates of World::intersect so far: the nearest accepted crossing, and whether another
+// at its distance leaves the order undecided (then the path stops: docs/TRANSPORT_CONTACTS.md).
+struct NearestCrossing {
+    bool found = false, ambiguous = false;
+    uint32_t boundary = kNone;
+    Candidate best;
+    bool readout = false;
+
+    // Offers boundary i's crossing c at distance t; false when it is dropped. Crossings at one
+    // distance are ordered: met from the ray's region first, matter before a zero-thickness readout,
+    // then stable ID; two distinct interfaces met from the region at once are ambiguous.
+    bool offer(uint32_t i, const Candidate& c, double t, bool isReadout, bool hinted) {
+        const bool tie = found && std::abs(t - best.lh.t) <= std::max(c.error, best.error);
+        if (tie && c.matches && best.matches && isReadout != readout) {
+            if (isReadout) return false;  // physical matter precedes a coincident zero-thickness readout
+            ambiguous = false;
+        } else if (tie && hinted && c.matches && best.matches && i != boundary) ambiguous = true;
+        if (tie && best.matches && !c.matches) return false;
+        if (!tie) ambiguous = false;
+        bool replace = !found || !tie;
+        if (found && tie) {
+            if (c.matches != best.matches) replace = c.matches;
+            else if (isReadout != readout) replace = readout;
+            else replace = i < boundary;
         }
+        if (replace) {
+            best = c;
+            best.lh.t = t;
+            boundary = i;
+            readout = isReadout;
+            found = true;
+            ambiguous = ambiguous || c.unresolvedRoot;
+        }
+        return true;
+    }
+};
+}  // namespace
+
+bool World::intersect(const Ray& ray, double tmax, SurfaceHit& hit) const {
+    NearestCrossing nearest;
+    double best = tmax;
+    const RaySlabs rs(ray);
+    const double worldScale = std::max(1e-12, maxAbsComponent(ray.o));
+    const double broadError = std::max(ray.departureError, contactError(std::max(worldScale, maxAbsComponent(bounds_.extent()))));
+    bvh_.traverse(ray, -broadError, best, [&](uint32_t i, double& tm) {
+        const Boundary& b = boundaries_[i];
+        Candidate c;
+        if (!firstCrossing(b, i, ray, rs, worldScale, tm, c)) return;
+        const bool readout = optics_[b.optics].type == SurfaceType::Detector && b.front == b.back;
+        if (!nearest.offer(i, c, std::max(0.0, c.lh.t), readout, ray.regionHint != kNone)) return;
+        // Leave a small window open so a coincident boundary with correct incidence can win.
+        best = nearest.best.lh.t;
+        tm = std::min(tmax, best + std::max(c.error, nearest.best.error));
     });
-    if (!found) return false;
-    const Boundary& b = boundaries_[bestB];
-    hit.t = bestLocal.t;
-    hit.pLocal = bestLocal.p;
-    hit.nLocal = bestLocal.n;
-    hit.p = b.toWorld.point(bestLocal.p);
-    hit.n = normalize(b.toWorld.vector(bestLocal.n));
-    hit.boundary = bestB;
-    hit.prim = bestLocal.prim;
+    if (!nearest.found) return false;
+    const Boundary& b = boundaries_[nearest.boundary];
+    const LocalHit& lh = nearest.best.lh;
+    hit.t = lh.t;
+    hit.pLocal = lh.p;
+    hit.nLocal = lh.n;
+    hit.p = nearest.best.nearSphere ? ray.at(hit.t) : b.toWorld.point(lh.p);
+    hit.n = normalize(b.toWorld.vector(lh.n));
+    hit.boundary = nearest.boundary;
+    hit.prim = lh.prim;
+    hit.error = nearest.best.error;
+    hit.ambiguousContact = nearest.ambiguous;
     return true;
 }
 
@@ -576,12 +612,6 @@ int World::findAssembly(const std::string& name) const {
         if (assemblies_[i].name == name) return int(i);
     return -1;
 }
-int World::findRegion(const std::string& name) const {
-    for (size_t i = 0; i < regions_.size(); ++i)
-        if (regions_[i].name == name) return int(i);
-    return -1;
-}
-
 std::string World::boundaryLabel(uint32_t b) const {
     if (b >= boundaries_.size()) return "(none)";
     const Boundary& bd = boundaries_[b];

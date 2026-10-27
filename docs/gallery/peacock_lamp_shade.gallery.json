@@ -1,0 +1,134 @@
+{
+  "schema": 1,
+  "name": "peacock_lamp_shade",
+  "identity": {
+    "schema": 1,
+    "scene": "scenes/the_peacock_lamp.owe",
+    "arguments": [
+      "--detector",
+      "Shade",
+      "--integrator",
+      "vcm",
+      "--spp",
+      "512",
+      "--max-depth",
+      "16",
+      "--seed",
+      "17",
+      "--resolution",
+      "960x600",
+      "--backend",
+      "gpu"
+    ],
+    "assets": {
+      "scenes/the_peacock_lamp.owe": "96234475892cf95c6cb869f0abcf843e14820c0dff10173370d9c9728029e1ca",
+      "models/crafted/the_peacock_lamp.gltf": "98a2704e7af02b8b3b71a2ed2b7dfd58762d84a188aa16db4c25777c2a61d512",
+      "assets/sketchfab/peacock_table_lamp/textures/Filament_Material_emissive.png": "02f8d54a3c18183e35633a0049eb4bfce0117f8f2ca9ad129e80ee9d483f2f8b",
+      "assets/sketchfab/peacock_table_lamp/textures/Filament_Material_baseColor.png": "ef1dbeb27ff5f23e1c6cc3dab41c2698026c7ca6b440804666417a2374e6eed9",
+      "assets/sketchfab/peacock_table_lamp/textures/Flame_emissive.png": "ea50bdb46d8a09c96159ad17855450e4783e5f2c1f2219571de07b75be89d514",
+      "assets/sketchfab/peacock_table_lamp/textures/Flame_baseColor.png": "587da4080a379fb6ff164807621fb257c61c05e9e05346bc2d22b737a4162831",
+      "assets/sketchfab/peacock_table_lamp/textures/Wick_metallicRoughness.png": "6089baef856d698b06eb56a514be8ee29313b312365f3cb8bfa4b7a3c42f8a80",
+      "assets/sketchfab/peacock_table_lamp/textures/Lamp_Material_normal.jpeg": "ec6fc432236ee4b98bf0d38219e8d6cb91074fbb1a1025aa5ce4dc3e8b7cedb2",
+      "assets/sketchfab/peacock_table_lamp/textures/Lamp_Material_metallicRoughness.png": "5a508d89148d1c51e4d23a6fb932cd92d15ef8472692157f76544bd19edbcf41",
+      "assets/sketchfab/peacock_table_lamp/textures/Lamp_Material_baseColor.jpeg": "ec0b11bd95f7f04f9130c4d722da5a3658167cfee3847663155a3fa5f7187a9b",
+      "assets/sketchfab/peacock_table_lamp/textures/Shell_metallicRoughness.png": "edd685a10553469e8308131a3ebc20e35e34ee339f73fa32ff64b202e9f1619f",
+      "assets/sketchfab/peacock_table_lamp/textures/Shell_baseColor.png": "f0b501b9b8c3b67121c75d5b0ebc1405cf5bd05056a28b7b8294043f9d8c35a9",
+      "assets/sketchfab/peacock_table_lamp/textures/Inner_normal.jpeg": "061a9a95d062462d7b21ebd4866f3b94b89685ce6389b6ddd4f20df2fc83ced8",
+      "assets/sketchfab/peacock_table_lamp/textures/Inner_baseColor.jpeg": "4df61ecd954fb3e6091d303206891141b6898c47b93c6d59202211a69f5115cf",
+      "assets/sketchfab/peacock_table_lamp/textures/Shade_transmission.png": "408b6cadaa47b0cbd32bd73fdccafd0541164ec1ded2a609c203deb7ef3a266d",
+      "assets/sketchfab/peacock_table_lamp/textures/Shade_normal.png": "c428ec1cbf059bc8e879ca8d0539f42285639101369d694dd6946e0db4d7d178",
+      "assets/sketchfab/peacock_table_lamp/textures/Shade_emissive.jpeg": "29dd5fd90c5b1115bb293290e3647bc4fdc7730abd746831645f6c672d263cc8",
+      "assets/sketchfab/peacock_table_lamp/textures/Shade_metallicRoughness.png": "61f78b2eb58175614d73fc3a0ce086f3dc4f0661dc73006d3aa84e1d4adc36f4",
+      "assets/sketchfab/peacock_table_lamp/textures/Shade_baseColor.png": "cf3f72894b39efa6cb432f6282e54df14f544d79d1884203beef0afe1273e838",
+      "assets/sketchfab/peacock_table_lamp/textures/Ground_Mat_baseColor.png": "ea527f717569f867ef9bc846d6f9760e4c67f7798b39160acd1f31dc931e6efe",
+      "assets/sketchfab/peacock_table_lamp/scene.bin": "c85c41a08f6e19722c62837fdd902e8c3ba6ac79b32203a137c4ef97fc590c14",
+      "assets/sketchfab/coptic_prayer_book/scene.gltf": "7a7c8c1032501cdb9bf078bffbf01dae3fa059c0c8e15b02d11a8a8cf2de3881",
+      "assets/sketchfab/coptic_prayer_book/textures/material0_normal.png": "f8fa5fad78775f1143cb466b804dea0740e2abeb40b3d9a94aa54d1236c465e2",
+      "assets/sketchfab/coptic_prayer_book/textures/material0_metallicRoughness.png": "853c02b4e35b72ad467bd2671fa5a648cb664e272957fd3ecbfd8b30a98635d2",
+      "assets/sketchfab/coptic_prayer_book/textures/material0_baseColor.png": "52d67285eee88812ee0e9d7be65e5aff8567b60d0540b75fd6dc75638e4bae1b",
+      "assets/sketchfab/coptic_prayer_book/scene.bin": "fc04866e86c0ab2c896065aab2f8c898801abd661f1135c44d3cd47f1ccc2dad",
+      "assets/polyhaven/round_wooden_table_01/round_wooden_table_01_8k.gltf": "283d6ef81129191e192a57797a01b8e1d7425b041da1f8568f66b09df6eb3c9b",
+      "assets/polyhaven/round_wooden_table_01/textures/round_wooden_table_01_arm_8k.jpg": "08ff7dec145a3d647101c26c8a4edb6d6e6111ae473038efa257b7d4f6be139a",
+      "assets/polyhaven/round_wooden_table_01/textures/round_wooden_table_01_diff_8k.jpg": "005f86ea8745e03efd845d4bd8e0b9640e812e3f77646a8e90e8d5930077053f",
+      "assets/polyhaven/round_wooden_table_01/textures/round_wooden_table_01_nor_gl_8k.jpg": "6f605a11d42f509019654c34137b84cfab33ca0c1fc8ad3dbade474d45e4de30",
+      "assets/polyhaven/round_wooden_table_01/round_wooden_table_01.bin": "c2635368bc86239a73fafdd8bce20b4261155ce7241e95e809a753ed4693f157",
+      "assets/polyhaven/round_wooden_table_01/textures/dark_walnut_8k.jpg": "69a6dc128893143d6de6db7c31fabb4acdc4a17c8770fad5cdf71aa7ea284350",
+      "assets/polyhaven/white_plaster_02/white_plaster_02_rough_8k.jpg": "abbb8792b0f81c079a9894ebbebb0325deebe788cd0413bd1162a54902202059",
+      "assets/polyhaven/white_plaster_02/white_plaster_02_nor_gl_8k.jpg": "14f716c0d836f54637b08f253ddeb84c01c08b1df8064aa886108caa2565748b",
+      "assets/polyhaven/white_plaster_02/white_plaster_02_diff_8k.jpg": "fb51b1a1fba44202468c40d89fab8f022a6b0f93e6800b0f1eb64e6a2c92cc25",
+      "assets/polyhaven/wood_floor/wood_floor_rough_8k.jpg": "e2902cb3d7ec28ee2a78bdd16532397d926e587df12ec72c55524d55b8c99fac",
+      "assets/polyhaven/wood_floor/wood_floor_nor_gl_8k.jpg": "7393c0f884e9d0200dab1a24e50bc9f61484956a59f436144c5930e05fe833a8",
+      "assets/polyhaven/wood_floor/wood_floor_diff_8k.jpg": "aa5af08dcb7c0a7ebf737ced8ecde01a1dedfba86a231ea154e0ef15ca9123b0",
+      "assets/polyhaven/oak_veneer_01/oak_veneer_01_rough_16k.jpg": "b98f1f2f44bab05dee6dda4240846715073709e36ef414c5466ec918c8e5c5e2",
+      "assets/polyhaven/oak_veneer_01/oak_veneer_01_nor_gl_16k.jpg": "7223961d4f249d40618ff4b3d37b1104809965c16ddd34fb7df018a2ad7f956a",
+      "assets/polyhaven/oak_veneer_01/fumed.jpg": "249b0e8d1ede50f448356b94480e2301d3c0be8eb3f999ae59a7f5356d3882e4"
+    },
+    "code": {
+      "binary_sha256": "23b8cda2783848e44a191850a9ff53d5a4c360f8af824ff095c266663050a075",
+      "source_scope": "capture_workspace",
+      "source_description": "source_sha256 hashes the current workspace sources, build definition, runner and suite manifest; it is not the executable's build provenance",
+      "source_sha256": "6e3b42691c8c8bef71970b098f435ebe750f717afe575b5b90802e3c00f78b2a",
+      "git_head": "58c2565930810cf3e9ddb323c5ae365b61457e4d"
+    },
+    "host": {
+      "platform": "Linux-7.2.7-arch1-1-x86_64-with-glibc2.44",
+      "machine": "x86_64",
+      "cpu": "",
+      "logical_cpus": 16,
+      "backend_inventory": "cpu (reference) \u2014 the reference transport on host threads; IEEE-754 double, bitwise reproducible\n  integrators: path, light, hybrid\n  [0] 12th Gen Intel(R) Core(TM) i7-12650H \u2014 cpu, 16 hardware threads\ngpu \u2014 portable GPU: Vulkan compute with Slang kernels (NVIDIA, AMD, Intel; Apple silicon via MoltenVK); float32, camera-relative\n  integrators: path, light, hybrid, sppm, bdpt, vcm\n  [0] Intel(R) Graphics (ADL GT2) \u2014 integrated, Vulkan 1.4.354\n  [1] NVIDIA GeForce RTX 4060 Laptop GPU \u2014 discrete, Vulkan 1.4.351, ray queries\n",
+      "nvidia_driver_inventory": {
+        "status": "available",
+        "devices": [
+          {
+            "index": "0",
+            "uuid": "GPU-827caec2-6f67-a1f6-4a68-4da0180a00c3",
+            "name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+            "driver_version": "615.71.09",
+            "pci.bus_id": "00000000:01:00.0"
+          }
+        ]
+      },
+      "environment": {
+        "CUDA_PATH": "/opt/cuda"
+      }
+    },
+    "gallery_tool_sha256": "c042c0fa71a9b506a8a8b6f0eda4040e89d04e6adf5eb2c5944164cdd4c243f0",
+    "entry_sha256": "c4217c6fbd9dbcaa1d4ba272bea72fd6c8f4f070af8c9bc126be8334649304f7"
+  },
+  "command": [
+    "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/build/owe",
+    "render",
+    "scenes/the_peacock_lamp.owe",
+    "--detector",
+    "Shade",
+    "--integrator",
+    "vcm",
+    "--spp",
+    "512",
+    "--max-depth",
+    "16",
+    "--seed",
+    "17",
+    "--resolution",
+    "960x600",
+    "--backend",
+    "gpu",
+    "--out",
+    "/home/blancusjh/Scripts/Scientific/side-projects/Optical-Pathtracer/out/gallery/20261026_ties/peacock_lamp_shade"
+  ],
+  "validation_limitations": [],
+  "wall_seconds": 1074.1728856449918,
+  "render_seconds": 1061.54,
+  "review": {
+    "note": "Opened the native 960x600 image. The shade fills the frame: peacock eyes, feather glass and the ribbed lower band are distinct, with the bronze arms and base below. About 25 isolated bright pixels sit along the shade's lower band (rare high-weight VCM paths), visible on close inspection. VCM 512 spp, depth 16, seed 17; 234 region inconsistencies in 5.9e8 paths (4.0e-7 per path) and 0 leaks. No denoising or retouching.",
+    "utc": "2026-10-27T04:33:02.364236+00:00"
+  },
+  "artifacts": {
+    ".png": "8b36a60f935f99d27d86f56d05434e2051d4cc9d626cef6d0aaa83fc52497da8",
+    ".json": "3e10895aa98e271626ad9b94e572f667872382a2ee5461154aebf6d556ac27d0",
+    ".pfm": "935d1ccb235d92920ae50a1c5da716ba95cf7408d1b60a116cf473bd19a9af6d",
+    ".stdout.log": "1e53fe8708f1058bc4ceb00fa227d22e7161660eb6759e129301939ad5e5c861",
+    ".stderr.log": "9674ea990b33162433764bdc9557bbd9b1bc22c6153e251593fc361a0d7a0cd4"
+  },
+  "source_rights": "cleared"
+}

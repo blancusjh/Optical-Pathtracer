@@ -1,0 +1,49 @@
+[ RUN  ] vcm_cache_overflow_replays_the_pass_without_losing_vertices
+vcm: light vertex cache (4 vertices) overflowed; replaying pass with 628 vertices
+vcm: light vertex cache (628 vertices) overflowed; replaying pass with 1248 vertices
+vcm: light vertex cache (1248 vertices) overflowed; replaying pass with 1872 vertices
+    replay image max error 0 (tolerance 0)
+vcm: light vertex cache (4 vertices) overflowed; replaying pass with 628 vertices
+vcm: light vertex cache (628 vertices) overflowed; replaying pass with 1212 vertices
+vcm: light vertex cache (1212 vertices) overflowed; replaying pass with 1818 vertices
+    replay image max error 1.49012e-08 (tolerance 4.36161e-06)
+[  OK  ] vcm_cache_overflow_replays_the_pass_without_losing_vertices (95.97 s)
+[ RUN  ] vcm_cache_overflow_rejects_a_bounded_allocation_and_can_recover
+vcm: light vertex cache (4 vertices) overflowed; replaying pass with 628 vertices
+vcm: light vertex cache (4 vertices) overflowed; replaying pass with 628 vertices
+vcm: light vertex cache (628 vertices) overflowed; replaying pass with 1212 vertices
+    replay image max error 3.97364e-08 (tolerance 4.28827e-06)
+[  OK  ] vcm_cache_overflow_rejects_a_bounded_allocation_and_can_recover (0.31 s)
+[ RUN  ] vcm_cached_diffuse_packets_match_coloured_textures_and_shading_normals
+    bdpt front coloured diffuse channel 0 ratio 0.99992
+    bdpt front coloured diffuse channel 1 ratio 1.00006
+    bdpt front coloured diffuse channel 2 ratio 0.99960
+    vcm front coloured diffuse channel 0 ratio 0.99991
+    vcm front coloured diffuse channel 1 ratio 1.00004
+    vcm front coloured diffuse channel 2 ratio 0.99965
+    bdpt back coloured diffuse channel 0 ratio 1.00003
+    bdpt back coloured diffuse channel 1 ratio 1.00014
+    bdpt back coloured diffuse channel 2 ratio 0.99867
+    vcm back coloured diffuse channel 0 ratio 0.99999
+    vcm back coloured diffuse channel 1 ratio 1.00010
+    vcm back coloured diffuse channel 2 ratio 0.99856
+[  OK  ] vcm_cached_diffuse_packets_match_coloured_textures_and_shading_normals (2.37 s)
+[ RUN  ] vcm_camera_cie_keeps_xyz_normalization_after_dispersion
+    bdpt dispersive sky channel 0 ratio 0.99962
+    bdpt dispersive sky channel 1 ratio 1.00013
+    bdpt dispersive sky channel 2 ratio 0.99940
+    vcm dispersive sky channel 0 ratio 0.99962
+    vcm dispersive sky channel 1 ratio 1.00013
+    vcm dispersive sky channel 2 ratio 0.99940
+[  OK  ] vcm_camera_cie_keeps_xyz_normalization_after_dispersion (2.21 s)
+[ RUN  ] vcm_bdpt_and_vcm_draw_the_path_tracers_image
+    against path: bdpt mean 1.0000 (worst block 0.0006), vcm mean 0.9994 (worst block 0.0015)
+[  OK  ] vcm_bdpt_and_vcm_draw_the_path_tracers_image (7.42 s)
+[ RUN  ] vcm_sees_a_lens_caustic_through_a_glass_plate
+    through the plate: 0.9165 of the direct view (Fresnel: 0.9187)
+[  OK  ] vcm_sees_a_lens_caustic_through_a_glass_plate (3.69 s)
+[ RUN  ] vcm_keeps_a_glossy_reflection_as_camera_paths_do
+    at 64 samples against path × 1024: vcm relMSE 0.01136, path 0.1085; vcm mean 0.9965
+[  OK  ] vcm_keeps_a_glossy_reflection_as_camera_paths_do (4.59 s)
+
+7/7 tests passed

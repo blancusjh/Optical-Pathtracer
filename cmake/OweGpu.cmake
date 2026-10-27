@@ -56,13 +56,23 @@ message(STATUS "slangc: ${OWE_SLANGC}")
 
 # owe_add_kernel(<target> <entry .slang> <symbol> [RAY_QUERY]): compiles a compute kernel to SPIR-V
 # and embeds it in the target as `const unsigned char <symbol>[]` / `<symbol>_size` (in bytes).
-# Modules are looked up next to the entry point (the backend's shaders/ directory). RAY_QUERY builds
+# Modules are looked up next to the entry point (the backend's shaders/ directory) and, for the
+# formulas shared with the C++ reference, under src/ (owe/core/shared). RAY_QUERY builds
 # the variant that traverses with VK_KHR_ray_query (used where the device has ray-tracing hardware).
 function(owe_add_kernel target source symbol)
   get_filename_component(_dir ${source} DIRECTORY)
-  file(GLOB _deps CONFIGURE_DEPENDS ${_dir}/*.slang)
   set(_spv ${CMAKE_BINARY_DIR}/shaders/${symbol}.spv)
   set(_cpp ${CMAKE_BINARY_DIR}/shaders/${symbol}.cpp)
+  set(_deps ${source} ${OWE_SLANGC})
+  set(_depfile_args)
+  if(CMAKE_GENERATOR MATCHES "Ninja|Makefiles" OR
+     (CMAKE_VERSION VERSION_GREATER_EQUAL "3.21" AND CMAKE_GENERATOR MATCHES "Visual Studio|Xcode"))
+    set(_depfile_args DEPFILE ${_spv}.d)
+  else()
+    # Preserve the CMake 3.20 IDE-generator build; newer generators use actual includes.
+    file(GLOB _includes CONFIGURE_DEPENDS ${_dir}/*.slang ${_dir}/../*.inc ${CMAKE_SOURCE_DIR}/src/owe/core/shared/*.hpp)
+    list(APPEND _deps ${_includes})
+  endif()
   set(_flags -profile spirv_1_3)
   if("RAY_QUERY" IN_LIST ARGN)
     set(_flags -profile spirv_1_4 -capability spvRayQueryKHR -DOWE_RAY_QUERY=1)
@@ -70,9 +80,10 @@ function(owe_add_kernel target source symbol)
   add_custom_command(
     OUTPUT ${_spv}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/shaders
-    COMMAND ${OWE_SLANGC} ${source} -I ${_dir} -target spirv ${_flags}
-            -entry main -stage compute -O3 -warnings-disable 41035 -o ${_spv}
+    COMMAND ${OWE_SLANGC} ${source} -I ${_dir} -I ${CMAKE_SOURCE_DIR}/src -target spirv ${_flags}
+            -entry main -stage compute -O3 -warnings-disable 41035 -o ${_spv} -depfile ${_spv}.d
     DEPENDS ${_deps}
+    ${_depfile_args}
     COMMENT "slangc ${symbol}"
     VERBATIM)
   add_custom_command(

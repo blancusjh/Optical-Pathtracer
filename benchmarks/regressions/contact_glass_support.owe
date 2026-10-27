@@ -1,0 +1,10 @@
+# Independent contact diagnostic; not part of the default benchmark suite.
+# Glass bottom and Support top both lie at z=0. Exact contact is intentional.
+units = m
+world { sky = uniform(1) }
+material wood { type = diffuse reflectance = rgb(0.3,0.2,0.1) }
+body Support { type = box size = (1,1,0.2) position = (0,0,-0.1) material = wood }
+body Glass { type = box size = (0.6,0.6,0.1) position = (0,0,0.05) medium = PMMA }
+observer Eye { position = (0,-0.35,0.8) look_at = (0,0,0) up = (0,1,0)
+ fov = 35deg pupil = 0 resolution = (64,64) exposure = 0 white_balance = none }
+render { detector = Eye integrator = path spp = 16 seed = 7 max_depth = 8 }

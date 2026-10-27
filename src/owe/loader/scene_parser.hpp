@@ -36,7 +36,6 @@ struct Value {
 
     ValuePtr get(const std::string& key) const;              // last assignment of key, or nullptr
     bool has(const std::string& key) const { return get(key) != nullptr; }
-    std::string where() const { return "line " + std::to_string(line); }
 };
 
 // Parses a document; returns a Block with keyword "document".

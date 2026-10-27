@@ -45,11 +45,7 @@ IndexModel IndexModel::ciddorAir() {
 
 double IndexModel::n(double lambdaNm) const {
     double v = nRelative(lambdaNm);
-    if (relAir_) {
-        double s2 = 1.0 / sqr(lambdaNm * 1e-3);
-        v *= 1.0 + 0.05792105 / (238.0185 - s2) + 0.00167917 / (57.362 - s2);
-    }
-    return v;
+    return relAir_ ? v * owe::ciddorAir(sqr(lambdaNm * 1e-3)) : v;
 }
 
 double IndexModel::nRelative(double lambdaNm) const {
@@ -57,17 +53,14 @@ double IndexModel::nRelative(double lambdaNm) const {
     double l2 = l * l;
     switch (kind_) {
         case Kind::Constant: return a_[0];
-        case Kind::Cauchy: return a_[0] + a_[1] / l2 + a_[2] / (l2 * l2);
+        case Kind::Cauchy: return cauchyIndex(a_[0], a_[1], a_[2], l2);
         case Kind::Sellmeier: {
             double s = 1;
-            for (size_t i = 0; i < a_.size(); ++i) s += a_[i] * l2 / (l2 - b_[i]);
+            for (size_t i = 0; i < a_.size(); ++i) s += sellmeierTerm(a_[i], b_[i], l2);
             return std::sqrt(s);
         }
         case Kind::Tabulated: return table_.eval(lambdaNm);
-        case Kind::Ciddor: {
-            double s2 = 1.0 / l2;
-            return 1.0 + 0.05792105 / (238.0185 - s2) + 0.00167917 / (57.362 - s2);
-        }
+        case Kind::Ciddor: return owe::ciddorAir(l2);
     }
     return 1;
 }

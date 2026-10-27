@@ -1,0 +1,6 @@
+Name: Rapier of D. João de Mascarenhas
+Author: Morbase | Museu Virtual
+Licence: CC0 Public Domain
+URL: https://sketchfab.com/3d-models/rapier_mascarenhas-cd753effd9b0465b8ab84d6003fe7acd
+Downloaded: 2026-09-29
+Format: glTF (separate textures)

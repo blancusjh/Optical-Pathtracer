@@ -1,0 +1,4919 @@
+{
+  "date": "2026-10-09",
+  "scope": "Completed fixed captures; finite references and remaining scene diagnostics, not a converged performance acceptance. Raw artifacts remain in ignored out/.",
+  "corrected_binary_sha256": "985976191a31be179d30e79f05389a4a2a3a25138adaa896f1d91214a8a82192",
+  "validation": {
+    "cpu_registered": 157,
+    "cpu_gpu_checks": "skipped",
+    "targeted_hardware_passed": 25,
+    "targeted_software_passed": 21,
+    "software_sppm_total_iterations": 16,
+    "software_sppm_inconsistencies": 0,
+    "software_sppm_leaks": 0,
+    "limitation": "Final GPU checks are targeted, not a new full-suite run; software smooth-glass 2048-sample assertion not completed.",
+    "hardware": {
+      "mode": "hardware",
+      "command": [
+        "out/performance_20261008/owe_tests_native_owner_candidate",
+        "gpu_scene_layout_is_flat_and_aligned",
+        "gpu_contact_",
+        "gpu_planetary_sphere",
+        "vcm_",
+        "backends_far_",
+        "backends_camera_nee_",
+        "backends_surface_sensor_",
+        "backends_particles_respect_",
+        "shading_smooth_glass_mesh_refracts_like_the_glass_ball",
+        "beer_lambert_attenuation_through_index_matched_slab",
+        "finite_detector_connection_preserves_reciprocal_region_attenuation"
+      ],
+      "ray_query_override": null,
+      "returncode": 0,
+      "wall_seconds": 727.2647638819981,
+      "peak_child_rss_KiB": 9588176,
+      "expected_count": 25,
+      "actual_count": 25,
+      "names_match": true,
+      "actual_names": [
+        "finite_detector_connection_preserves_reciprocal_region_attenuation",
+        "beer_lambert_attenuation_through_index_matched_slab",
+        "gpu_scene_layout_is_flat_and_aligned",
+        "gpu_planetary_sphere_frame_preserves_height_and_observer_rebasing",
+        "gpu_planetary_sphere_preserves_nearby_occlusion",
+        "gpu_planetary_sphere_keeps_stable_distant_origin_roots",
+        "gpu_contact_glass_support_preserves_contact_and_resolved_gaps",
+        "gpu_contact_spawn_preserves_resolved_thin_same_boundary_exit",
+        "gpu_contact_spawn_preserves_distinct_parallel_mesh_face",
+        "gpu_contact_spawn_preserves_nearest_distinct_face_in_one_mesh",
+        "shading_smooth_glass_mesh_refracts_like_the_glass_ball",
+        "vcm_cache_overflow_replays_the_pass_without_losing_vertices",
+        "vcm_cache_overflow_rejects_a_bounded_allocation_and_can_recover",
+        "vcm_cached_connections_cannot_escape_a_sealed_far_enclosure",
+        "vcm_cached_diffuse_packets_match_coloured_textures_and_shading_normals",
+        "vcm_camera_cie_keeps_xyz_normalization_after_dispersion",
+        "vcm_bdpt_and_vcm_draw_the_path_tracers_image",
+        "vcm_sees_a_lens_caustic_through_a_glass_plate",
+        "vcm_keeps_a_glossy_reflection_as_camera_paths_do",
+        "backends_far_light_vertices_respect_near_observer_occlusion",
+        "backends_far_emitters_respect_near_observer_occlusion",
+        "backends_far_emitters_respect_source_end_occlusion",
+        "backends_camera_nee_respects_source_end_occlusion",
+        "backends_surface_sensor_respects_exact_opaque_contact",
+        "backends_particles_respect_surface_sensor_opaque_contact"
+      ],
+      "log": "out/performance_20261008/contact_native_owner_hardware_targeted_tests.log"
+    },
+    "software": {
+      "mode": "software",
+      "command": [
+        "out/performance_20261008/owe_tests_native_owner_candidate",
+        "gpu_scene_layout_is_flat_and_aligned",
+        "gpu_contact_",
+        "gpu_planetary_sphere",
+        "backends_far_",
+        "backends_camera_nee_",
+        "backends_surface_sensor_",
+        "backends_particles_respect_",
+        "beer_lambert_attenuation_through_index_matched_slab",
+        "finite_detector_connection_preserves_reciprocal_region_attenuation",
+        "vcm_cache_overflow",
+        "vcm_cached_connections",
+        "vcm_cached_diffuse_packets",
+        "vcm_camera_cie"
+      ],
+      "ray_query_override": "0",
+      "returncode": 0,
+      "wall_seconds": 488.275420224003,
+      "peak_child_rss_KiB": 8911124,
+      "expected_count": 21,
+      "actual_count": 21,
+      "names_match": true,
+      "actual_names": [
+        "finite_detector_connection_preserves_reciprocal_region_attenuation",
+        "beer_lambert_attenuation_through_index_matched_slab",
+        "gpu_scene_layout_is_flat_and_aligned",
+        "gpu_planetary_sphere_frame_preserves_height_and_observer_rebasing",
+        "gpu_planetary_sphere_preserves_nearby_occlusion",
+        "gpu_planetary_sphere_keeps_stable_distant_origin_roots",
+        "gpu_contact_glass_support_preserves_contact_and_resolved_gaps",
+        "gpu_contact_spawn_preserves_resolved_thin_same_boundary_exit",
+        "gpu_contact_spawn_preserves_distinct_parallel_mesh_face",
+        "gpu_contact_spawn_preserves_nearest_distinct_face_in_one_mesh",
+        "vcm_cache_overflow_replays_the_pass_without_losing_vertices",
+        "vcm_cache_overflow_rejects_a_bounded_allocation_and_can_recover",
+        "vcm_cached_connections_cannot_escape_a_sealed_far_enclosure",
+        "vcm_cached_diffuse_packets_match_coloured_textures_and_shading_normals",
+        "vcm_camera_cie_keeps_xyz_normalization_after_dispersion",
+        "backends_far_light_vertices_respect_near_observer_occlusion",
+        "backends_far_emitters_respect_near_observer_occlusion",
+        "backends_far_emitters_respect_source_end_occlusion",
+        "backends_camera_nee_respects_source_end_occlusion",
+        "backends_surface_sensor_respects_exact_opaque_contact",
+        "backends_particles_respect_surface_sensor_opaque_contact"
+      ],
+      "log": "out/performance_20261008/contact_native_owner_software_targeted_tests.log"
+    }
+  },
+  "executions": [
+    {
+      "name": "canonical_independent_reference",
+      "command": [
+        "env",
+        "-u",
+        "OWE_GPU_PROFILE",
+        "python3",
+        "tools/run_benchmarks.py",
+        "--suite",
+        "canonical",
+        "--binary",
+        "out/performance_20261008/owe_corrected_final",
+        "--backend",
+        "gpu",
+        "--device",
+        "1",
+        "--seed",
+        "1",
+        "--threads",
+        "0",
+        "--passes",
+        "1",
+        "--reference-spp",
+        "8192",
+        "--reference-seed",
+        "1001",
+        "--budgets",
+        "16",
+        "--output",
+        "out/performance_20261008/corrected_canonical_reference8192_seed1001"
+      ],
+      "started_utc": "2026-10-09T07:50:16.604806+00:00",
+      "wall_seconds": 2902.1343338489532,
+      "returncode": 0
+    },
+    {
+      "name": "canonical_shared_reference",
+      "command": [
+        "env",
+        "-u",
+        "OWE_GPU_PROFILE",
+        "python3",
+        "tools/run_benchmarks.py",
+        "--suite",
+        "canonical",
+        "--binary",
+        "out/performance_20261008/owe_corrected_final",
+        "--backend",
+        "gpu",
+        "--device",
+        "1",
+        "--seed",
+        "1",
+        "--threads",
+        "0",
+        "--passes",
+        "1",
+        "--reference-spp",
+        "8192",
+        "--reference-seed",
+        "1000",
+        "--budgets",
+        "16",
+        "--output",
+        "out/performance_20261008/corrected_canonical_reference8192_seed1000"
+      ],
+      "started_utc": "2026-10-09T07:01:41.181051+00:00",
+      "wall_seconds": 2915.026844024658,
+      "returncode": 0
+    },
+    {
+      "name": "corrected_canonical",
+      "command": [
+        "env",
+        "-u",
+        "OWE_GPU_PROFILE",
+        "python3",
+        "tools/run_benchmarks.py",
+        "--suite",
+        "canonical",
+        "--binary",
+        "out/performance_20261008/owe_corrected_final",
+        "--backend",
+        "gpu",
+        "--device",
+        "1",
+        "--seed",
+        "1",
+        "--threads",
+        "0",
+        "--passes",
+        "1",
+        "--reference-spp",
+        "8192",
+        "--reference-seed",
+        "1000",
+        "--budgets",
+        "16",
+        "64",
+        "256",
+        "1024",
+        "--output",
+        "out/performance_20261008/corrected_canonical_common8192",
+        "--reference-dir",
+        "out/performance_20261008/corrected_canonical_reference8192_seed1000",
+        "--baseline",
+        "out/performance_20261008/v1_canonical_common8192/summary.json"
+      ],
+      "started_utc": "2026-10-09T08:39:58.430117+00:00",
+      "wall_seconds": 526.8477444648743,
+      "returncode": 0
+    },
+    {
+      "name": "corrected_scans_pilot",
+      "command": [
+        "env",
+        "-u",
+        "OWE_GPU_PROFILE",
+        "python3",
+        "tools/run_benchmarks.py",
+        "--suite",
+        "scans",
+        "--binary",
+        "out/performance_20261008/owe_corrected_final",
+        "--backend",
+        "gpu",
+        "--device",
+        "1",
+        "--seed",
+        "1",
+        "--threads",
+        "0",
+        "--passes",
+        "1",
+        "--reference-spp",
+        "256",
+        "--reference-seed",
+        "1000",
+        "--budgets",
+        "16",
+        "64",
+        "--output",
+        "out/performance_20261008/corrected_scans_common256_pilot",
+        "--reference-dir",
+        "out/performance_20261008/corrected_scans_reference256_seed1000"
+      ],
+      "started_utc": "2026-10-09T14:02:35.789181+00:00",
+      "wall_seconds": 2906.223730802536,
+      "returncode": 0
+    },
+    {
+      "name": "historical_canonical",
+      "command": [
+        "env",
+        "-u",
+        "OWE_GPU_PROFILE",
+        "python3",
+        "tools/run_benchmarks.py",
+        "--suite",
+        "canonical",
+        "--binary",
+        "out/performance_20261008/v1_source/build/owe",
+        "--backend",
+        "gpu",
+        "--device",
+        "1",
+        "--seed",
+        "1",
+        "--threads",
+        "0",
+        "--passes",
+        "1",
+        "--reference-spp",
+        "8192",
+        "--reference-seed",
+        "1000",
+        "--budgets",
+        "16",
+        "64",
+        "256",
+        "1024",
+        "--output",
+        "out/performance_20261008/v1_canonical_common8192",
+        "--reference-dir",
+        "out/performance_20261008/corrected_canonical_reference8192_seed1000"
+      ],
+      "started_utc": "2026-10-09T08:38:38.883908+00:00",
+      "wall_seconds": 79.5204508304596,
+      "returncode": 0
+    },
+    {
+      "name": "scans_independent_reference_pilot",
+      "command": [
+        "env",
+        "-u",
+        "OWE_GPU_PROFILE",
+        "python3",
+        "tools/run_benchmarks.py",
+        "--suite",
+        "scans",
+        "--binary",
+        "out/performance_20261008/owe_corrected_final",
+        "--backend",
+        "gpu",
+        "--device",
+        "1",
+        "--seed",
+        "1",
+        "--threads",
+        "0",
+        "--passes",
+        "1",
+        "--reference-spp",
+        "256",
+        "--reference-seed",
+        "1001",
+        "--budgets",
+        "16",
+        "--output",
+        "out/performance_20261008/corrected_scans_reference256_seed1001"
+      ],
+      "started_utc": "2026-10-09T11:25:31.859292+00:00",
+      "wall_seconds": 9423.906930685043,
+      "returncode": 0
+    },
+    {
+      "name": "scans_shared_reference_pilot",
+      "command": [
+        "env",
+        "-u",
+        "OWE_GPU_PROFILE",
+        "python3",
+        "tools/run_benchmarks.py",
+        "--suite",
+        "scans",
+        "--binary",
+        "out/performance_20261008/owe_corrected_final",
+        "--backend",
+        "gpu",
+        "--device",
+        "1",
+        "--seed",
+        "1",
+        "--threads",
+        "0",
+        "--passes",
+        "1",
+        "--reference-spp",
+        "256",
+        "--reference-seed",
+        "1000",
+        "--budgets",
+        "16",
+        "--output",
+        "out/performance_20261008/corrected_scans_reference256_seed1000"
+      ],
+      "started_utc": "2026-10-09T08:48:45.538731+00:00",
+      "wall_seconds": 9406.298934459686,
+      "returncode": 0
+    }
+  ],
+  "reference_pairs": [
+    {
+      "suite": "canonical",
+      "scene": "the_lens",
+      "spp": 8192,
+      "seed1001_against_1000_rel_mse": 18.151174707512332,
+      "seed1000_against_1001_rel_mse": 11.382561685484898,
+      "ordinary_mse": 5.1506453561975025,
+      "mse_over_seed1000_mean_square": 1.3299376556824034,
+      "seed1000_channel_means": [
+        1.1184228861997856,
+        0.8160778478503895,
+        0.6536416336265726
+      ],
+      "seed1001_channel_means": [
+        1.124218751700975,
+        0.8161798405416599,
+        0.655195033588304
+      ],
+      "references": [
+        {
+          "path": "out/performance_20261008/corrected_canonical_reference8192_seed1000/the_lens/reference.pfm",
+          "sha256": "dcf97050a1ba11e4783fae28a25cef869470144395b3525fe15760fffcc87831",
+          "native": {
+            "engine": "optical-world-engine 0.1.0",
+            "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+            "scene": {
+              "path": "scenes/the_lens.owe",
+              "fnv1a64": "cb5ce2a9ddc307f7",
+              "edits": []
+            },
+            "detector": {
+              "name": "Eye",
+              "description": "ideal observer 'Eye' 256x192, fovY=42 deg, pupil diameter=4 mm, focus=0.330000 m, pixel filter gaussian(0.4)",
+              "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ",
+              "pixel_response": "square * gaussian(sigma 0.400000 px)"
+            },
+            "observer_pose": {
+              "position_m": [
+                0.03,
+                -0.17,
+                0.34
+              ],
+              "look_at_m": [
+                0,
+                0.02,
+                0
+              ],
+              "up": [
+                0,
+                0,
+                1
+              ],
+              "fov_deg": 42,
+              "pupil_radius_m": 0.002,
+              "focus_distance_m": 0.33,
+              "width": 256,
+              "height": 192
+            },
+            "integrator": "path",
+            "sampling": {
+              "wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm",
+              "fresnel": "stochastic branch selection",
+              "nee": true,
+              "mis": "power heuristic",
+              "russian_roulette_depth": 6,
+              "fresnel_floor": 0
+            },
+            "seed": 1000,
+            "samples_per_pixel": 8192,
+            "passes": 1,
+            "max_depth": 64,
+            "display": {
+              "exposure_ev": 0,
+              "auto_exposure": true,
+              "auto_gain_ev": -2.49416,
+              "white_balance_kelvin": 0,
+              "tone": "agx"
+            },
+            "render_seconds": 26.6564,
+            "statistics": {
+              "paths": 402653184,
+              "segments": 873128461,
+              "region_inconsistencies": 63,
+              "leaks": 11,
+              "first_inconsistency": {
+                "boundary": "Table.surface",
+                "ray_region": "ambient[air]"
+              }
+            },
+            "mean_Y": 0.868655,
+            "world": {
+              "media": [
+                {
+                  "name": "air",
+                  "index": "ciddor-air",
+                  "n_d": 1.00028
+                },
+                {
+                  "name": "opaque",
+                  "index": "constant(1)",
+                  "n_d": 1
+                },
+                {
+                  "name": "N-BK7",
+                  "index": "sellmeier(B1=1.03961 C1=0.0060007, B2=0.231792 C2=0.0200179, B3=1.01047 C3=103.561) rel. air",
+                  "n_d": 1.51722
+                }
+              ],
+              "regions": 6,
+              "boundaries": 17,
+              "bodies": 13,
+              "assemblies": 0
+            }
+          }
+        },
+        {
+          "path": "out/performance_20261008/corrected_canonical_reference8192_seed1001/the_lens/reference.pfm",
+          "sha256": "e7ce02b73c26db9c522889061744283dec1c6a561e25e30ce3169662ddd31a33",
+          "native": {
+            "engine": "optical-world-engine 0.1.0",
+            "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+            "scene": {
+              "path": "scenes/the_lens.owe",
+              "fnv1a64": "cb5ce2a9ddc307f7",
+              "edits": []
+            },
+            "detector": {
+              "name": "Eye",
+              "description": "ideal observer 'Eye' 256x192, fovY=42 deg, pupil diameter=4 mm, focus=0.330000 m, pixel filter gaussian(0.4)",
+              "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ",
+              "pixel_response": "square * gaussian(sigma 0.400000 px)"
+            },
+            "observer_pose": {
+              "position_m": [
+                0.03,
+                -0.17,
+                0.34
+              ],
+              "look_at_m": [
+                0,
+                0.02,
+                0
+              ],
+              "up": [
+                0,
+                0,
+                1
+              ],
+              "fov_deg": 42,
+              "pupil_radius_m": 0.002,
+              "focus_distance_m": 0.33,
+              "width": 256,
+              "height": 192
+            },
+            "integrator": "path",
+            "sampling": {
+              "wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm",
+              "fresnel": "stochastic branch selection",
+              "nee": true,
+              "mis": "power heuristic",
+              "russian_roulette_depth": 6,
+              "fresnel_floor": 0
+            },
+            "seed": 1001,
+            "samples_per_pixel": 8192,
+            "passes": 1,
+            "max_depth": 64,
+            "display": {
+              "exposure_ev": 0,
+              "auto_exposure": true,
+              "auto_gain_ev": -2.49828,
+              "white_balance_kelvin": 0,
+              "tone": "agx"
+            },
+            "render_seconds": 26.6179,
+            "statistics": {
+              "paths": 402653184,
+              "segments": 873096731,
+              "region_inconsistencies": 52,
+              "leaks": 27,
+              "first_inconsistency": {
+                "boundary": "Table.surface",
+                "ray_region": "ambient[air]"
+              }
+            },
+            "mean_Y": 0.870072,
+            "world": {
+              "media": [
+                {
+                  "name": "air",
+                  "index": "ciddor-air",
+                  "n_d": 1.00028
+                },
+                {
+                  "name": "opaque",
+                  "index": "constant(1)",
+                  "n_d": 1
+                },
+                {
+                  "name": "N-BK7",
+                  "index": "sellmeier(B1=1.03961 C1=0.0060007, B2=0.231792 C2=0.0200179, B3=1.01047 C3=103.561) rel. air",
+                  "n_d": 1.51722
+                }
+              ],
+              "regions": 6,
+              "boundaries": 17,
+              "bodies": 13,
+              "assemblies": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "suite": "canonical",
+      "scene": "prism_in_sunlight",
+      "spp": 8192,
+      "seed1001_against_1000_rel_mse": 3382.362860017084,
+      "seed1000_against_1001_rel_mse": 4074.060298620209,
+      "ordinary_mse": 0.002855046927114217,
+      "mse_over_seed1000_mean_square": 2.0226759396928595,
+      "seed1000_channel_means": [
+        0.0020166380848648893,
+        0.0019302097627947508,
+        0.0018177795306867361
+      ],
+      "seed1001_channel_means": [
+        0.002189524607185689,
+        0.0017430505836009875,
+        0.0018710247636676651
+      ],
+      "references": [
+        {
+          "path": "out/performance_20261008/corrected_canonical_reference8192_seed1000/prism_in_sunlight/reference.pfm",
+          "sha256": "d75bb5a5efdfe41dee6016e9fa797b738a3f936f132ebc404d026e0676b0bee0",
+          "native": {
+            "engine": "optical-world-engine 0.1.0",
+            "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+            "scene": {
+              "path": "scenes/prism_in_sunlight.owe",
+              "fnv1a64": "5862374b87b05f10",
+              "edits": []
+            },
+            "detector": {
+              "name": "Eye",
+              "description": "ideal observer 'Eye' 256x192, fovY=62 deg, pupil diameter=4 mm, focus=0.370000 m, pixel filter gaussian(0.4)",
+              "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ",
+              "pixel_response": "square * gaussian(sigma 0.400000 px)"
+            },
+            "observer_pose": {
+              "position_m": [
+                0.12,
+                -0.26,
+                0.2
+              ],
+              "look_at_m": [
+                0.05,
+                0.06,
+                0
+              ],
+              "up": [
+                0,
+                0,
+                1
+              ],
+              "fov_deg": 62,
+              "pupil_radius_m": 0.002,
+              "focus_distance_m": 0.37,
+              "width": 256,
+              "height": 192
+            },
+            "integrator": "path",
+            "sampling": {
+              "wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm",
+              "fresnel": "stochastic branch selection",
+              "nee": true,
+              "mis": "power heuristic",
+              "russian_roulette_depth": 6,
+              "fresnel_floor": 0
+            },
+            "seed": 1000,
+            "samples_per_pixel": 8192,
+            "passes": 1,
+            "max_depth": 64,
+            "display": {
+              "exposure_ev": 0,
+              "auto_exposure": true,
+              "auto_gain_ev": 3.7003,
+              "white_balance_kelvin": 0,
+              "tone": "agx"
+            },
+            "render_seconds": 25.7158,
+            "statistics": {
+              "paths": 402653184,
+              "segments": 923047260,
+              "region_inconsistencies": 21,
+              "leaks": 5,
+              "first_inconsistency": {
+                "boundary": "Floor.face",
+                "ray_region": "Prism.interior[N-SF11]"
+              }
+            },
+            "mean_Y": 0.00194048,
+            "world": {
+              "media": [
+                {
+                  "name": "air",
+                  "index": "ciddor-air",
+                  "n_d": 1.00028
+                },
+                {
+                  "name": "N-SF11",
+                  "index": "sellmeier(B1=1.7376 C1=0.0131887, B2=0.313747 C2=0.0623068, B3=1.89878 C3=155.236) rel. air",
+                  "n_d": 1.78521
+                }
+              ],
+              "regions": 2,
+              "boundaries": 4,
+              "bodies": 4,
+              "assemblies": 0
+            }
+          }
+        },
+        {
+          "path": "out/performance_20261008/corrected_canonical_reference8192_seed1001/prism_in_sunlight/reference.pfm",
+          "sha256": "7d61a14ab4d3362b4c25112527c758724c6281a7c4b17e1664fba3427cc01bb0",
+          "native": {
+            "engine": "optical-world-engine 0.1.0",
+            "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+            "scene": {
+              "path": "scenes/prism_in_sunlight.owe",
+              "fnv1a64": "5862374b87b05f10",
+              "edits": []
+            },
+            "detector": {
+              "name": "Eye",
+              "description": "ideal observer 'Eye' 256x192, fovY=62 deg, pupil diameter=4 mm, focus=0.370000 m, pixel filter gaussian(0.4)",
+              "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ",
+              "pixel_response": "square * gaussian(sigma 0.400000 px)"
+            },
+            "observer_pose": {
+              "position_m": [
+                0.12,
+                -0.26,
+                0.2
+              ],
+              "look_at_m": [
+                0.05,
+                0.06,
+                0
+              ],
+              "up": [
+                0,
+                0,
+                1
+              ],
+              "fov_deg": 62,
+              "pupil_radius_m": 0.002,
+              "focus_distance_m": 0.37,
+              "width": 256,
+              "height": 192
+            },
+            "integrator": "path",
+            "sampling": {
+              "wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm",
+              "fresnel": "stochastic branch selection",
+              "nee": true,
+              "mis": "power heuristic",
+              "russian_roulette_depth": 6,
+              "fresnel_floor": 0
+            },
+            "seed": 1001,
+            "samples_per_pixel": 8192,
+            "passes": 1,
+            "max_depth": 64,
+            "display": {
+              "exposure_ev": 0,
+              "auto_exposure": true,
+              "auto_gain_ev": 3.70914,
+              "white_balance_kelvin": 0,
+              "tone": "agx"
+            },
+            "render_seconds": 25.7572,
+            "statistics": {
+              "paths": 402653184,
+              "segments": 923065117,
+              "region_inconsistencies": 14,
+              "leaks": 4,
+              "first_inconsistency": {
+                "boundary": "Floor.face",
+                "ray_region": "Prism.interior[N-SF11]"
+              }
+            },
+            "mean_Y": 0.00184724,
+            "world": {
+              "media": [
+                {
+                  "name": "air",
+                  "index": "ciddor-air",
+                  "n_d": 1.00028
+                },
+                {
+                  "name": "N-SF11",
+                  "index": "sellmeier(B1=1.7376 C1=0.0131887, B2=0.313747 C2=0.0623068, B3=1.89878 C3=155.236) rel. air",
+                  "n_d": 1.78521
+                }
+              ],
+              "regions": 2,
+              "boundaries": 4,
+              "bodies": 4,
+              "assemblies": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "suite": "canonical",
+      "scene": "glass_of_water",
+      "spp": 8192,
+      "seed1001_against_1000_rel_mse": 0.18597424293005524,
+      "seed1000_against_1001_rel_mse": 0.18365931997416288,
+      "ordinary_mse": 0.03303975926836448,
+      "mse_over_seed1000_mean_square": 0.07623740406467042,
+      "seed1000_channel_means": [
+        0.8014901441721823,
+        0.4120214104123827,
+        0.2234757432318791
+      ],
+      "seed1001_channel_means": [
+        0.8042031544747097,
+        0.41148545533881925,
+        0.22378604513875142
+      ],
+      "references": [
+        {
+          "path": "out/performance_20261008/corrected_canonical_reference8192_seed1000/glass_of_water/reference.pfm",
+          "sha256": "bb2de133c97b676683215a52a4b4a6b6705e39ee091a9deefb809d01bf9e076e",
+          "native": {
+            "engine": "optical-world-engine 0.1.0",
+            "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+            "scene": {
+              "path": "scenes/glass/glass_of_water.owe",
+              "fnv1a64": "9cc6cd4c519c95fb",
+              "edits": []
+            },
+            "detector": {
+              "name": "Eye",
+              "description": "ideal observer 'Eye' 256x192, fovY=34 deg, pupil diameter=3 mm, focus=0.340000 m, pixel filter gaussian(0.4)",
+              "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ",
+              "pixel_response": "square * gaussian(sigma 0.400000 px)"
+            },
+            "observer_pose": {
+              "position_m": [
+                0.02,
+                -0.34,
+                0.115
+              ],
+              "look_at_m": [
+                0,
+                0,
+                0.07
+              ],
+              "up": [
+                0,
+                0,
+                1
+              ],
+              "fov_deg": 34,
+              "pupil_radius_m": 0.0015,
+              "focus_distance_m": 0.34,
+              "width": 256,
+              "height": 192
+            },
+            "integrator": "path",
+            "sampling": {
+              "wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm",
+              "fresnel": "stochastic branch selection",
+              "nee": true,
+              "mis": "power heuristic",
+              "russian_roulette_depth": 6,
+              "fresnel_floor": 0
+            },
+            "seed": 1000,
+            "samples_per_pixel": 8192,
+            "passes": 1,
+            "max_depth": 64,
+            "display": {
+              "exposure_ev": 0,
+              "auto_exposure": true,
+              "auto_gain_ev": -1.67703,
+              "white_balance_kelvin": 0,
+              "tone": "agx"
+            },
+            "render_seconds": 114.19,
+            "statistics": {
+              "paths": 402653184,
+              "segments": 1303085733,
+              "region_inconsistencies": 50,
+              "leaks": 1,
+              "first_inconsistency": {
+                "boundary": "Table.surface",
+                "ray_region": "ambient[air]"
+              }
+            },
+            "mean_Y": 0.481243,
+            "world": {
+              "media": [
+                {
+                  "name": "air",
+                  "index": "ciddor-air",
+                  "n_d": 1.00028
+                },
+                {
+                  "name": "opaque",
+                  "index": "constant(1)",
+                  "n_d": 1
+                },
+                {
+                  "name": "N-BK7",
+                  "index": "sellmeier(B1=1.03961 C1=0.0060007, B2=0.231792 C2=0.0200179, B3=1.01047 C3=103.561) rel. air",
+                  "n_d": 1.51722
+                },
+                {
+                  "name": "water",
+                  "index": "sellmeier(B1=0.568403 C1=0.00510183, B2=0.172618 C2=0.0182115, B3=0.0208619 C3=0.0262072, B4=0.113075 C4=10.6979)",
+                  "n_d": 1.3334
+                }
+              ],
+              "regions": 6,
+              "boundaries": 21,
+              "bodies": 11,
+              "assemblies": 0
+            }
+          }
+        },
+        {
+          "path": "out/performance_20261008/corrected_canonical_reference8192_seed1001/glass_of_water/reference.pfm",
+          "sha256": "981ad25249be77166fa7bf9a3b516d8131ecaa21d1a51b402e7a72d1141e1063",
+          "native": {
+            "engine": "optical-world-engine 0.1.0",
+            "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+            "scene": {
+              "path": "scenes/glass/glass_of_water.owe",
+              "fnv1a64": "9cc6cd4c519c95fb",
+              "edits": []
+            },
+            "detector": {
+              "name": "Eye",
+              "description": "ideal observer 'Eye' 256x192, fovY=34 deg, pupil diameter=3 mm, focus=0.340000 m, pixel filter gaussian(0.4)",
+              "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ",
+              "pixel_response": "square * gaussian(sigma 0.400000 px)"
+            },
+            "observer_pose": {
+              "position_m": [
+                0.02,
+                -0.34,
+                0.115
+              ],
+              "look_at_m": [
+                0,
+                0,
+                0.07
+              ],
+              "up": [
+                0,
+                0,
+                1
+              ],
+              "fov_deg": 34,
+              "pupil_radius_m": 0.0015,
+              "focus_distance_m": 0.34,
+              "width": 256,
+              "height": 192
+            },
+            "integrator": "path",
+            "sampling": {
+              "wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm",
+              "fresnel": "stochastic branch selection",
+              "nee": true,
+              "mis": "power heuristic",
+              "russian_roulette_depth": 6,
+              "fresnel_floor": 0
+            },
+            "seed": 1001,
+            "samples_per_pixel": 8192,
+            "passes": 1,
+            "max_depth": 64,
+            "display": {
+              "exposure_ev": 0,
+              "auto_exposure": true,
+              "auto_gain_ev": -1.67801,
+              "white_balance_kelvin": 0,
+              "tone": "agx"
+            },
+            "render_seconds": 114.353,
+            "statistics": {
+              "paths": 402653184,
+              "segments": 1303123033,
+              "region_inconsistencies": 63,
+              "leaks": 2,
+              "first_inconsistency": {
+                "boundary": "Glass.rod-dry",
+                "ray_region": "Glass.liquid[water]"
+              }
+            },
+            "mean_Y": 0.481459,
+            "world": {
+              "media": [
+                {
+                  "name": "air",
+                  "index": "ciddor-air",
+                  "n_d": 1.00028
+                },
+                {
+                  "name": "opaque",
+                  "index": "constant(1)",
+                  "n_d": 1
+                },
+                {
+                  "name": "N-BK7",
+                  "index": "sellmeier(B1=1.03961 C1=0.0060007, B2=0.231792 C2=0.0200179, B3=1.01047 C3=103.561) rel. air",
+                  "n_d": 1.51722
+                },
+                {
+                  "name": "water",
+                  "index": "sellmeier(B1=0.568403 C1=0.00510183, B2=0.172618 C2=0.0182115, B3=0.0208619 C3=0.0262072, B4=0.113075 C4=10.6979)",
+                  "n_d": 1.3334
+                }
+              ],
+              "regions": 6,
+              "boundaries": 21,
+              "bodies": 11,
+              "assemblies": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "suite": "canonical",
+      "scene": "study_magnifier",
+      "spp": 8192,
+      "seed1001_against_1000_rel_mse": 13.63670065619629,
+      "seed1000_against_1001_rel_mse": 4.427199446306428,
+      "ordinary_mse": 3.353286758280467,
+      "mse_over_seed1000_mean_square": 0.5463413441379015,
+      "seed1000_channel_means": [
+        1.038659973637247,
+        0.6405970309460068,
+        0.4523354193953348
+      ],
+      "seed1001_channel_means": [
+        1.0259654325730783,
+        0.6396034207153889,
+        0.453156797868805
+      ],
+      "references": [
+        {
+          "path": "out/performance_20261008/corrected_canonical_reference8192_seed1000/study_magnifier/reference.pfm",
+          "sha256": "c3c09bce13d479c34dfa70c91d3017224f6b492e5d180bdcd9f1f7f1b0fe90a6",
+          "native": {
+            "engine": "optical-world-engine 0.1.0",
+            "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+            "scene": {
+              "path": "scenes/the_study.owe",
+              "fnv1a64": "a1f91c57b6349ddf",
+              "edits": []
+            },
+            "detector": {
+              "name": "Magnifier",
+              "description": "ideal observer 'Magnifier' 256x192, fovY=40 deg, pupil diameter=3 mm, focus=0.380000 m, pixel filter gaussian(0.4)",
+              "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ",
+              "pixel_response": "square * gaussian(sigma 0.400000 px)"
+            },
+            "observer_pose": {
+              "position_m": [
+                -0.3,
+                1.02,
+                1.08
+              ],
+              "look_at_m": [
+                -0.3,
+                1.17,
+                0.75
+              ],
+              "up": [
+                0,
+                0,
+                1
+              ],
+              "fov_deg": 40,
+              "pupil_radius_m": 0.0015,
+              "focus_distance_m": 0.38,
+              "width": 256,
+              "height": 192
+            },
+            "integrator": "path",
+            "sampling": {
+              "wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm",
+              "fresnel": "stochastic branch selection",
+              "nee": true,
+              "mis": "power heuristic",
+              "russian_roulette_depth": 6,
+              "fresnel_floor": 0
+            },
+            "seed": 1000,
+            "samples_per_pixel": 8192,
+            "passes": 1,
+            "max_depth": 64,
+            "display": {
+              "exposure_ev": 0,
+              "auto_exposure": true,
+              "auto_gain_ev": -2.32473,
+              "white_balance_kelvin": 0,
+              "tone": "agx"
+            },
+            "render_seconds": 218.865,
+            "statistics": {
+              "paths": 402653184,
+              "segments": 2524205266,
+              "region_inconsistencies": 69,
+              "leaks": 0,
+              "first_inconsistency": {
+                "boundary": "LeftWall.face",
+                "ray_region": "Magnifier.glass0[N-BK7]"
+              }
+            },
+            "mean_Y": 0.711666,
+            "world": {
+              "media": [
+                {
+                  "name": "air",
+                  "index": "ciddor-air",
+                  "n_d": 1.00028
+                },
+                {
+                  "name": "opaque",
+                  "index": "constant(1)",
+                  "n_d": 1
+                },
+                {
+                  "name": "N-BK7",
+                  "index": "sellmeier(B1=1.03961 C1=0.0060007, B2=0.231792 C2=0.0200179, B3=1.01047 C3=103.561) rel. air",
+                  "n_d": 1.51722
+                },
+                {
+                  "name": "water",
+                  "index": "sellmeier(B1=0.568403 C1=0.00510183, B2=0.172618 C2=0.0182115, B3=0.0208619 C3=0.0262072, B4=0.113075 C4=10.6979)",
+                  "n_d": 1.3334
+                },
+                {
+                  "name": "N-SF11",
+                  "index": "sellmeier(B1=1.7376 C1=0.0131887, B2=0.313747 C2=0.0623068, B3=1.89878 C3=155.236) rel. air",
+                  "n_d": 1.78521
+                },
+                {
+                  "name": "F2",
+                  "index": "sellmeier(B1=1.34533 C1=0.00997744, B2=0.209073 C2=0.0470451, B3=0.937357 C3=111.887) rel. air",
+                  "n_d": 1.62049
+                }
+              ],
+              "regions": 31,
+              "boundaries": 105,
+              "bodies": 51,
+              "assemblies": 3
+            }
+          }
+        },
+        {
+          "path": "out/performance_20261008/corrected_canonical_reference8192_seed1001/study_magnifier/reference.pfm",
+          "sha256": "5fc8b4f328a36c79cc39a171be6ca606ec671fc3cae25edde615083e1ee9049c",
+          "native": {
+            "engine": "optical-world-engine 0.1.0",
+            "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+            "scene": {
+              "path": "scenes/the_study.owe",
+              "fnv1a64": "a1f91c57b6349ddf",
+              "edits": []
+            },
+            "detector": {
+              "name": "Magnifier",
+              "description": "ideal observer 'Magnifier' 256x192, fovY=40 deg, pupil diameter=3 mm, focus=0.380000 m, pixel filter gaussian(0.4)",
+              "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ",
+              "pixel_response": "square * gaussian(sigma 0.400000 px)"
+            },
+            "observer_pose": {
+              "position_m": [
+                -0.3,
+                1.02,
+                1.08
+              ],
+              "look_at_m": [
+                -0.3,
+                1.17,
+                0.75
+              ],
+              "up": [
+                0,
+                0,
+                1
+              ],
+              "fov_deg": 40,
+              "pupil_radius_m": 0.0015,
+              "focus_distance_m": 0.38,
+              "width": 256,
+              "height": 192
+            },
+            "integrator": "path",
+            "sampling": {
+              "wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm",
+              "fresnel": "stochastic branch selection",
+              "nee": true,
+              "mis": "power heuristic",
+              "russian_roulette_depth": 6,
+              "fresnel_floor": 0
+            },
+            "seed": 1001,
+            "samples_per_pixel": 8192,
+            "passes": 1,
+            "max_depth": 64,
+            "display": {
+              "exposure_ev": 0,
+              "auto_exposure": true,
+              "auto_gain_ev": -2.32429,
+              "white_balance_kelvin": 0,
+              "tone": "agx"
+            },
+            "render_seconds": 219.088,
+            "statistics": {
+              "paths": 402653184,
+              "segments": 2524198205,
+              "region_inconsistencies": 57,
+              "leaks": 1,
+              "first_inconsistency": {
+                "boundary": "Glass.inner-wet",
+                "ray_region": "ambient[air]"
+              }
+            },
+            "mean_Y": 0.708315,
+            "world": {
+              "media": [
+                {
+                  "name": "air",
+                  "index": "ciddor-air",
+                  "n_d": 1.00028
+                },
+                {
+                  "name": "opaque",
+                  "index": "constant(1)",
+                  "n_d": 1
+                },
+                {
+                  "name": "N-BK7",
+                  "index": "sellmeier(B1=1.03961 C1=0.0060007, B2=0.231792 C2=0.0200179, B3=1.01047 C3=103.561) rel. air",
+                  "n_d": 1.51722
+                },
+                {
+                  "name": "water",
+                  "index": "sellmeier(B1=0.568403 C1=0.00510183, B2=0.172618 C2=0.0182115, B3=0.0208619 C3=0.0262072, B4=0.113075 C4=10.6979)",
+                  "n_d": 1.3334
+                },
+                {
+                  "name": "N-SF11",
+                  "index": "sellmeier(B1=1.7376 C1=0.0131887, B2=0.313747 C2=0.0623068, B3=1.89878 C3=155.236) rel. air",
+                  "n_d": 1.78521
+                },
+                {
+                  "name": "F2",
+                  "index": "sellmeier(B1=1.34533 C1=0.00997744, B2=0.209073 C2=0.0470451, B3=0.937357 C3=111.887) rel. air",
+                  "n_d": 1.62049
+                }
+              ],
+              "regions": 31,
+              "boundaries": 105,
+              "bodies": 51,
+              "assemblies": 3
+            }
+          }
+        }
+      ]
+    },
+    {
+      "suite": "canonical",
+      "scene": "the_telescope",
+      "spp": 8192,
+      "seed1001_against_1000_rel_mse": 0.0060613149756171105,
+      "seed1000_against_1001_rel_mse": 0.0060632167746615204,
+      "ordinary_mse": 0.002818078466366991,
+      "mse_over_seed1000_mean_square": 0.0040209632245994794,
+      "seed1000_channel_means": [
+        0.5115898308153898,
+        0.524082265844597,
+        0.45694892539980647
+      ],
+      "seed1001_channel_means": [
+        0.5117180403921774,
+        0.5240277600123968,
+        0.4569544470227001
+      ],
+      "references": [
+        {
+          "path": "out/performance_20261008/corrected_canonical_reference8192_seed1000/the_telescope/reference.pfm",
+          "sha256": "6916342ee00f494cc4b635db2197819036dc4c03e7df905c384e7f5fc21ea084",
+          "native": {
+            "engine": "optical-world-engine 0.1.0",
+            "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+            "scene": {
+              "path": "scenes/the_telescope.owe",
+              "fnv1a64": "0023c140f5c751f5",
+              "edits": []
+            },
+            "detector": {
+              "name": "Eyepiece",
+              "description": "ideal observer 'Eyepiece' 256x192, fovY=36 deg, pupil diameter=3 mm, focus=infinity, pixel filter gaussian(0.4)",
+              "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ",
+              "pixel_response": "square * gaussian(sigma 0.400000 px)"
+            },
+            "observer_pose": {
+              "position_m": [
+                -0.43850337665063027,
+                0,
+                44.354144938250236
+              ],
+              "look_at_m": [
+                450,
+                0,
+                179.56220746765905
+              ],
+              "up": [
+                0,
+                0,
+                1
+              ],
+              "fov_deg": 36,
+              "pupil_radius_m": 0.0015,
+              "focus_distance_m": null,
+              "width": 256,
+              "height": 192
+            },
+            "integrator": "path",
+            "sampling": {
+              "wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm",
+              "fresnel": "stochastic branch selection",
+              "nee": true,
+              "mis": "power heuristic",
+              "russian_roulette_depth": 6,
+              "fresnel_floor": 0
+            },
+            "seed": 1000,
+            "samples_per_pixel": 8192,
+            "passes": 1,
+            "max_depth": 64,
+            "display": {
+              "exposure_ev": 0,
+              "auto_exposure": true,
+              "auto_gain_ev": -2.22441,
+              "white_balance_kelvin": 0,
+              "tone": "agx"
+            },
+            "render_seconds": 79.381,
+            "statistics": {
+              "paths": 402653184,
+              "segments": 1952209147,
+              "region_inconsistencies": 50,
+              "leaks": 1,
+              "first_inconsistency": {
+                "boundary": "Statue.pedestal",
+                "ray_region": "ambient[air]"
+              }
+            },
+            "mean_Y": 0.51658,
+            "world": {
+              "media": [
+                {
+                  "name": "air",
+                  "index": "ciddor-air",
+                  "n_d": 1.00028
+                },
+                {
+                  "name": "opaque",
+                  "index": "constant(1)",
+                  "n_d": 1
+                },
+                {
+                  "name": "N-BK7",
+                  "index": "sellmeier(B1=1.03961 C1=0.0060007, B2=0.231792 C2=0.0200179, B3=1.01047 C3=103.561) rel. air",
+                  "n_d": 1.51722
+                },
+                {
+                  "name": "F2",
+                  "index": "sellmeier(B1=1.34533 C1=0.00997744, B2=0.209073 C2=0.0470451, B3=0.937357 C3=111.887) rel. air",
+                  "n_d": 1.62049
+                }
+              ],
+              "regions": 9,
+              "boundaries": 188,
+              "bodies": 18,
+              "assemblies": 1
+            }
+          }
+        },
+        {
+          "path": "out/performance_20261008/corrected_canonical_reference8192_seed1001/the_telescope/reference.pfm",
+          "sha256": "faded47664edcadf129a2cac29755e5efd27240ecfc952f759bd3550f4d63cb8",
+          "native": {
+            "engine": "optical-world-engine 0.1.0",
+            "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+            "scene": {
+              "path": "scenes/the_telescope.owe",
+              "fnv1a64": "0023c140f5c751f5",
+              "edits": []
+            },
+            "detector": {
+              "name": "Eyepiece",
+              "description": "ideal observer 'Eyepiece' 256x192, fovY=36 deg, pupil diameter=3 mm, focus=infinity, pixel filter gaussian(0.4)",
+              "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ",
+              "pixel_response": "square * gaussian(sigma 0.400000 px)"
+            },
+            "observer_pose": {
+              "position_m": [
+                -0.43850337665063027,
+                0,
+                44.354144938250236
+              ],
+              "look_at_m": [
+                450,
+                0,
+                179.56220746765905
+              ],
+              "up": [
+                0,
+                0,
+                1
+              ],
+              "fov_deg": 36,
+              "pupil_radius_m": 0.0015,
+              "focus_distance_m": null,
+              "width": 256,
+              "height": 192
+            },
+            "integrator": "path",
+            "sampling": {
+              "wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm",
+              "fresnel": "stochastic branch selection",
+              "nee": true,
+              "mis": "power heuristic",
+              "russian_roulette_depth": 6,
+              "fresnel_floor": 0
+            },
+            "seed": 1001,
+            "samples_per_pixel": 8192,
+            "passes": 1,
+            "max_depth": 64,
+            "display": {
+              "exposure_ev": 0,
+              "auto_exposure": true,
+              "auto_gain_ev": -2.2244,
+              "white_balance_kelvin": 0,
+              "tone": "agx"
+            },
+            "render_seconds": 79.4732,
+            "statistics": {
+              "paths": 402653184,
+              "segments": 1952247431,
+              "region_inconsistencies": 41,
+              "leaks": 1,
+              "first_inconsistency": {
+                "boundary": "Scope.L3.rim2",
+                "ray_region": "ambient[air]"
+              }
+            },
+            "mean_Y": 0.516569,
+            "world": {
+              "media": [
+                {
+                  "name": "air",
+                  "index": "ciddor-air",
+                  "n_d": 1.00028
+                },
+                {
+                  "name": "opaque",
+                  "index": "constant(1)",
+                  "n_d": 1
+                },
+                {
+                  "name": "N-BK7",
+                  "index": "sellmeier(B1=1.03961 C1=0.0060007, B2=0.231792 C2=0.0200179, B3=1.01047 C3=103.561) rel. air",
+                  "n_d": 1.51722
+                },
+                {
+                  "name": "F2",
+                  "index": "sellmeier(B1=1.34533 C1=0.00997744, B2=0.209073 C2=0.0470451, B3=0.937357 C3=111.887) rel. air",
+                  "n_d": 1.62049
+                }
+              ],
+              "regions": 9,
+              "boundaries": 188,
+              "bodies": 18,
+              "assemblies": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "suite": "canonical",
+      "scene": "study_camera",
+      "spp": 8192,
+      "seed1001_against_1000_rel_mse": 115.95365295403255,
+      "seed1000_against_1001_rel_mse": 108.69373433406028,
+      "ordinary_mse": 0.05478781901307603,
+      "mse_over_seed1000_mean_square": 2.685435394295145,
+      "seed1000_channel_means": [
+        0.031016078376513878,
+        0.017240063090338136,
+        0.00789008512087395
+      ],
+      "seed1001_channel_means": [
+        0.03201756173163339,
+        0.017433153066871654,
+        0.007845561056743828
+      ],
+      "references": [
+        {
+          "path": "out/performance_20261008/corrected_canonical_reference8192_seed1000/study_camera/reference.pfm",
+          "sha256": "7054000e9dd226428d668e6fcb28a8054dfd1a8907663d3616cacd682b6368aa",
+          "native": {
+            "engine": "optical-world-engine 0.1.0",
+            "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+            "scene": {
+              "path": "scenes/the_study.owe",
+              "fnv1a64": "a1f91c57b6349ddf",
+              "edits": []
+            },
+            "camera": "EFL 86.3 mm, f/2.80, focus 1.340 m; depth of field 1.322 m to 1.358 m (CoC 29 \u00b5m)",
+            "detector": {
+              "name": "Cam",
+              "description": "surface sensor 'Cam' 256x192, 36 x 24 mm, aimed",
+              "quantity": "irradiance [W m^-2] as CIE XYZ",
+              "pixel_response": "square"
+            },
+            "integrator": "path",
+            "sampling": {
+              "wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm",
+              "fresnel": "stochastic branch selection",
+              "nee": true,
+              "mis": "power heuristic",
+              "russian_roulette_depth": 6,
+              "fresnel_floor": 0
+            },
+            "seed": 1000,
+            "samples_per_pixel": 8192,
+            "passes": 1,
+            "max_depth": 64,
+            "display": {
+              "exposure_ev": 0,
+              "auto_exposure": true,
+              "auto_gain_ev": 2.96264,
+              "white_balance_kelvin": 0,
+              "tone": "agx"
+            },
+            "render_seconds": 151.253,
+            "statistics": {
+              "paths": 402653158,
+              "segments": 2400482995,
+              "region_inconsistencies": 204,
+              "leaks": 0,
+              "first_inconsistency": {
+                "boundary": "Glass.outer",
+                "ray_region": "ambient[air]"
+              }
+            },
+            "mean_Y": 0.019495,
+            "world": {
+              "media": [
+                {
+                  "name": "air",
+                  "index": "ciddor-air",
+                  "n_d": 1.00028
+                },
+                {
+                  "name": "opaque",
+                  "index": "constant(1)",
+                  "n_d": 1
+                },
+                {
+                  "name": "N-BK7",
+                  "index": "sellmeier(B1=1.03961 C1=0.0060007, B2=0.231792 C2=0.0200179, B3=1.01047 C3=103.561) rel. air",
+                  "n_d": 1.51722
+                },
+                {
+                  "name": "water",
+                  "index": "sellmeier(B1=0.568403 C1=0.00510183, B2=0.172618 C2=0.0182115, B3=0.0208619 C3=0.0262072, B4=0.113075 C4=10.6979)",
+                  "n_d": 1.3334
+                },
+                {
+                  "name": "N-SF11",
+                  "index": "sellmeier(B1=1.7376 C1=0.0131887, B2=0.313747 C2=0.0623068, B3=1.89878 C3=155.236) rel. air",
+                  "n_d": 1.78521
+                },
+                {
+                  "name": "F2",
+                  "index": "sellmeier(B1=1.34533 C1=0.00997744, B2=0.209073 C2=0.0470451, B3=0.937357 C3=111.887) rel. air",
+                  "n_d": 1.62049
+                }
+              ],
+              "regions": 31,
+              "boundaries": 105,
+              "bodies": 51,
+              "assemblies": 3
+            }
+          }
+        },
+        {
+          "path": "out/performance_20261008/corrected_canonical_reference8192_seed1001/study_camera/reference.pfm",
+          "sha256": "8c77124cc7114c3d03feaea813e10cb5ab4b41f692c0d427e37cab6ceb63a99d",
+          "native": {
+            "engine": "optical-world-engine 0.1.0",
+            "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+            "scene": {
+              "path": "scenes/the_study.owe",
+              "fnv1a64": "a1f91c57b6349ddf",
+              "edits": []
+            },
+            "camera": "EFL 86.3 mm, f/2.80, focus 1.340 m; depth of field 1.322 m to 1.358 m (CoC 29 \u00b5m)",
+            "detector": {
+              "name": "Cam",
+              "description": "surface sensor 'Cam' 256x192, 36 x 24 mm, aimed",
+              "quantity": "irradiance [W m^-2] as CIE XYZ",
+              "pixel_response": "square"
+            },
+            "integrator": "path",
+            "sampling": {
+              "wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm",
+              "fresnel": "stochastic branch selection",
+              "nee": true,
+              "mis": "power heuristic",
+              "russian_roulette_depth": 6,
+              "fresnel_floor": 0
+            },
+            "seed": 1001,
+            "samples_per_pixel": 8192,
+            "passes": 1,
+            "max_depth": 64,
+            "display": {
+              "exposure_ev": 0,
+              "auto_exposure": true,
+              "auto_gain_ev": 2.96255,
+              "white_balance_kelvin": 0,
+              "tone": "agx"
+            },
+            "render_seconds": 151.406,
+            "statistics": {
+              "paths": 402653156,
+              "segments": 2400442749,
+              "region_inconsistencies": 193,
+              "leaks": 0,
+              "first_inconsistency": {
+                "boundary": "Glass.outer",
+                "ray_region": "ambient[air]"
+              }
+            },
+            "mean_Y": 0.0198429,
+            "world": {
+              "media": [
+                {
+                  "name": "air",
+                  "index": "ciddor-air",
+                  "n_d": 1.00028
+                },
+                {
+                  "name": "opaque",
+                  "index": "constant(1)",
+                  "n_d": 1
+                },
+                {
+                  "name": "N-BK7",
+                  "index": "sellmeier(B1=1.03961 C1=0.0060007, B2=0.231792 C2=0.0200179, B3=1.01047 C3=103.561) rel. air",
+                  "n_d": 1.51722
+                },
+                {
+                  "name": "water",
+                  "index": "sellmeier(B1=0.568403 C1=0.00510183, B2=0.172618 C2=0.0182115, B3=0.0208619 C3=0.0262072, B4=0.113075 C4=10.6979)",
+                  "n_d": 1.3334
+                },
+                {
+                  "name": "N-SF11",
+                  "index": "sellmeier(B1=1.7376 C1=0.0131887, B2=0.313747 C2=0.0623068, B3=1.89878 C3=155.236) rel. air",
+                  "n_d": 1.78521
+                },
+                {
+                  "name": "F2",
+                  "index": "sellmeier(B1=1.34533 C1=0.00997744, B2=0.209073 C2=0.0470451, B3=0.937357 C3=111.887) rel. air",
+                  "n_d": 1.62049
+                }
+              ],
+              "regions": 31,
+              "boundaries": 105,
+              "bodies": 51,
+              "assemblies": 3
+            }
+          }
+        }
+      ]
+    },
+    {
+      "suite": "canonical",
+      "scene": "observatory_saturn",
+      "spp": 8192,
+      "seed1001_against_1000_rel_mse": 0.0939408187715028,
+      "seed1000_against_1001_rel_mse": 0.21005553508629865,
+      "ordinary_mse": 3.5202063077663837e-09,
+      "mse_over_seed1000_mean_square": 0.004485539507309417,
+      "seed1000_channel_means": [
+        0.00015202867280784708,
+        0.00012288708489112857,
+        9.062804537102002e-05
+      ],
+      "seed1001_channel_means": [
+        0.00015184979169584616,
+        0.000122644595524597,
+        9.061195428527765e-05
+      ],
+      "references": [
+        {
+          "path": "out/performance_20261008/corrected_canonical_reference8192_seed1000/observatory_saturn/reference.pfm",
+          "sha256": "38ba5432150e0b63f92decf0e6f08a4a97a7ccc539740b95330b761c3c6301e4",
+          "native": {
+            "engine": "optical-world-engine 0.1.0",
+            "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+            "scene": {
+              "path": "scenes/the_observatory.owe",
+              "fnv1a64": "f7d59fa4025a8e5a",
+              "edits": []
+            },
+            "detector": {
+              "name": "SaturnEyepiece",
+              "description": "ideal observer 'SaturnEyepiece' 256x192, fovY=4 deg, pupil diameter=1.1 mm, focus=infinity, pixel filter gaussian(0.4)",
+              "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ",
+              "pixel_response": "square * gaussian(sigma 0.400000 px)"
+            },
+            "observer_pose": {
+              "position_m": [
+                0.2995237559462546,
+                1.007329758575156,
+                47.8841571693739
+              ],
+              "look_at_m": [
+                74883457859.65544,
+                -1070883338999.4807,
+                697137964819.2346
+              ],
+              "up": [
+                0,
+                0,
+                1
+              ],
+              "fov_deg": 4,
+              "pupil_radius_m": 0.00055,
+              "focus_distance_m": null,
+              "width": 256,
+              "height": 192
+            },
+            "integrator": "path",
+            "sampling": {
+              "wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm",
+              "fresnel": "stochastic branch selection",
+              "nee": true,
+              "mis": "power heuristic",
+              "russian_roulette_depth": 6,
+              "fresnel_floor": 0
+            },
+            "seed": 1000,
+            "samples_per_pixel": 8192,
+            "passes": 1,
+            "max_depth": 64,
+            "display": {
+              "exposure_ev": 5,
+              "auto_exposure": false,
+              "auto_gain_ev": 0,
+              "white_balance_kelvin": 0,
+              "tone": "agx"
+            },
+            "render_seconds": 2178.05,
+            "statistics": {
+              "paths": 402653184,
+              "segments": 3241125803,
+              "region_inconsistencies": 5078,
+              "leaks": 1,
+              "first_inconsistency": {
+                "boundary": "GreatRefractor.L2.S1",
+                "ray_region": "GreatRefractor.L2.glass0[F2]"
+              }
+            },
+            "mean_Y": 0.000126756,
+            "world": {
+              "media": [
+                {
+                  "name": "air",
+                  "index": "ciddor-air",
+                  "n_d": 1.00028
+                },
+                {
+                  "name": "opaque",
+                  "index": "constant(1)",
+                  "n_d": 1
+                },
+                {
+                  "name": "N-BK7",
+                  "index": "sellmeier(B1=1.03961 C1=0.0060007, B2=0.231792 C2=0.0200179, B3=1.01047 C3=103.561) rel. air",
+                  "n_d": 1.51722
+                },
+                {
+                  "name": "F2",
+                  "index": "sellmeier(B1=1.34533 C1=0.00997744, B2=0.209073 C2=0.0470451, B3=0.937357 C3=111.887) rel. air",
+                  "n_d": 1.62049
+                }
+              ],
+              "regions": 72,
+              "boundaries": 3727,
+              "bodies": 166,
+              "assemblies": 6
+            }
+          }
+        },
+        {
+          "path": "out/performance_20261008/corrected_canonical_reference8192_seed1001/observatory_saturn/reference.pfm",
+          "sha256": "18039a6aa49188532a3a59dfcc939d52bd01a20872d3e22884ec59419837a394",
+          "native": {
+            "engine": "optical-world-engine 0.1.0",
+            "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+            "scene": {
+              "path": "scenes/the_observatory.owe",
+              "fnv1a64": "f7d59fa4025a8e5a",
+              "edits": []
+            },
+            "detector": {
+              "name": "SaturnEyepiece",
+              "description": "ideal observer 'SaturnEyepiece' 256x192, fovY=4 deg, pupil diameter=1.1 mm, focus=infinity, pixel filter gaussian(0.4)",
+              "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ",
+              "pixel_response": "square * gaussian(sigma 0.400000 px)"
+            },
+            "observer_pose": {
+              "position_m": [
+                0.2995237559462546,
+                1.007329758575156,
+                47.8841571693739
+              ],
+              "look_at_m": [
+                74883457859.65544,
+                -1070883338999.4807,
+                697137964819.2346
+              ],
+              "up": [
+                0,
+                0,
+                1
+              ],
+              "fov_deg": 4,
+              "pupil_radius_m": 0.00055,
+              "focus_distance_m": null,
+              "width": 256,
+              "height": 192
+            },
+            "integrator": "path",
+            "sampling": {
+              "wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm",
+              "fresnel": "stochastic branch selection",
+              "nee": true,
+              "mis": "power heuristic",
+              "russian_roulette_depth": 6,
+              "fresnel_floor": 0
+            },
+            "seed": 1001,
+            "samples_per_pixel": 8192,
+            "passes": 1,
+            "max_depth": 64,
+            "display": {
+              "exposure_ev": 5,
+              "auto_exposure": false,
+              "auto_gain_ev": 0,
+              "white_balance_kelvin": 0,
+              "tone": "agx"
+            },
+            "render_seconds": 2167.16,
+            "statistics": {
+              "paths": 402653184,
+              "segments": 3241068668,
+              "region_inconsistencies": 4977,
+              "leaks": 1,
+              "first_inconsistency": {
+                "boundary": "GreatRefractor.L2.S1",
+                "ray_region": "GreatRefractor.L2.glass0[F2]"
+              }
+            },
+            "mean_Y": 0.000126544,
+            "world": {
+              "media": [
+                {
+                  "name": "air",
+                  "index": "ciddor-air",
+                  "n_d": 1.00028
+                },
+                {
+                  "name": "opaque",
+                  "index": "constant(1)",
+                  "n_d": 1
+                },
+                {
+                  "name": "N-BK7",
+                  "index": "sellmeier(B1=1.03961 C1=0.0060007, B2=0.231792 C2=0.0200179, B3=1.01047 C3=103.561) rel. air",
+                  "n_d": 1.51722
+                },
+                {
+                  "name": "F2",
+                  "index": "sellmeier(B1=1.34533 C1=0.00997744, B2=0.209073 C2=0.0470451, B3=0.937357 C3=111.887) rel. air",
+                  "n_d": 1.62049
+                }
+              ],
+              "regions": 72,
+              "boundaries": 3727,
+              "bodies": 166,
+              "assemblies": 6
+            }
+          }
+        }
+      ]
+    },
+    {
+      "suite": "canonical",
+      "scene": "camera_obscura",
+      "spp": 8192,
+      "seed1001_against_1000_rel_mse": 4184.68494667337,
+      "seed1000_against_1001_rel_mse": 3607.3950595133742,
+      "ordinary_mse": 9.594565767688687e-12,
+      "mse_over_seed1000_mean_square": 1.965032679476935,
+      "seed1000_channel_means": [
+        2.999418273340409e-07,
+        3.618380588277957e-07,
+        2.1348253681441476e-07
+      ],
+      "seed1001_channel_means": [
+        2.9644300630125354e-07,
+        3.623773388951344e-07,
+        2.1000937448691783e-07
+      ],
+      "references": [
+        {
+          "path": "out/performance_20261008/corrected_canonical_reference8192_seed1000/camera_obscura/reference.pfm",
+          "sha256": "e518207a8bf08187de08e602d0076091bf94d1ba7a8657088bd4a58ee385649f",
+          "native": {
+            "engine": "optical-world-engine 0.1.0",
+            "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+            "scene": {
+              "path": "scenes/camera_obscura.owe",
+              "fnv1a64": "c2699cdb4aa0d1a2",
+              "edits": []
+            },
+            "detector": {
+              "name": "Inside",
+              "description": "ideal observer 'Inside' 256x192, fovY=55 deg, pupil diameter=4 mm, focus=3.400000 m, pixel filter gaussian(0.4)",
+              "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ",
+              "pixel_response": "square * gaussian(sigma 0.400000 px)"
+            },
+            "observer_pose": {
+              "position_m": [
+                0.9,
+                -0.6,
+                1.6
+              ],
+              "look_at_m": [
+                0,
+                -3.9,
+                1.2
+              ],
+              "up": [
+                0,
+                0,
+                1
+              ],
+              "fov_deg": 55,
+              "pupil_radius_m": 0.002,
+              "focus_distance_m": 3.4,
+              "width": 256,
+              "height": 192
+            },
+            "integrator": "path",
+            "sampling": {
+              "wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm",
+              "fresnel": "stochastic branch selection",
+              "nee": true,
+              "mis": "power heuristic",
+              "russian_roulette_depth": 6,
+              "fresnel_floor": 0
+            },
+            "seed": 1000,
+            "samples_per_pixel": 8192,
+            "passes": 1,
+            "max_depth": 64,
+            "display": {
+              "exposure_ev": 0,
+              "auto_exposure": true,
+              "auto_gain_ev": 18.5248,
+              "white_balance_kelvin": 0,
+              "tone": "agx"
+            },
+            "render_seconds": 90.1641,
+            "statistics": {
+              "paths": 402653184,
+              "segments": 1815082021,
+              "region_inconsistencies": 12,
+              "leaks": 0,
+              "first_inconsistency": {
+                "boundary": "Ceiling.surface",
+                "ray_region": "ambient[air]"
+              }
+            },
+            "mean_Y": 3.37967e-07,
+            "world": {
+              "media": [
+                {
+                  "name": "air",
+                  "index": "ciddor-air",
+                  "n_d": 1.00028
+                },
+                {
+                  "name": "opaque",
+                  "index": "constant(1)",
+                  "n_d": 1
+                }
+              ],
+              "regions": 15,
+              "boundaries": 26,
+              "bodies": 22,
+              "assemblies": 0
+            }
+          }
+        },
+        {
+          "path": "out/performance_20261008/corrected_canonical_reference8192_seed1001/camera_obscura/reference.pfm",
+          "sha256": "9af8a565b20372fe00f7d4ff5aa1b78380b2344723d583c66dd408319af3aef0",
+          "native": {
+            "engine": "optical-world-engine 0.1.0",
+            "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+            "scene": {
+              "path": "scenes/camera_obscura.owe",
+              "fnv1a64": "c2699cdb4aa0d1a2",
+              "edits": []
+            },
+            "detector": {
+              "name": "Inside",
+              "description": "ideal observer 'Inside' 256x192, fovY=55 deg, pupil diameter=4 mm, focus=3.400000 m, pixel filter gaussian(0.4)",
+              "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ",
+              "pixel_response": "square * gaussian(sigma 0.400000 px)"
+            },
+            "observer_pose": {
+              "position_m": [
+                0.9,
+                -0.6,
+                1.6
+              ],
+              "look_at_m": [
+                0,
+                -3.9,
+                1.2
+              ],
+              "up": [
+                0,
+                0,
+                1
+              ],
+              "fov_deg": 55,
+              "pupil_radius_m": 0.002,
+              "focus_distance_m": 3.4,
+              "width": 256,
+              "height": 192
+            },
+            "integrator": "path",
+            "sampling": {
+              "wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm",
+              "fresnel": "stochastic branch selection",
+              "nee": true,
+              "mis": "power heuristic",
+              "russian_roulette_depth": 6,
+              "fresnel_floor": 0
+            },
+            "seed": 1001,
+            "samples_per_pixel": 8192,
+            "passes": 1,
+            "max_depth": 64,
+            "display": {
+              "exposure_ev": 0,
+              "auto_exposure": true,
+              "auto_gain_ev": 18.5116,
+              "white_balance_kelvin": 0,
+              "tone": "agx"
+            },
+            "render_seconds": 90.1938,
+            "statistics": {
+              "paths": 402653184,
+              "segments": 1815015627,
+              "region_inconsistencies": 12,
+              "leaks": 0,
+              "first_inconsistency": {
+                "boundary": "Ceiling.surface",
+                "ray_region": "ambient[air]"
+              }
+            },
+            "mean_Y": 3.37358e-07,
+            "world": {
+              "media": [
+                {
+                  "name": "air",
+                  "index": "ciddor-air",
+                  "n_d": 1.00028
+                },
+                {
+                  "name": "opaque",
+                  "index": "constant(1)",
+                  "n_d": 1
+                }
+              ],
+              "regions": 15,
+              "boundaries": 26,
+              "bodies": 22,
+              "assemblies": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "suite": "scans",
+      "scene": "the_kunstkammer",
+      "spp": 256,
+      "seed1001_against_1000_rel_mse": 0.23776076088188616,
+      "seed1000_against_1001_rel_mse": 0.21070348314438114,
+      "ordinary_mse": 0.015093540830917391,
+      "mse_over_seed1000_mean_square": 0.7796101580842384,
+      "seed1000_channel_means": [
+        0.061102710035345634,
+        0.039473569949353346,
+        0.023751377794042215
+      ],
+      "seed1001_channel_means": [
+        0.06124057207097653,
+        0.03955402032698041,
+        0.023812616446594725
+      ],
+      "references": [
+        {
+          "path": "out/performance_20261008/corrected_scans_reference256_seed1000/the_kunstkammer/reference.pfm",
+          "sha256": "5ada895fbe7971893221996d4b3c007ba198ef48e5442f713dced8f1b3a62ee3",
+          "native": {
+            "engine": "optical-world-engine 0.1.0",
+            "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+            "scene": {
+              "path": "scenes/the_kunstkammer.owe",
+              "fnv1a64": "469db8305ef4ad57",
+              "edits": []
+            },
+            "detector": {
+              "name": "Room",
+              "description": "ideal observer 'Room' 960x600, fovY=58 deg, pupil diameter=3 mm, focus=5.350000 m, pixel filter gaussian(0.4)",
+              "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ",
+              "pixel_response": "square * gaussian(sigma 0.400000 px)"
+            },
+            "observer_pose": {
+              "position_m": [
+                -1.3,
+                -4.7,
+                1.6
+              ],
+              "look_at_m": [
+                0.3,
+                0.5,
+                1.6
+              ],
+              "up": [
+                0,
+                0,
+                1
+              ],
+              "fov_deg": 58.00000000000001,
+              "pupil_radius_m": 0.0015,
+              "focus_distance_m": 5.35,
+              "width": 960,
+              "height": 600
+            },
+            "integrator": "path",
+            "sampling": {
+              "wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm",
+              "fresnel": "stochastic branch selection",
+              "nee": true,
+              "mis": "power heuristic",
+              "russian_roulette_depth": 6,
+              "fresnel_floor": 0
+            },
+            "seed": 1000,
+            "samples_per_pixel": 256,
+            "passes": 1,
+            "max_depth": 12,
+            "display": {
+              "exposure_ev": 1,
+              "auto_exposure": false,
+              "auto_gain_ev": 0,
+              "white_balance_kelvin": 5200,
+              "tone": "agx"
+            },
+            "render_seconds": 81.8316,
+            "statistics": {
+              "paths": 147456000,
+              "segments": 965413120,
+              "region_inconsistencies": 174,
+              "leaks": 0,
+              "first_inconsistency": {
+                "boundary": "LeftSillWall.surface",
+                "ray_region": "ambient[air]"
+              }
+            },
+            "mean_Y": 0.0429388,
+            "world": {
+              "media": [
+                {
+                  "name": "air",
+                  "index": "ciddor-air",
+                  "n_d": 1.00028
+                },
+                {
+                  "name": "opaque",
+                  "index": "constant(1)",
+                  "n_d": 1
+                }
+              ],
+              "regions": 196,
+              "boundaries": 486,
+              "bodies": 218,
+              "assemblies": 1
+            }
+          }
+        },
+        {
+          "path": "out/performance_20261008/corrected_scans_reference256_seed1001/the_kunstkammer/reference.pfm",
+          "sha256": "321596d9cadfc6f9f414b32b979f347570921382b78e4f05302475b9862ff523",
+          "native": {
+            "engine": "optical-world-engine 0.1.0",
+            "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+            "scene": {
+              "path": "scenes/the_kunstkammer.owe",
+              "fnv1a64": "469db8305ef4ad57",
+              "edits": []
+            },
+            "detector": {
+              "name": "Room",
+              "description": "ideal observer 'Room' 960x600, fovY=58 deg, pupil diameter=3 mm, focus=5.350000 m, pixel filter gaussian(0.4)",
+              "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ",
+              "pixel_response": "square * gaussian(sigma 0.400000 px)"
+            },
+            "observer_pose": {
+              "position_m": [
+                -1.3,
+                -4.7,
+                1.6
+              ],
+              "look_at_m": [
+                0.3,
+                0.5,
+                1.6
+              ],
+              "up": [
+                0,
+                0,
+                1
+              ],
+              "fov_deg": 58.00000000000001,
+              "pupil_radius_m": 0.0015,
+              "focus_distance_m": 5.35,
+              "width": 960,
+              "height": 600
+            },
+            "integrator": "path",
+            "sampling": {
+              "wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm",
+              "fresnel": "stochastic branch selection",
+              "nee": true,
+              "mis": "power heuristic",
+              "russian_roulette_depth": 6,
+              "fresnel_floor": 0
+            },
+            "seed": 1001,
+            "samples_per_pixel": 256,
+            "passes": 1,
+            "max_depth": 12,
+            "display": {
+              "exposure_ev": 1,
+              "auto_exposure": false,
+              "auto_gain_ev": 0,
+              "white_balance_kelvin": 5200,
+              "tone": "agx"
+            },
+            "render_seconds": 81.8498,
+            "statistics": {
+              "paths": 147456000,
+              "segments": 965422390,
+              "region_inconsistencies": 182,
+              "leaks": 0,
+              "first_inconsistency": {
+                "boundary": "LeftSillWall.surface",
+                "ray_region": "ambient[air]"
+              }
+            },
+            "mean_Y": 0.04303,
+            "world": {
+              "media": [
+                {
+                  "name": "air",
+                  "index": "ciddor-air",
+                  "n_d": 1.00028
+                },
+                {
+                  "name": "opaque",
+                  "index": "constant(1)",
+                  "n_d": 1
+                }
+              ],
+              "regions": 196,
+              "boundaries": 486,
+              "bodies": 218,
+              "assemblies": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "suite": "scans",
+      "scene": "the_gregorian",
+      "spp": 256,
+      "seed1001_against_1000_rel_mse": 19.907531304067664,
+      "seed1000_against_1001_rel_mse": 19.217786635122643,
+      "ordinary_mse": 1.7950108348834768e-07,
+      "mse_over_seed1000_mean_square": 0.003901794243060142,
+      "seed1000_channel_means": [
+        0.00011768596057684549,
+        3.2940454314208825e-05,
+        7.1384839769015775e-06
+      ],
+      "seed1001_channel_means": [
+        0.00011793761624910805,
+        3.298739122841402e-05,
+        7.028235893521211e-06
+      ],
+      "references": [
+        {
+          "path": "out/performance_20261008/corrected_scans_reference256_seed1000/the_gregorian/reference.pfm",
+          "sha256": "a7b38721d53481e76e11d25d455ad2dac24dfcfca7936c3971bca394155b2d88",
+          "native": {
+            "engine": "optical-world-engine 0.1.0",
+            "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+            "scene": {
+              "path": "scenes/the_gregorian.owe",
+              "fnv1a64": "65a7474490feff32",
+              "edits": []
+            },
+            "detector": {
+              "name": "Beside",
+              "description": "ideal observer 'Beside' 960x600, fovY=50 deg, pupil diameter=4 mm, focus=1.600000 m, pixel filter gaussian(0.4)",
+              "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ",
+              "pixel_response": "square * gaussian(sigma 0.400000 px)"
+            },
+            "observer_pose": {
+              "position_m": [
+                0.88,
+                -1.25,
+                0.99
+              ],
+              "look_at_m": [
+                0.1,
+                0.13,
+                0.99
+              ],
+              "up": [
+                0,
+                0,
+                1
+              ],
+              "fov_deg": 50,
+              "pupil_radius_m": 0.002,
+              "focus_distance_m": 1.6,
+              "width": 960,
+              "height": 600
+            },
+            "integrator": "path",
+            "sampling": {
+              "wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm",
+              "fresnel": "stochastic branch selection",
+              "nee": true,
+              "mis": "power heuristic",
+              "russian_roulette_depth": 6,
+              "fresnel_floor": 0
+            },
+            "seed": 1000,
+            "samples_per_pixel": 256,
+            "passes": 1,
+            "max_depth": 16,
+            "display": {
+              "exposure_ev": 14,
+              "auto_exposure": false,
+              "auto_gain_ev": 0,
+              "white_balance_kelvin": 2400,
+              "tone": "agx"
+            },
+            "render_seconds": 41.3731,
+            "statistics": {
+              "paths": 147456000,
+              "segments": 660110865,
+              "region_inconsistencies": 19,
+              "leaks": 0,
+              "first_inconsistency": {
+                "boundary": "JambR.surface",
+                "ray_region": "ambient[air]"
+              }
+            },
+            "mean_Y": 4.91013e-05,
+            "world": {
+              "media": [
+                {
+                  "name": "air",
+                  "index": "ciddor-air",
+                  "n_d": 1.00028
+                },
+                {
+                  "name": "opaque",
+                  "index": "constant(1)",
+                  "n_d": 1
+                },
+                {
+                  "name": "crown",
+                  "index": "cauchy(A=1.5046, B=0.0042, C=0)",
+                  "n_d": 1.51677
+                }
+              ],
+              "regions": 33,
+              "boundaries": 54,
+              "bodies": 35,
+              "assemblies": 1
+            }
+          }
+        },
+        {
+          "path": "out/performance_20261008/corrected_scans_reference256_seed1001/the_gregorian/reference.pfm",
+          "sha256": "761908572647270b0f68eb1430ac06f4940aae9e9fa02523a3cd1ef1329f7211",
+          "native": {
+            "engine": "optical-world-engine 0.1.0",
+            "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+            "scene": {
+              "path": "scenes/the_gregorian.owe",
+              "fnv1a64": "65a7474490feff32",
+              "edits": []
+            },
+            "detector": {
+              "name": "Beside",
+              "description": "ideal observer 'Beside' 960x600, fovY=50 deg, pupil diameter=4 mm, focus=1.600000 m, pixel filter gaussian(0.4)",
+              "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ",
+              "pixel_response": "square * gaussian(sigma 0.400000 px)"
+            },
+            "observer_pose": {
+              "position_m": [
+                0.88,
+                -1.25,
+                0.99
+              ],
+              "look_at_m": [
+                0.1,
+                0.13,
+                0.99
+              ],
+              "up": [
+                0,
+                0,
+                1
+              ],
+              "fov_deg": 50,
+              "pupil_radius_m": 0.002,
+              "focus_distance_m": 1.6,
+              "width": 960,
+              "height": 600
+            },
+            "integrator": "path",
+            "sampling": {
+              "wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm",
+              "fresnel": "stochastic branch selection",
+              "nee": true,
+              "mis": "power heuristic",
+              "russian_roulette_depth": 6,
+              "fresnel_floor": 0
+            },
+            "seed": 1001,
+            "samples_per_pixel": 256,
+            "passes": 1,
+            "max_depth": 16,
+            "display": {
+              "exposure_ev": 14,
+              "auto_exposure": false,
+              "auto_gain_ev": 0,
+              "white_balance_kelvin": 2400,
+              "tone": "agx"
+            },
+            "render_seconds": 41.4402,
+            "statistics": {
+              "paths": 147456000,
+              "segments": 660109962,
+              "region_inconsistencies": 26,
+              "leaks": 0,
+              "first_inconsistency": {
+                "boundary": "JambL.surface",
+                "ray_region": "ambient[air]"
+              }
+            },
+            "mean_Y": 4.91804e-05,
+            "world": {
+              "media": [
+                {
+                  "name": "air",
+                  "index": "ciddor-air",
+                  "n_d": 1.00028
+                },
+                {
+                  "name": "opaque",
+                  "index": "constant(1)",
+                  "n_d": 1
+                },
+                {
+                  "name": "crown",
+                  "index": "cauchy(A=1.5046, B=0.0042, C=0)",
+                  "n_d": 1.51677
+                }
+              ],
+              "regions": 33,
+              "boundaries": 54,
+              "bodies": 35,
+              "assemblies": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "suite": "scans",
+      "scene": "the_peacock_lamp",
+      "spp": 256,
+      "seed1001_against_1000_rel_mse": 7.57577703097224,
+      "seed1000_against_1001_rel_mse": 39.853149709965784,
+      "ordinary_mse": 6.755228501484928e-07,
+      "mse_over_seed1000_mean_square": 0.38104278735348784,
+      "seed1000_channel_means": [
+        4.2623767442280476e-05,
+        6.563117551908304e-06,
+        -7.491728110336616e-07
+      ],
+      "seed1001_channel_means": [
+        4.032630851320049e-05,
+        6.106567094821232e-06,
+        -6.316988943311096e-07
+      ],
+      "references": [
+        {
+          "path": "out/performance_20261008/corrected_scans_reference256_seed1000/the_peacock_lamp/reference.pfm",
+          "sha256": "dcc0dd48d03b75228bfd9afe01e0cc506764897d1ca7db8be7c935052d78c40b",
+          "native": {
+            "engine": "optical-world-engine 0.1.0",
+            "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+            "scene": {
+              "path": "scenes/the_peacock_lamp.owe",
+              "fnv1a64": "056e69c67cc6642c",
+              "edits": []
+            },
+            "detector": {
+              "name": "Room",
+              "description": "ideal observer 'Room' 960x600, fovY=40 deg, pupil diameter=3 mm, focus=1.350000 m, pixel filter gaussian(0.4)",
+              "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ",
+              "pixel_response": "square * gaussian(sigma 0.400000 px)"
+            },
+            "observer_pose": {
+              "position_m": [
+                -0.28,
+                -0.72,
+                1.36
+              ],
+              "look_at_m": [
+                0.05,
+                0.44,
+                1.36
+              ],
+              "up": [
+                0,
+                0,
+                1
+              ],
+              "fov_deg": 40,
+              "pupil_radius_m": 0.0015,
+              "focus_distance_m": 1.35,
+              "width": 960,
+              "height": 600
+            },
+            "integrator": "vcm",
+            "sampling": {
+              "wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm",
+              "fresnel": "stochastic branch selection",
+              "nee": true,
+              "mis": "power heuristic",
+              "russian_roulette_depth": 6,
+              "fresnel_floor": 0,
+              "bidirectional": {
+                "light_vertex_cache": true,
+                "connections_per_vertex": 1,
+                "mis": "balance heuristic over all strategies",
+                "merging": {
+                  "radius_pixels": 2.0,
+                  "alpha": 0.666667
+                }
+              }
+            },
+            "seed": 1000,
+            "samples_per_pixel": 256,
+            "passes": 1,
+            "max_depth": 16,
+            "display": {
+              "exposure_ev": 12.115,
+              "auto_exposure": false,
+              "auto_gain_ev": 0,
+              "white_balance_kelvin": 3000,
+              "tone": "agx"
+            },
+            "render_seconds": 479.485,
+            "statistics": {
+              "paths": 294912000,
+              "segments": 1824707417,
+              "region_inconsistencies": 1824773,
+              "leaks": 0,
+              "first_inconsistency": {
+                "boundary": "Lead2A.side",
+                "ray_region": "ambient[air]"
+              }
+            },
+            "mean_Y": 1.37045e-05,
+            "world": {
+              "media": [
+                {
+                  "name": "air",
+                  "index": "ciddor-air",
+                  "n_d": 1.00028
+                },
+                {
+                  "name": "opaque",
+                  "index": "constant(1)",
+                  "n_d": 1
+                }
+              ],
+              "regions": 28,
+              "boundaries": 55,
+              "bodies": 43,
+              "assemblies": 2
+            }
+          }
+        },
+        {
+          "path": "out/performance_20261008/corrected_scans_reference256_seed1001/the_peacock_lamp/reference.pfm",
+          "sha256": "9916c58f530a1801be2716c6dfe0666250c82cdf092978a02bb673f612bfbcbc",
+          "native": {
+            "engine": "optical-world-engine 0.1.0",
+            "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+            "scene": {
+              "path": "scenes/the_peacock_lamp.owe",
+              "fnv1a64": "056e69c67cc6642c",
+              "edits": []
+            },
+            "detector": {
+              "name": "Room",
+              "description": "ideal observer 'Room' 960x600, fovY=40 deg, pupil diameter=3 mm, focus=1.350000 m, pixel filter gaussian(0.4)",
+              "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ",
+              "pixel_response": "square * gaussian(sigma 0.400000 px)"
+            },
+            "observer_pose": {
+              "position_m": [
+                -0.28,
+                -0.72,
+                1.36
+              ],
+              "look_at_m": [
+                0.05,
+                0.44,
+                1.36
+              ],
+              "up": [
+                0,
+                0,
+                1
+              ],
+              "fov_deg": 40,
+              "pupil_radius_m": 0.0015,
+              "focus_distance_m": 1.35,
+              "width": 960,
+              "height": 600
+            },
+            "integrator": "vcm",
+            "sampling": {
+              "wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm",
+              "fresnel": "stochastic branch selection",
+              "nee": true,
+              "mis": "power heuristic",
+              "russian_roulette_depth": 6,
+              "fresnel_floor": 0,
+              "bidirectional": {
+                "light_vertex_cache": true,
+                "connections_per_vertex": 1,
+                "mis": "balance heuristic over all strategies",
+                "merging": {
+                  "radius_pixels": 2.0,
+                  "alpha": 0.666667
+                }
+              }
+            },
+            "seed": 1001,
+            "samples_per_pixel": 256,
+            "passes": 1,
+            "max_depth": 16,
+            "display": {
+              "exposure_ev": 12.115,
+              "auto_exposure": false,
+              "auto_gain_ev": 0,
+              "white_balance_kelvin": 3000,
+              "tone": "agx"
+            },
+            "render_seconds": 482.993,
+            "statistics": {
+              "paths": 294912000,
+              "segments": 1824759703,
+              "region_inconsistencies": 1821410,
+              "leaks": 0,
+              "first_inconsistency": {
+                "boundary": "Lead3B.side",
+                "ray_region": "ambient[air]"
+              }
+            },
+            "mean_Y": 1.28978e-05,
+            "world": {
+              "media": [
+                {
+                  "name": "air",
+                  "index": "ciddor-air",
+                  "n_d": 1.00028
+                },
+                {
+                  "name": "opaque",
+                  "index": "constant(1)",
+                  "n_d": 1
+                }
+              ],
+              "regions": 28,
+              "boundaries": 55,
+              "bodies": 43,
+              "assemblies": 2
+            }
+          }
+        }
+      ]
+    },
+    {
+      "suite": "scans",
+      "scene": "the_invisible_window",
+      "spp": 256,
+      "seed1001_against_1000_rel_mse": 0.006140450650473701,
+      "seed1000_against_1001_rel_mse": 0.006264442143466951,
+      "ordinary_mse": 693952.0779663959,
+      "mse_over_seed1000_mean_square": 0.0014558401020892927,
+      "seed1000_channel_means": [
+        14107.083040446956,
+        12050.413228787875,
+        10615.593716589257
+      ],
+      "seed1001_channel_means": [
+        13864.69325206617,
+        12039.133673605273,
+        10627.25626656146
+      ],
+      "references": [
+        {
+          "path": "out/performance_20261008/corrected_scans_reference256_seed1000/the_invisible_window/reference.pfm",
+          "sha256": "197e993495b8db5f6d1289ea1c52c7b34bdee0153d7b90b62f49262dfd48cae0",
+          "native": {
+            "engine": "optical-world-engine 0.1.0",
+            "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+            "scene": {
+              "path": "scenes/the_invisible_window.owe",
+              "fnv1a64": "1ef1c7863c3dfa24",
+              "edits": []
+            },
+            "detector": {
+              "name": "Wall",
+              "description": "ideal observer 'Wall' 960x600, fovY=35 deg, pupil diameter=2 mm, focus=0.715000 m, pixel filter gaussian(0.4)",
+              "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ",
+              "pixel_response": "square * gaussian(sigma 0.400000 px)"
+            },
+            "observer_pose": {
+              "position_m": [
+                0.55,
+                -0.21,
+                1.245
+              ],
+              "look_at_m": [
+                1.2256164802,
+                0.025,
+                1.245
+              ],
+              "up": [
+                0,
+                0,
+                1
+              ],
+              "fov_deg": 35,
+              "pupil_radius_m": 0.001,
+              "focus_distance_m": 0.715,
+              "width": 960,
+              "height": 600
+            },
+            "integrator": "sppm",
+            "sampling": {
+              "wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm",
+              "fresnel": "stochastic branch selection",
+              "nee": true,
+              "mis": "power heuristic",
+              "russian_roulette_depth": 6,
+              "fresnel_floor": 0,
+              "photons": {
+                "radius_pixels": 2.0,
+                "alpha": 0.666667,
+                "per_pixel_and_iteration": 16.0,
+                "wavelengths": "shared by every path and photon of an iteration"
+              }
+            },
+            "seed": 1000,
+            "samples_per_pixel": 256,
+            "passes": 1,
+            "max_depth": 10,
+            "display": {
+              "exposure_ev": -17,
+              "auto_exposure": false,
+              "auto_gain_ev": 0,
+              "white_balance_kelvin": 5800,
+              "tone": "agx"
+            },
+            "render_seconds": 8104.42,
+            "statistics": {
+              "paths": 2506752000,
+              "segments": 13885317886,
+              "region_inconsistencies": 569,
+              "leaks": 66,
+              "first_inconsistency": {
+                "boundary": "Heliostat.face",
+                "ray_region": "Panel.interior[PMMA]"
+              }
+            },
+            "mean_Y": 12384.3,
+            "world": {
+              "media": [
+                {
+                  "name": "air",
+                  "index": "ciddor-air",
+                  "n_d": 1.00028
+                },
+                {
+                  "name": "opaque",
+                  "index": "constant(1)",
+                  "n_d": 1
+                },
+                {
+                  "name": "PMMA",
+                  "index": "sellmeier(B1=1.1819 C1=0.011313)",
+                  "n_d": 1.49062
+                }
+              ],
+              "regions": 29,
+              "boundaries": 34,
+              "bodies": 30,
+              "assemblies": 0
+            }
+          }
+        },
+        {
+          "path": "out/performance_20261008/corrected_scans_reference256_seed1001/the_invisible_window/reference.pfm",
+          "sha256": "fbee8e7fe8e77ff4005924c431d1bcff3e787eff1481300532089efddc6b5103",
+          "native": {
+            "engine": "optical-world-engine 0.1.0",
+            "backend": "gpu: NVIDIA GeForce RTX 4060 Laptop GPU (Vulkan 1.4.351, ray queries; Slang kernels, float32, camera-relative, hardware traversal)",
+            "scene": {
+              "path": "scenes/the_invisible_window.owe",
+              "fnv1a64": "1ef1c7863c3dfa24",
+              "edits": []
+            },
+            "detector": {
+              "name": "Wall",
+              "description": "ideal observer 'Wall' 960x600, fovY=35 deg, pupil diameter=2 mm, focus=0.715000 m, pixel filter gaussian(0.4)",
+              "quantity": "radiance [W m^-2 sr^-1] as CIE XYZ",
+              "pixel_response": "square * gaussian(sigma 0.400000 px)"
+            },
+            "observer_pose": {
+              "position_m": [
+                0.55,
+                -0.21,
+                1.245
+              ],
+              "look_at_m": [
+                1.2256164802,
+                0.025,
+                1.245
+              ],
+              "up": [
+                0,
+                0,
+                1
+              ],
+              "fov_deg": 35,
+              "pupil_radius_m": 0.001,
+              "focus_distance_m": 0.715,
+              "width": 960,
+              "height": 600
+            },
+            "integrator": "sppm",
+            "sampling": {
+              "wavelengths": "4 per path (hero + 3 stratified; secondaries terminated at dispersive interfaces), visible-importance pdf on [360, 830] nm",
+              "fresnel": "stochastic branch selection",
+              "nee": true,
+              "mis": "power heuristic",
+              "russian_roulette_depth": 6,
+              "fresnel_floor": 0,
+              "photons": {
+                "radius_pixels": 2.0,
+                "alpha": 0.666667,
+                "per_pixel_and_iteration": 16.0,
+                "wavelengths": "shared by every path and photon of an iteration"
+              }
+            },
+            "seed": 1001,
+            "samples_per_pixel": 256,
+            "passes": 1,
+            "max_depth": 10,
+            "display": {
+              "exposure_ev": -17,
+              "auto_exposure": false,
+              "auto_gain_ev": 0,
+              "white_balance_kelvin": 5800,
+              "tone": "agx"
+            },
+            "render_seconds": 8118.41,
+            "statistics": {
+              "paths": 2506752000,
+              "segments": 13884679393,
+              "region_inconsistencies": 579,
+              "leaks": 63,
+              "first_inconsistency": {
+                "boundary": "Heliostat.face",
+                "ray_region": "Panel.interior[PMMA]"
+              }
+            },
+            "mean_Y": 12325.5,
+            "world": {
+              "media": [
+                {
+                  "name": "air",
+                  "index": "ciddor-air",
+                  "n_d": 1.00028
+                },
+                {
+                  "name": "opaque",
+                  "index": "constant(1)",
+                  "n_d": 1
+                },
+                {
+                  "name": "PMMA",
+                  "index": "sellmeier(B1=1.1819 C1=0.011313)",
+                  "n_d": 1.49062
+                }
+              ],
+              "regions": 29,
+              "boundaries": 34,
+              "bodies": 30,
+              "assemblies": 0
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "canonical_comparison": {
+    "metric": "rel_mse",
+    "time_key": "seconds",
+    "method": "fastest_observed_meeting_error_no_interpolation",
+    "goal_speedup": 4.0,
+    "matched_cases": 2,
+    "required_cases": 8,
+    "complete": false,
+    "geomean_speedup": null,
+    "partial_geomean_speedup": 0.3381053416529713,
+    "profiled": false,
+    "goal_met": false,
+    "scenes": [
+      {
+        "scene": "camera_obscura",
+        "status": "candidate_target_missing",
+        "target_error": 0.017610902949544153,
+        "baseline_seconds": 0.0354336
+      },
+      {
+        "scene": "glass_of_water",
+        "status": "candidate_target_missing",
+        "target_error": 0.7151441595699515,
+        "baseline_seconds": 3.26342
+      },
+      {
+        "scene": "observatory_saturn",
+        "status": "candidate_target_missing",
+        "target_error": 0.44783406010253035,
+        "baseline_seconds": 3.6569
+      },
+      {
+        "scene": "prism_in_sunlight",
+        "status": "matched",
+        "target_error": 0.024383862931984236,
+        "baseline_seconds": 0.0725991,
+        "candidate_seconds": 0.200942,
+        "speedup": 0.3612938061729255
+      },
+      {
+        "scene": "study_camera",
+        "status": "candidate_target_missing",
+        "target_error": 1.2635393005548012,
+        "baseline_seconds": 0.907726
+      },
+      {
+        "scene": "study_magnifier",
+        "status": "candidate_target_missing",
+        "target_error": 0.2133945309554973,
+        "baseline_seconds": 0.444103
+      },
+      {
+        "scene": "the_lens",
+        "status": "matched",
+        "target_error": 0.06287789126926115,
+        "baseline_seconds": 0.0174649,
+        "candidate_seconds": 0.0551979,
+        "speedup": 0.31640515309459233
+      },
+      {
+        "scene": "the_telescope",
+        "status": "candidate_target_missing",
+        "target_error": 0.026459077423971092,
+        "baseline_seconds": 1.79811
+      }
+    ],
+    "performance_suite_complete": false
+  },
+  "canonical": [
+    {
+      "scene": "the_lens",
+      "suite": "canonical",
+      "settings": {
+        "scene": "scenes/the_lens.owe",
+        "detector": "Eye",
+        "backend": "gpu",
+        "device": 1,
+        "threads": 0,
+        "passes": 1,
+        "seed": 1,
+        "resolution": "256x192",
+        "max_depth": 64
+      },
+      "runs": [
+        {
+          "integrator": "path",
+          "spp": 16,
+          "seconds": 0.0551979,
+          "mean_Y": 0.834191,
+          "paths": 786432,
+          "inconsistencies": 1,
+          "leaks": 0,
+          "mpaths_per_second": 14.24749854614034,
+          "wall_seconds": 0.5539133769998443,
+          "non_transport_seconds": 0.4987154769998443,
+          "peak_host_rss_bytes": 585707520,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 0.062863447069316,
+          "rel_mse_no_glints": 0.05380096274968258,
+          "mean_ratio": 0.9627977401152852
+        },
+        {
+          "integrator": "path",
+          "spp": 64,
+          "seconds": 0.208725,
+          "mean_Y": 0.833931,
+          "paths": 3145728,
+          "inconsistencies": 1,
+          "leaks": 1,
+          "mpaths_per_second": 15.071160618038087,
+          "wall_seconds": 0.7290764569988823,
+          "non_transport_seconds": 0.5203514569988823,
+          "peak_host_rss_bytes": 585367552,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 0.6036109909661243,
+          "rel_mse_no_glints": 0.014757659518022926,
+          "mean_ratio": 0.9626326216694069
+        },
+        {
+          "integrator": "path",
+          "spp": 256,
+          "seconds": 0.828045,
+          "mean_Y": 0.853416,
+          "paths": 12582912,
+          "inconsistencies": 1,
+          "leaks": 1,
+          "mpaths_per_second": 15.19592775754941,
+          "wall_seconds": 1.3472990299997036,
+          "non_transport_seconds": 0.5192540299997036,
+          "peak_host_rss_bytes": 585281536,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 74.66222609612176,
+          "rel_mse_no_glints": 5.9610556576499665,
+          "mean_ratio": 1.0264033665939365
+        },
+        {
+          "integrator": "path",
+          "spp": 1024,
+          "seconds": 3.33078,
+          "mean_Y": 0.875137,
+          "paths": 50331648,
+          "inconsistencies": 6,
+          "leaks": 1,
+          "mpaths_per_second": 15.111069479221083,
+          "wall_seconds": 3.8499421660017106,
+          "non_transport_seconds": 0.5191621660017107,
+          "peak_host_rss_bytes": 585867264,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 67.48108248184734,
+          "rel_mse_no_glints": 0.7658787553234497,
+          "mean_ratio": 0.9961355824570444
+        }
+      ],
+      "failures": [],
+      "profiled": false,
+      "reference": {
+        "integrator": "path",
+        "spp": 8192,
+        "seconds": 26.6564,
+        "mean_Y": 0.868655,
+        "glint_fraction": 0.02874755859375,
+        "pfm_sha256": "dcf97050a1ba11e4783fae28a25cef869470144395b3525fe15760fffcc87831",
+        "wall_seconds": 27.29103583200049,
+        "non_transport_seconds": 0.6346358320004875,
+        "peak_host_rss_bytes": 585617408,
+        "rss_method": "isolated_resource_children_maxrss"
+      },
+      "measurement_id": "400c64ee817bc11c8e49586c3339e4e9c66dd784c0eb1575253666ec938c7aa1"
+    },
+    {
+      "scene": "prism_in_sunlight",
+      "suite": "canonical",
+      "settings": {
+        "scene": "scenes/prism_in_sunlight.owe",
+        "detector": "Eye",
+        "backend": "gpu",
+        "device": 1,
+        "threads": 0,
+        "passes": 1,
+        "seed": 1,
+        "resolution": "256x192",
+        "max_depth": 64
+      },
+      "runs": [
+        {
+          "integrator": "path",
+          "spp": 16,
+          "seconds": 0.0506583,
+          "mean_Y": 0.00159585,
+          "paths": 786432,
+          "inconsistencies": 0,
+          "leaks": 0,
+          "mpaths_per_second": 15.524247754069915,
+          "wall_seconds": 0.5728565730023547,
+          "non_transport_seconds": 0.5221982730023547,
+          "peak_host_rss_bytes": 585191424,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 0.08437314441824181,
+          "rel_mse_no_glints": 0.08407082449730491,
+          "mean_ratio": 0.8514497798523656
+        },
+        {
+          "integrator": "path",
+          "spp": 64,
+          "seconds": 0.200942,
+          "mean_Y": 0.00159498,
+          "paths": 3145728,
+          "inconsistencies": 0,
+          "leaks": 0,
+          "mpaths_per_second": 15.654905395586784,
+          "wall_seconds": 0.7377660529964487,
+          "non_transport_seconds": 0.5368240529964488,
+          "peak_host_rss_bytes": 585396224,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 0.023678450800126656,
+          "rel_mse_no_glints": 0.02341062031963864,
+          "mean_ratio": 0.851573226854776
+        },
+        {
+          "integrator": "path",
+          "spp": 256,
+          "seconds": 0.805987,
+          "mean_Y": 0.00307412,
+          "paths": 12582912,
+          "inconsistencies": 0,
+          "leaks": 0,
+          "mpaths_per_second": 15.611805153184854,
+          "wall_seconds": 1.3456516430014744,
+          "non_transport_seconds": 0.5396646430014744,
+          "peak_host_rss_bytes": 585252864,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 199853.48579456584,
+          "rel_mse_no_glints": 204530.65937937537,
+          "mean_ratio": 1.2565803081942089
+        },
+        {
+          "integrator": "path",
+          "spp": 1024,
+          "seconds": 3.21524,
+          "mean_Y": 0.00175659,
+          "paths": 50331648,
+          "inconsistencies": 1,
+          "leaks": 0,
+          "mpaths_per_second": 15.65408740871599,
+          "wall_seconds": 3.7467697110041627,
+          "non_transport_seconds": 0.5315297110041626,
+          "peak_host_rss_bytes": 584933376,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 21925.8867845004,
+          "rel_mse_no_glints": 0.0016120618101493642,
+          "mean_ratio": 0.8719564908796674
+        }
+      ],
+      "failures": [],
+      "profiled": false,
+      "reference": {
+        "integrator": "path",
+        "spp": 8192,
+        "seconds": 25.7158,
+        "mean_Y": 0.00194048,
+        "glint_fraction": 0.022867838541666668,
+        "pfm_sha256": "d75bb5a5efdfe41dee6016e9fa797b738a3f936f132ebc404d026e0676b0bee0",
+        "wall_seconds": 26.238583489997836,
+        "non_transport_seconds": 0.5227834899978347,
+        "peak_host_rss_bytes": 585281536,
+        "rss_method": "isolated_resource_children_maxrss"
+      },
+      "measurement_id": "807abd1e9db246e4fa0cf6a269e47e214dd159d4a28a8c039baf4d784b16f92a"
+    },
+    {
+      "scene": "glass_of_water",
+      "suite": "canonical",
+      "settings": {
+        "scene": "scenes/glass/glass_of_water.owe",
+        "detector": "Eye",
+        "backend": "gpu",
+        "device": 1,
+        "threads": 0,
+        "passes": 1,
+        "seed": 1,
+        "resolution": "256x192",
+        "max_depth": 64
+      },
+      "runs": [
+        {
+          "integrator": "path",
+          "spp": 16,
+          "seconds": 0.221659,
+          "mean_Y": 0.480217,
+          "paths": 786432,
+          "inconsistencies": 0,
+          "leaks": 0,
+          "mpaths_per_second": 3.5479362444114613,
+          "wall_seconds": 0.7214992470035213,
+          "non_transport_seconds": 0.4998402470035213,
+          "peak_host_rss_bytes": 585662464,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 30.4509621384527,
+          "rel_mse_no_glints": 30.4509621384527,
+          "mean_ratio": 1.0023825667324506
+        },
+        {
+          "integrator": "path",
+          "spp": 64,
+          "seconds": 0.892921,
+          "mean_Y": 0.481814,
+          "paths": 3145728,
+          "inconsistencies": 0,
+          "leaks": 0,
+          "mpaths_per_second": 3.5229633976577994,
+          "wall_seconds": 1.3812430809994112,
+          "non_transport_seconds": 0.4883220809994112,
+          "peak_host_rss_bytes": 585576448,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 9.374904185939505,
+          "rel_mse_no_glints": 9.374904185939505,
+          "mean_ratio": 0.9985103640600569
+        },
+        {
+          "integrator": "path",
+          "spp": 256,
+          "seconds": 3.56853,
+          "mean_Y": 0.483284,
+          "paths": 12582912,
+          "inconsistencies": 0,
+          "leaks": 0,
+          "mpaths_per_second": 3.526077124193996,
+          "wall_seconds": 4.065947291004704,
+          "non_transport_seconds": 0.49741729100470433,
+          "peak_host_rss_bytes": 585760768,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 3.5138690584154997,
+          "rel_mse_no_glints": 3.5138690584154997,
+          "mean_ratio": 1.006843313331129
+        },
+        {
+          "integrator": "path",
+          "spp": 1024,
+          "seconds": 14.2619,
+          "mean_Y": 0.481128,
+          "paths": 50331648,
+          "inconsistencies": 3,
+          "leaks": 0,
+          "mpaths_per_second": 3.5290983669777516,
+          "wall_seconds": 14.76382630700391,
+          "non_transport_seconds": 0.5019263070039095,
+          "peak_host_rss_bytes": 585777152,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 0.7202089351104614,
+          "rel_mse_no_glints": 0.7202089351104614,
+          "mean_ratio": 1.0007106023284382
+        }
+      ],
+      "failures": [],
+      "profiled": false,
+      "reference": {
+        "integrator": "path",
+        "spp": 8192,
+        "seconds": 114.19,
+        "mean_Y": 0.481243,
+        "glint_fraction": 0.0,
+        "pfm_sha256": "bb2de133c97b676683215a52a4b4a6b6705e39ee091a9deefb809d01bf9e076e",
+        "wall_seconds": 114.68836460600141,
+        "non_transport_seconds": 0.49836460600141663,
+        "peak_host_rss_bytes": 585781248,
+        "rss_method": "isolated_resource_children_maxrss"
+      },
+      "measurement_id": "0a7a7c1e8986df08d783e64f9db944e4966f98b3c8ad9f6a13fa7adf07885f8f"
+    },
+    {
+      "scene": "study_magnifier",
+      "suite": "canonical",
+      "settings": {
+        "scene": "scenes/the_study.owe",
+        "detector": "Magnifier",
+        "backend": "gpu",
+        "device": 1,
+        "threads": 0,
+        "passes": 1,
+        "seed": 1,
+        "resolution": "256x192",
+        "max_depth": 64
+      },
+      "runs": [
+        {
+          "integrator": "path",
+          "spp": 16,
+          "seconds": 0.431953,
+          "mean_Y": 0.687577,
+          "paths": 786432,
+          "inconsistencies": 0,
+          "leaks": 0,
+          "mpaths_per_second": 1.8206425236078927,
+          "wall_seconds": 0.9503606449943618,
+          "non_transport_seconds": 0.5184076449943618,
+          "peak_host_rss_bytes": 585445376,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 6.192981784993474,
+          "rel_mse_no_glints": 6.324522770051187,
+          "mean_ratio": 0.9623895941164948
+        },
+        {
+          "integrator": "path",
+          "spp": 64,
+          "seconds": 1.71463,
+          "mean_Y": 0.68853,
+          "paths": 3145728,
+          "inconsistencies": 1,
+          "leaks": 0,
+          "mpaths_per_second": 1.8346395432250688,
+          "wall_seconds": 2.2220748489999096,
+          "non_transport_seconds": 0.5074448489999095,
+          "peak_host_rss_bytes": 585355264,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 0.23661570056212536,
+          "rel_mse_no_glints": 0.23692544300488325,
+          "mean_ratio": 0.9620158823972453
+        },
+        {
+          "integrator": "path",
+          "spp": 256,
+          "seconds": 6.84727,
+          "mean_Y": 0.708664,
+          "paths": 12582912,
+          "inconsistencies": 0,
+          "leaks": 0,
+          "mpaths_per_second": 1.837653838683154,
+          "wall_seconds": 7.358993161004037,
+          "non_transport_seconds": 0.5117231610040367,
+          "peak_host_rss_bytes": 585691136,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 3032.4847057707566,
+          "rel_mse_no_glints": 3077.7001422170833,
+          "mean_ratio": 0.9902252202948346
+        },
+        {
+          "integrator": "path",
+          "spp": 1024,
+          "seconds": 27.3728,
+          "mean_Y": 0.732813,
+          "paths": 50331648,
+          "inconsistencies": 3,
+          "leaks": 0,
+          "mpaths_per_second": 1.8387467851297636,
+          "wall_seconds": 27.883383045998926,
+          "non_transport_seconds": 0.5105830459989242,
+          "peak_host_rss_bytes": 585797632,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 31.65051364379426,
+          "rel_mse_no_glints": 32.18229607003674,
+          "mean_ratio": 0.9974403260090022
+        }
+      ],
+      "failures": [],
+      "profiled": false,
+      "reference": {
+        "integrator": "path",
+        "spp": 8192,
+        "seconds": 218.865,
+        "mean_Y": 0.711666,
+        "glint_fraction": 0.022318522135416668,
+        "pfm_sha256": "c3c09bce13d479c34dfa70c91d3017224f6b492e5d180bdcd9f1f7f1b0fe90a6",
+        "wall_seconds": 219.38089679300174,
+        "non_transport_seconds": 0.5158967930017297,
+        "peak_host_rss_bytes": 585486336,
+        "rss_method": "isolated_resource_children_maxrss"
+      },
+      "measurement_id": "5449c89947684bf9e7b5c13b4afe33b2edd22665b95f7e0844ea7003fcdc7f10"
+    },
+    {
+      "scene": "the_telescope",
+      "suite": "canonical",
+      "settings": {
+        "scene": "scenes/the_telescope.owe",
+        "detector": "Eyepiece",
+        "backend": "gpu",
+        "device": 1,
+        "threads": 0,
+        "passes": 1,
+        "seed": 1,
+        "resolution": "256x192",
+        "max_depth": 64
+      },
+      "runs": [
+        {
+          "integrator": "path",
+          "spp": 16,
+          "seconds": 0.183914,
+          "mean_Y": 0.51533,
+          "paths": 786432,
+          "inconsistencies": 0,
+          "leaks": 0,
+          "mpaths_per_second": 4.276085561729939,
+          "wall_seconds": 4.175916585998493,
+          "non_transport_seconds": 3.992002585998493,
+          "peak_host_rss_bytes": 4298612736,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 1.5051230684545198,
+          "rel_mse_no_glints": 1.5051230684545198,
+          "mean_ratio": 0.9940743114530017
+        },
+        {
+          "integrator": "path",
+          "spp": 64,
+          "seconds": 0.642042,
+          "mean_Y": 0.516546,
+          "paths": 3145728,
+          "inconsistencies": 1,
+          "leaks": 0,
+          "mpaths_per_second": 4.899567318025923,
+          "wall_seconds": 4.670984661002876,
+          "non_transport_seconds": 4.028942661002876,
+          "peak_host_rss_bytes": 4298149888,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 0.3856951946402475,
+          "rel_mse_no_glints": 0.3856951946402475,
+          "mean_ratio": 0.9974491167865447
+        },
+        {
+          "integrator": "path",
+          "spp": 256,
+          "seconds": 2.51721,
+          "mean_Y": 0.51691,
+          "paths": 12582912,
+          "inconsistencies": 1,
+          "leaks": 0,
+          "mpaths_per_second": 4.998753381720238,
+          "wall_seconds": 6.621291329000087,
+          "non_transport_seconds": 4.104081329000087,
+          "peak_host_rss_bytes": 4298129408,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 0.09822969705001433,
+          "rel_mse_no_glints": 0.09822969705001433,
+          "mean_ratio": 0.9995395630365502
+        },
+        {
+          "integrator": "path",
+          "spp": 1024,
+          "seconds": 9.9477,
+          "mean_Y": 0.516284,
+          "paths": 50331648,
+          "inconsistencies": 8,
+          "leaks": 0,
+          "mpaths_per_second": 5.0596266473657225,
+          "wall_seconds": 13.921065308000834,
+          "non_transport_seconds": 3.973365308000835,
+          "peak_host_rss_bytes": 4298518528,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 0.026470589499609544,
+          "rel_mse_no_glints": 0.026470589499609544,
+          "mean_ratio": 0.9996312918572682
+        }
+      ],
+      "failures": [],
+      "profiled": false,
+      "reference": {
+        "integrator": "path",
+        "spp": 8192,
+        "seconds": 79.381,
+        "mean_Y": 0.51658,
+        "glint_fraction": 0.0,
+        "pfm_sha256": "6916342ee00f494cc4b635db2197819036dc4c03e7df905c384e7f5fc21ea084",
+        "wall_seconds": 83.4853641150039,
+        "non_transport_seconds": 4.104364115003904,
+        "peak_host_rss_bytes": 4298067968,
+        "rss_method": "isolated_resource_children_maxrss"
+      },
+      "measurement_id": "1b379af57e47714d74a2ff883127e9b19715b435fc565de6dbf1383a33c5132b"
+    },
+    {
+      "scene": "study_camera",
+      "suite": "canonical",
+      "settings": {
+        "scene": "scenes/the_study.owe",
+        "detector": "Cam",
+        "backend": "gpu",
+        "device": 1,
+        "threads": 0,
+        "passes": 1,
+        "seed": 1,
+        "resolution": "256x192",
+        "max_depth": 64
+      },
+      "runs": [
+        {
+          "integrator": "path",
+          "spp": 16,
+          "seconds": 0.294957,
+          "mean_Y": 0.0185508,
+          "paths": 786431,
+          "inconsistencies": 0,
+          "leaks": 0,
+          "mpaths_per_second": 2.666256437379008,
+          "wall_seconds": 0.8210981709999032,
+          "non_transport_seconds": 0.5261411709999032,
+          "peak_host_rss_bytes": 585748480,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 6.086982515227352,
+          "rel_mse_no_glints": 6.092282347041529,
+          "mean_ratio": 0.9511527886483668
+        },
+        {
+          "integrator": "path",
+          "spp": 64,
+          "seconds": 1.1813,
+          "mean_Y": 0.0186382,
+          "paths": 3145728,
+          "inconsistencies": 1,
+          "leaks": 0,
+          "mpaths_per_second": 2.662937441801405,
+          "wall_seconds": 1.6989228950042161,
+          "non_transport_seconds": 0.5176228950042161,
+          "peak_host_rss_bytes": 585699328,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 2.7063408312948187,
+          "rel_mse_no_glints": 2.7128996761302435,
+          "mean_ratio": 0.963458799892747
+        },
+        {
+          "integrator": "path",
+          "spp": 256,
+          "seconds": 4.72506,
+          "mean_Y": 0.0186733,
+          "paths": 12582912,
+          "inconsistencies": 3,
+          "leaks": 0,
+          "mpaths_per_second": 2.6630163426496174,
+          "wall_seconds": 5.23469416500302,
+          "non_transport_seconds": 0.5096341650030203,
+          "peak_host_rss_bytes": 585293824,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 1.341109071016826,
+          "rel_mse_no_glints": 1.347580688940326,
+          "mean_ratio": 0.9615661577087664
+        },
+        {
+          "integrator": "path",
+          "spp": 1024,
+          "seconds": 18.9141,
+          "mean_Y": 0.0238367,
+          "paths": 50331647,
+          "inconsistencies": 33,
+          "leaks": 0,
+          "mpaths_per_second": 2.66106486695111,
+          "wall_seconds": 19.429370157005906,
+          "non_transport_seconds": 0.5152701570059044,
+          "peak_host_rss_bytes": 585428992,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 4204.588986277508,
+          "rel_mse_no_glints": 3028.9422527955307,
+          "mean_ratio": 1.2359959807027794
+        }
+      ],
+      "failures": [],
+      "profiled": false,
+      "reference": {
+        "integrator": "path",
+        "spp": 8192,
+        "seconds": 151.253,
+        "mean_Y": 0.019495,
+        "glint_fraction": 0.007100423177083333,
+        "pfm_sha256": "7054000e9dd226428d668e6fcb28a8054dfd1a8907663d3616cacd682b6368aa",
+        "wall_seconds": 151.8862171350047,
+        "non_transport_seconds": 0.6332171350047133,
+        "peak_host_rss_bytes": 585396224,
+        "rss_method": "isolated_resource_children_maxrss"
+      },
+      "measurement_id": "d49dcc32dbbde63060a20ad2678e412cd37a0d6fb32189c93764d282847a9533"
+    },
+    {
+      "scene": "observatory_saturn",
+      "suite": "canonical",
+      "settings": {
+        "scene": "scenes/the_observatory.owe",
+        "detector": "SaturnEyepiece",
+        "backend": "gpu",
+        "device": 1,
+        "threads": 0,
+        "passes": 1,
+        "seed": 1,
+        "resolution": "256x192",
+        "max_depth": 64
+      },
+      "runs": [
+        {
+          "integrator": "path",
+          "spp": 16,
+          "seconds": 4.13842,
+          "mean_Y": 0.000131558,
+          "paths": 786432,
+          "inconsistencies": 9,
+          "leaks": 0,
+          "mpaths_per_second": 0.19003194455855132,
+          "wall_seconds": 6.875123990001157,
+          "non_transport_seconds": 2.736703990001157,
+          "peak_host_rss_bytes": 2527240192,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 43.67501098416673,
+          "rel_mse_no_glints": 43.67501098416673,
+          "mean_ratio": 1.0335985144340416
+        },
+        {
+          "integrator": "path",
+          "spp": 64,
+          "seconds": 16.3268,
+          "mean_Y": 0.000126564,
+          "paths": 3145728,
+          "inconsistencies": 41,
+          "leaks": 0,
+          "mpaths_per_second": 0.19267266090109514,
+          "wall_seconds": 19.00008176299889,
+          "non_transport_seconds": 2.67328176299889,
+          "peak_host_rss_bytes": 2526887936,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 5.76791362431282,
+          "rel_mse_no_glints": 5.76791362431282,
+          "mean_ratio": 1.0143074234378238
+        },
+        {
+          "integrator": "path",
+          "spp": 256,
+          "seconds": 68.973,
+          "mean_Y": 0.000126253,
+          "paths": 12582912,
+          "inconsistencies": 168,
+          "leaks": 0,
+          "mpaths_per_second": 0.18243243008133617,
+          "wall_seconds": 71.62832271599473,
+          "non_transport_seconds": 2.6553227159947284,
+          "peak_host_rss_bytes": 2529439744,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 1.7123034596640943,
+          "rel_mse_no_glints": 1.7123034596640943,
+          "mean_ratio": 0.9960852438744775
+        },
+        {
+          "integrator": "path",
+          "spp": 1024,
+          "seconds": 277.722,
+          "mean_Y": 0.00012669,
+          "paths": 50331648,
+          "inconsistencies": 591,
+          "leaks": 0,
+          "mpaths_per_second": 0.1812303238490289,
+          "wall_seconds": 280.3730837580006,
+          "non_transport_seconds": 2.6510837580005955,
+          "peak_host_rss_bytes": 2530615296,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 0.4525345891990835,
+          "rel_mse_no_glints": 0.4525345891990835,
+          "mean_ratio": 1.0009028997233813
+        }
+      ],
+      "failures": [],
+      "profiled": false,
+      "reference": {
+        "integrator": "path",
+        "spp": 8192,
+        "seconds": 2178.05,
+        "mean_Y": 0.000126756,
+        "glint_fraction": 0.0,
+        "pfm_sha256": "38ba5432150e0b63f92decf0e6f08a4a97a7ccc539740b95330b761c3c6301e4",
+        "wall_seconds": 2180.8241447699984,
+        "non_transport_seconds": 2.774144769998202,
+        "peak_host_rss_bytes": 2522742784,
+        "rss_method": "isolated_resource_children_maxrss"
+      },
+      "measurement_id": "6e2210a2b55ec186bd6471112a81f3d455b8e18c8582ecf3d290b19ec69eea1d"
+    },
+    {
+      "scene": "camera_obscura",
+      "suite": "canonical",
+      "settings": {
+        "scene": "scenes/camera_obscura.owe",
+        "detector": "Inside",
+        "backend": "gpu",
+        "device": 1,
+        "threads": 0,
+        "passes": 1,
+        "seed": 1,
+        "resolution": "256x192",
+        "max_depth": 64
+      },
+      "runs": [
+        {
+          "integrator": "path",
+          "spp": 16,
+          "seconds": 0.17678,
+          "mean_Y": 2.9411e-07,
+          "paths": 786432,
+          "inconsistencies": 0,
+          "leaks": 0,
+          "mpaths_per_second": 4.448648037108271,
+          "wall_seconds": 0.6916522800020175,
+          "non_transport_seconds": 0.5148722800020176,
+          "peak_host_rss_bytes": 586240000,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 0.017611186329937738,
+          "rel_mse_no_glints": 0.015604866227581957,
+          "mean_ratio": 0.8742161127790639
+        },
+        {
+          "integrator": "path",
+          "spp": 64,
+          "seconds": 0.703201,
+          "mean_Y": 3.1036e-07,
+          "paths": 3145728,
+          "inconsistencies": 0,
+          "leaks": 0,
+          "mpaths_per_second": 4.473440737427849,
+          "wall_seconds": 1.2243454700001166,
+          "non_transport_seconds": 0.5211444700001167,
+          "peak_host_rss_bytes": 586358784,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 8973.766969093147,
+          "rel_mse_no_glints": 10041.170163406916,
+          "mean_ratio": 0.9134173491416785
+        },
+        {
+          "integrator": "path",
+          "spp": 256,
+          "seconds": 2.81536,
+          "mean_Y": 7.90886e-07,
+          "paths": 12582912,
+          "inconsistencies": 1,
+          "leaks": 0,
+          "mpaths_per_second": 4.469379404410093,
+          "wall_seconds": 3.331935390000581,
+          "non_transport_seconds": 0.5165753900005807,
+          "peak_host_rss_bytes": 586530816,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 1982332.040147362,
+          "rel_mse_no_glints": 756737.5307826465,
+          "mean_ratio": 2.3063559580306343
+        },
+        {
+          "integrator": "path",
+          "spp": 1024,
+          "seconds": 11.2633,
+          "mean_Y": 4.28083e-07,
+          "paths": 50331648,
+          "inconsistencies": 1,
+          "leaks": 0,
+          "mpaths_per_second": 4.468641339571884,
+          "wall_seconds": 11.768306710000616,
+          "non_transport_seconds": 0.5050067100006164,
+          "peak_host_rss_bytes": 586403840,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 137813.69616476048,
+          "rel_mse_no_glints": 48018.963288995576,
+          "mean_ratio": 1.269770963188221
+        }
+      ],
+      "failures": [],
+      "profiled": false,
+      "reference": {
+        "integrator": "path",
+        "spp": 8192,
+        "seconds": 90.1641,
+        "mean_Y": 3.37967e-07,
+        "glint_fraction": 0.10630289713541667,
+        "pfm_sha256": "e518207a8bf08187de08e602d0076091bf94d1ba7a8657088bd4a58ee385649f",
+        "wall_seconds": 90.67207030999998,
+        "non_transport_seconds": 0.5079703099999762,
+        "peak_host_rss_bytes": 586330112,
+        "rss_method": "isolated_resource_children_maxrss"
+      },
+      "measurement_id": "e4259812727aea5d217e87506360603bcbe4d4876b2bea5b8a054737036e88d6"
+    }
+  ],
+  "historical_canonical": [
+    {
+      "scene": "the_lens",
+      "suite": "canonical",
+      "settings": {
+        "scene": "scenes/the_lens.owe",
+        "detector": "Eye",
+        "backend": "gpu",
+        "device": 1,
+        "threads": 0,
+        "passes": 1,
+        "seed": 1,
+        "resolution": "256x192",
+        "max_depth": 64
+      },
+      "runs": [
+        {
+          "integrator": "path",
+          "spp": 16,
+          "seconds": 0.0174649,
+          "mean_Y": 0.83423,
+          "paths": 786432,
+          "inconsistencies": 3,
+          "leaks": 2,
+          "mpaths_per_second": 45.02928731341147,
+          "wall_seconds": 0.6270192910014885,
+          "non_transport_seconds": 0.6095543910014884,
+          "peak_host_rss_bytes": 585306112,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 0.06287789126926115,
+          "rel_mse_no_glints": 0.053815834488988946,
+          "mean_ratio": 0.962839023893217
+        },
+        {
+          "integrator": "path",
+          "spp": 64,
+          "seconds": 0.0671971,
+          "mean_Y": 0.833957,
+          "paths": 3145728,
+          "inconsistencies": 5,
+          "leaks": 2,
+          "mpaths_per_second": 46.81344879466525,
+          "wall_seconds": 0.7651358150033047,
+          "non_transport_seconds": 0.6979387150033047,
+          "peak_host_rss_bytes": 585240576,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 0.60361760213744,
+          "rel_mse_no_glints": 0.014764463303789901,
+          "mean_ratio": 0.962651035668747
+        },
+        {
+          "integrator": "path",
+          "spp": 256,
+          "seconds": 0.314932,
+          "mean_Y": 0.85344,
+          "paths": 12582912,
+          "inconsistencies": 16,
+          "leaks": 12,
+          "mpaths_per_second": 39.95437745291047,
+          "wall_seconds": 1.009328447005828,
+          "non_transport_seconds": 0.6943964470058279,
+          "peak_host_rss_bytes": 585113600,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 74.66222944133277,
+          "rel_mse_no_glints": 5.961058876076419,
+          "mean_ratio": 1.0264337531203407
+        },
+        {
+          "integrator": "path",
+          "spp": 1024,
+          "seconds": 1.03452,
+          "mean_Y": 0.875146,
+          "paths": 50331648,
+          "inconsistencies": 70,
+          "leaks": 52,
+          "mpaths_per_second": 48.652174921702816,
+          "wall_seconds": 1.6865564460022142,
+          "non_transport_seconds": 0.6520364460022141,
+          "peak_host_rss_bytes": 585166848,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 67.48108242747068,
+          "rel_mse_no_glints": 0.7658784137632696,
+          "mean_ratio": 0.9961424933314748
+        }
+      ],
+      "failures": [],
+      "profiled": false,
+      "reference": {
+        "integrator": "path",
+        "spp": 8192,
+        "seconds": 26.6564,
+        "mean_Y": 0.868655,
+        "glint_fraction": 0.02874755859375,
+        "pfm_sha256": "dcf97050a1ba11e4783fae28a25cef869470144395b3525fe15760fffcc87831",
+        "wall_seconds": 27.29103583200049,
+        "non_transport_seconds": 0.6346358320004875,
+        "peak_host_rss_bytes": 585617408,
+        "rss_method": "isolated_resource_children_maxrss"
+      },
+      "measurement_id": "400c64ee817bc11c8e49586c3339e4e9c66dd784c0eb1575253666ec938c7aa1"
+    },
+    {
+      "scene": "prism_in_sunlight",
+      "suite": "canonical",
+      "settings": {
+        "scene": "scenes/prism_in_sunlight.owe",
+        "detector": "Eye",
+        "backend": "gpu",
+        "device": 1,
+        "threads": 0,
+        "passes": 1,
+        "seed": 1,
+        "resolution": "256x192",
+        "max_depth": 64
+      },
+      "runs": [
+        {
+          "integrator": "path",
+          "spp": 16,
+          "seconds": 0.0190302,
+          "mean_Y": 0.00159631,
+          "paths": 786432,
+          "inconsistencies": 5,
+          "leaks": 0,
+          "mpaths_per_second": 41.32547214427594,
+          "wall_seconds": 0.6582334699996863,
+          "non_transport_seconds": 0.6392032699996864,
+          "peak_host_rss_bytes": 584704000,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 0.09027857901791589,
+          "rel_mse_no_glints": 0.09011343170599394,
+          "mean_ratio": 0.8516549251468898
+        },
+        {
+          "integrator": "path",
+          "spp": 64,
+          "seconds": 0.0725991,
+          "mean_Y": 0.00159516,
+          "paths": 3145728,
+          "inconsistencies": 6,
+          "leaks": 4,
+          "mpaths_per_second": 43.33012392715612,
+          "wall_seconds": 0.7440716749988496,
+          "non_transport_seconds": 0.6714725749988496,
+          "peak_host_rss_bytes": 584765440,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 0.024383862931984236,
+          "rel_mse_no_glints": 0.02401117732138875,
+          "mean_ratio": 0.8516554115864113
+        },
+        {
+          "integrator": "path",
+          "spp": 256,
+          "seconds": 0.357875,
+          "mean_Y": 0.00307431,
+          "paths": 12582912,
+          "inconsistencies": 24,
+          "leaks": 9,
+          "mpaths_per_second": 35.16007544533706,
+          "wall_seconds": 1.055197549998411,
+          "non_transport_seconds": 0.697322549998411,
+          "peak_host_rss_bytes": 584560640,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 199853.4861741312,
+          "rel_mse_no_glints": 204530.65974123892,
+          "mean_ratio": 1.2566649061417894
+        },
+        {
+          "integrator": "path",
+          "spp": 1024,
+          "seconds": 1.13894,
+          "mean_Y": 0.00175671,
+          "paths": 50331648,
+          "inconsistencies": 98,
+          "leaks": 43,
+          "mpaths_per_second": 44.19165891091716,
+          "wall_seconds": 1.830741345002025,
+          "non_transport_seconds": 0.6918013450020248,
+          "peak_host_rss_bytes": 584794112,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 21925.88690834683,
+          "rel_mse_no_glints": 0.0017237699445485537,
+          "mean_ratio": 0.8720184970737112
+        }
+      ],
+      "failures": [],
+      "profiled": false,
+      "reference": {
+        "integrator": "path",
+        "spp": 8192,
+        "seconds": 25.7158,
+        "mean_Y": 0.00194048,
+        "glint_fraction": 0.022867838541666668,
+        "pfm_sha256": "d75bb5a5efdfe41dee6016e9fa797b738a3f936f132ebc404d026e0676b0bee0",
+        "wall_seconds": 26.238583489997836,
+        "non_transport_seconds": 0.5227834899978347,
+        "peak_host_rss_bytes": 585281536,
+        "rss_method": "isolated_resource_children_maxrss"
+      },
+      "measurement_id": "807abd1e9db246e4fa0cf6a269e47e214dd159d4a28a8c039baf4d784b16f92a"
+    },
+    {
+      "scene": "glass_of_water",
+      "suite": "canonical",
+      "settings": {
+        "scene": "scenes/glass/glass_of_water.owe",
+        "detector": "Eye",
+        "backend": "gpu",
+        "device": 1,
+        "threads": 0,
+        "passes": 1,
+        "seed": 1,
+        "resolution": "256x192",
+        "max_depth": 64
+      },
+      "runs": [
+        {
+          "integrator": "path",
+          "spp": 16,
+          "seconds": 0.0518715,
+          "mean_Y": 0.480374,
+          "paths": 786432,
+          "inconsistencies": 3,
+          "leaks": 2,
+          "mpaths_per_second": 15.16115786125329,
+          "wall_seconds": 0.7006448310057749,
+          "non_transport_seconds": 0.648773331005775,
+          "peak_host_rss_bytes": 585244672,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 30.450977732313667,
+          "rel_mse_no_glints": 30.450977732313667,
+          "mean_ratio": 1.0026779190731387
+        },
+        {
+          "integrator": "path",
+          "spp": 64,
+          "seconds": 0.204661,
+          "mean_Y": 0.481972,
+          "paths": 3145728,
+          "inconsistencies": 13,
+          "leaks": 0,
+          "mpaths_per_second": 15.370432080367046,
+          "wall_seconds": 0.8435173659963766,
+          "non_transport_seconds": 0.6388563659963766,
+          "peak_host_rss_bytes": 585396224,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 9.374909707923617,
+          "rel_mse_no_glints": 9.374909707923617,
+          "mean_ratio": 0.9988340680557973
+        },
+        {
+          "integrator": "path",
+          "spp": 256,
+          "seconds": 0.810034,
+          "mean_Y": 0.483062,
+          "paths": 12582912,
+          "inconsistencies": 59,
+          "leaks": 10,
+          "mpaths_per_second": 15.533807222906692,
+          "wall_seconds": 1.495841306001239,
+          "non_transport_seconds": 0.685807306001239,
+          "peak_host_rss_bytes": 585175040,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 3.325873642974924,
+          "rel_mse_no_glints": 3.325873642974924,
+          "mean_ratio": 1.0065658870540481
+        },
+        {
+          "integrator": "path",
+          "spp": 1024,
+          "seconds": 3.26342,
+          "mean_Y": 0.481306,
+          "paths": 50331648,
+          "inconsistencies": 246,
+          "leaks": 38,
+          "mpaths_per_second": 15.422975896452188,
+          "wall_seconds": 3.9393241590005346,
+          "non_transport_seconds": 0.6759041590005346,
+          "peak_host_rss_bytes": 585449472,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 0.7151441595699515,
+          "rel_mse_no_glints": 0.7151441595699515,
+          "mean_ratio": 1.001005944143587
+        }
+      ],
+      "failures": [],
+      "profiled": false,
+      "reference": {
+        "integrator": "path",
+        "spp": 8192,
+        "seconds": 114.19,
+        "mean_Y": 0.481243,
+        "glint_fraction": 0.0,
+        "pfm_sha256": "bb2de133c97b676683215a52a4b4a6b6705e39ee091a9deefb809d01bf9e076e",
+        "wall_seconds": 114.68836460600141,
+        "non_transport_seconds": 0.49836460600141663,
+        "peak_host_rss_bytes": 585781248,
+        "rss_method": "isolated_resource_children_maxrss"
+      },
+      "measurement_id": "0a7a7c1e8986df08d783e64f9db944e4966f98b3c8ad9f6a13fa7adf07885f8f"
+    },
+    {
+      "scene": "study_magnifier",
+      "suite": "canonical",
+      "settings": {
+        "scene": "scenes/the_study.owe",
+        "detector": "Magnifier",
+        "backend": "gpu",
+        "device": 1,
+        "threads": 0,
+        "passes": 1,
+        "seed": 1,
+        "resolution": "256x192",
+        "max_depth": 64
+      },
+      "runs": [
+        {
+          "integrator": "path",
+          "spp": 16,
+          "seconds": 0.112152,
+          "mean_Y": 0.687935,
+          "paths": 786432,
+          "inconsistencies": 1,
+          "leaks": 0,
+          "mpaths_per_second": 7.012197731649904,
+          "wall_seconds": 0.810491906995594,
+          "non_transport_seconds": 0.698339906995594,
+          "peak_host_rss_bytes": 584818688,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 6.229268527060898,
+          "rel_mse_no_glints": 6.361640132669205,
+          "mean_ratio": 0.9629298470988062
+        },
+        {
+          "integrator": "path",
+          "spp": 64,
+          "seconds": 0.444103,
+          "mean_Y": 0.688298,
+          "paths": 3145728,
+          "inconsistencies": 7,
+          "leaks": 0,
+          "mpaths_per_second": 7.083329768094338,
+          "wall_seconds": 1.1174452990017016,
+          "non_transport_seconds": 0.6733422990017016,
+          "peak_host_rss_bytes": 584773632,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 0.2133945309554973,
+          "rel_mse_no_glints": 0.212853572339055,
+          "mean_ratio": 0.960865091316682
+        },
+        {
+          "integrator": "path",
+          "spp": 256,
+          "seconds": 1.7744,
+          "mean_Y": 0.707471,
+          "paths": 12582912,
+          "inconsistencies": 16,
+          "leaks": 2,
+          "mpaths_per_second": 7.091361587015329,
+          "wall_seconds": 2.440666879003402,
+          "non_transport_seconds": 0.6662668790034019,
+          "peak_host_rss_bytes": 584912896,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 3254.0903439745907,
+          "rel_mse_no_glints": 3303.2546911615664,
+          "mean_ratio": 0.9892722956799037
+        },
+        {
+          "integrator": "path",
+          "spp": 1024,
+          "seconds": 7.10597,
+          "mean_Y": 0.71733,
+          "paths": 50331648,
+          "inconsistencies": 58,
+          "leaks": 5,
+          "mpaths_per_second": 7.083008794014047,
+          "wall_seconds": 7.765067016996909,
+          "non_transport_seconds": 0.6590970169969088,
+          "peak_host_rss_bytes": 585109504,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 0.3817057537564967,
+          "rel_mse_no_glints": 0.1994649028570496,
+          "mean_ratio": 0.982935752685868
+        }
+      ],
+      "failures": [],
+      "profiled": false,
+      "reference": {
+        "integrator": "path",
+        "spp": 8192,
+        "seconds": 218.865,
+        "mean_Y": 0.711666,
+        "glint_fraction": 0.022318522135416668,
+        "pfm_sha256": "c3c09bce13d479c34dfa70c91d3017224f6b492e5d180bdcd9f1f7f1b0fe90a6",
+        "wall_seconds": 219.38089679300174,
+        "non_transport_seconds": 0.5158967930017297,
+        "peak_host_rss_bytes": 585486336,
+        "rss_method": "isolated_resource_children_maxrss"
+      },
+      "measurement_id": "5449c89947684bf9e7b5c13b4afe33b2edd22665b95f7e0844ea7003fcdc7f10"
+    },
+    {
+      "scene": "the_telescope",
+      "suite": "canonical",
+      "settings": {
+        "scene": "scenes/the_telescope.owe",
+        "detector": "Eyepiece",
+        "backend": "gpu",
+        "device": 1,
+        "threads": 0,
+        "passes": 1,
+        "seed": 1,
+        "resolution": "256x192",
+        "max_depth": 64
+      },
+      "runs": [
+        {
+          "integrator": "path",
+          "spp": 16,
+          "seconds": 0.0443928,
+          "mean_Y": 0.515291,
+          "paths": 786432,
+          "inconsistencies": 7,
+          "leaks": 0,
+          "mpaths_per_second": 17.715305184624533,
+          "wall_seconds": 4.164634665001358,
+          "non_transport_seconds": 4.120241865001359,
+          "peak_host_rss_bytes": 4302319616,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 1.5042259243194873,
+          "rel_mse_no_glints": 1.5042259243194873,
+          "mean_ratio": 0.9940158523676202
+        },
+        {
+          "integrator": "path",
+          "spp": 64,
+          "seconds": 0.159063,
+          "mean_Y": 0.516566,
+          "paths": 3145728,
+          "inconsistencies": 24,
+          "leaks": 0,
+          "mpaths_per_second": 19.776616812206484,
+          "wall_seconds": 4.2731488089993945,
+          "non_transport_seconds": 4.114085808999395,
+          "peak_host_rss_bytes": 4302635008,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 0.38571284101481473,
+          "rel_mse_no_glints": 0.38571284101481473,
+          "mean_ratio": 0.9974430241955436
+        },
+        {
+          "integrator": "path",
+          "spp": 256,
+          "seconds": 0.480928,
+          "mean_Y": 0.516937,
+          "paths": 12582912,
+          "inconsistencies": 87,
+          "leaks": 0,
+          "mpaths_per_second": 26.163816621199015,
+          "wall_seconds": 4.643022247000772,
+          "non_transport_seconds": 4.162094247000772,
+          "peak_host_rss_bytes": 4300828672,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 0.09822745942076744,
+          "rel_mse_no_glints": 0.09822745942076744,
+          "mean_ratio": 0.9996530291911688
+        },
+        {
+          "integrator": "path",
+          "spp": 1024,
+          "seconds": 1.79811,
+          "mean_Y": 0.516284,
+          "paths": 50331648,
+          "inconsistencies": 386,
+          "leaks": 3,
+          "mpaths_per_second": 27.991417655204632,
+          "wall_seconds": 5.930754593995516,
+          "non_transport_seconds": 4.132644593995516,
+          "peak_host_rss_bytes": 4301746176,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 0.026459077423971092,
+          "rel_mse_no_glints": 0.026459077423971092,
+          "mean_ratio": 0.999645216178781
+        }
+      ],
+      "failures": [],
+      "profiled": false,
+      "reference": {
+        "integrator": "path",
+        "spp": 8192,
+        "seconds": 79.381,
+        "mean_Y": 0.51658,
+        "glint_fraction": 0.0,
+        "pfm_sha256": "6916342ee00f494cc4b635db2197819036dc4c03e7df905c384e7f5fc21ea084",
+        "wall_seconds": 83.4853641150039,
+        "non_transport_seconds": 4.104364115003904,
+        "peak_host_rss_bytes": 4298067968,
+        "rss_method": "isolated_resource_children_maxrss"
+      },
+      "measurement_id": "1b379af57e47714d74a2ff883127e9b19715b435fc565de6dbf1383a33c5132b"
+    },
+    {
+      "scene": "study_camera",
+      "suite": "canonical",
+      "settings": {
+        "scene": "scenes/the_study.owe",
+        "detector": "Cam",
+        "backend": "gpu",
+        "device": 1,
+        "threads": 0,
+        "passes": 1,
+        "seed": 1,
+        "resolution": "256x192",
+        "max_depth": 64
+      },
+      "runs": [
+        {
+          "integrator": "path",
+          "spp": 16,
+          "seconds": 0.0584618,
+          "mean_Y": 0.0185586,
+          "paths": 786431,
+          "inconsistencies": 2,
+          "leaks": 0,
+          "mpaths_per_second": 13.452049030306968,
+          "wall_seconds": 0.7568390880041989,
+          "non_transport_seconds": 0.6983772880041988,
+          "peak_host_rss_bytes": 585281536,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 6.088744456096617,
+          "rel_mse_no_glints": 6.094491206391571,
+          "mean_ratio": 0.9515859163188193
+        },
+        {
+          "integrator": "path",
+          "spp": 64,
+          "seconds": 0.229325,
+          "mean_Y": 0.0186523,
+          "paths": 3145728,
+          "inconsistencies": 6,
+          "leaks": 0,
+          "mpaths_per_second": 13.717335658999236,
+          "wall_seconds": 0.9120149869995657,
+          "non_transport_seconds": 0.6826899869995657,
+          "peak_host_rss_bytes": 584757248,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 2.7190453930236247,
+          "rel_mse_no_glints": 2.7252986751284283,
+          "mean_ratio": 0.9639773725946711
+        },
+        {
+          "integrator": "path",
+          "spp": 256,
+          "seconds": 0.907726,
+          "mean_Y": 0.0186598,
+          "paths": 12582912,
+          "inconsistencies": 24,
+          "leaks": 0,
+          "mpaths_per_second": 13.862015630267283,
+          "wall_seconds": 1.6052645689997007,
+          "non_transport_seconds": 0.6975385689997007,
+          "peak_host_rss_bytes": 584966144,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 1.2635393005548012,
+          "rel_mse_no_glints": 1.2693661988124696,
+          "mean_ratio": 0.9599733090444268
+        },
+        {
+          "integrator": "path",
+          "spp": 1024,
+          "seconds": 3.61736,
+          "mean_Y": 0.024626,
+          "paths": 50331646,
+          "inconsistencies": 102,
+          "leaks": 0,
+          "mpaths_per_second": 13.91391677908751,
+          "wall_seconds": 4.3031192400012515,
+          "non_transport_seconds": 0.6857592400012513,
+          "peak_host_rss_bytes": 585314304,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 4378.355477898061,
+          "rel_mse_no_glints": 3203.9533334035054,
+          "mean_ratio": 1.2406073388683165
+        }
+      ],
+      "failures": [],
+      "profiled": false,
+      "reference": {
+        "integrator": "path",
+        "spp": 8192,
+        "seconds": 151.253,
+        "mean_Y": 0.019495,
+        "glint_fraction": 0.007100423177083333,
+        "pfm_sha256": "7054000e9dd226428d668e6fcb28a8054dfd1a8907663d3616cacd682b6368aa",
+        "wall_seconds": 151.8862171350047,
+        "non_transport_seconds": 0.6332171350047133,
+        "peak_host_rss_bytes": 585396224,
+        "rss_method": "isolated_resource_children_maxrss"
+      },
+      "measurement_id": "d49dcc32dbbde63060a20ad2678e412cd37a0d6fb32189c93764d282847a9533"
+    },
+    {
+      "scene": "observatory_saturn",
+      "suite": "canonical",
+      "settings": {
+        "scene": "scenes/the_observatory.owe",
+        "detector": "SaturnEyepiece",
+        "backend": "gpu",
+        "device": 1,
+        "threads": 0,
+        "passes": 1,
+        "seed": 1,
+        "resolution": "256x192",
+        "max_depth": 64
+      },
+      "runs": [
+        {
+          "integrator": "path",
+          "spp": 16,
+          "seconds": 0.0851399,
+          "mean_Y": 0.000131765,
+          "paths": 786432,
+          "inconsistencies": 4,
+          "leaks": 0,
+          "mpaths_per_second": 9.236938262788657,
+          "wall_seconds": 3.014985620000516,
+          "non_transport_seconds": 2.929845720000516,
+          "peak_host_rss_bytes": 2527502336,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 43.67490426382561,
+          "rel_mse_no_glints": 43.67490426382561,
+          "mean_ratio": 1.03680781867789
+        },
+        {
+          "integrator": "path",
+          "spp": 64,
+          "seconds": 0.290646,
+          "mean_Y": 0.000126336,
+          "paths": 3145728,
+          "inconsistencies": 16,
+          "leaks": 0,
+          "mpaths_per_second": 10.823228257054973,
+          "wall_seconds": 3.080870595003944,
+          "non_transport_seconds": 2.7902245950039437,
+          "peak_host_rss_bytes": 2525421568,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 5.754203795320098,
+          "rel_mse_no_glints": 5.754203795320098,
+          "mean_ratio": 1.0117994662637257
+        },
+        {
+          "integrator": "path",
+          "spp": 256,
+          "seconds": 0.946475,
+          "mean_Y": 0.000126106,
+          "paths": 12582912,
+          "inconsistencies": 85,
+          "leaks": 0,
+          "mpaths_per_second": 13.294500118862095,
+          "wall_seconds": 3.7825542720020167,
+          "non_transport_seconds": 2.8360792720020167,
+          "peak_host_rss_bytes": 2528526336,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 1.6814280627655402,
+          "rel_mse_no_glints": 1.6814280627655402,
+          "mean_ratio": 0.9941271344251726
+        },
+        {
+          "integrator": "path",
+          "spp": 1024,
+          "seconds": 3.6569,
+          "mean_Y": 0.00012683,
+          "paths": 50331648,
+          "inconsistencies": 285,
+          "leaks": 0,
+          "mpaths_per_second": 13.763473980694032,
+          "wall_seconds": 6.551820613996824,
+          "non_transport_seconds": 2.8949206139968244,
+          "peak_host_rss_bytes": 2523664384,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 0.44783406010253035,
+          "rel_mse_no_glints": 0.44783406010253035,
+          "mean_ratio": 1.0014894707267252
+        }
+      ],
+      "failures": [],
+      "profiled": false,
+      "reference": {
+        "integrator": "path",
+        "spp": 8192,
+        "seconds": 2178.05,
+        "mean_Y": 0.000126756,
+        "glint_fraction": 0.0,
+        "pfm_sha256": "38ba5432150e0b63f92decf0e6f08a4a97a7ccc539740b95330b761c3c6301e4",
+        "wall_seconds": 2180.8241447699984,
+        "non_transport_seconds": 2.774144769998202,
+        "peak_host_rss_bytes": 2522742784,
+        "rss_method": "isolated_resource_children_maxrss"
+      },
+      "measurement_id": "6e2210a2b55ec186bd6471112a81f3d455b8e18c8582ecf3d290b19ec69eea1d"
+    },
+    {
+      "scene": "camera_obscura",
+      "suite": "canonical",
+      "settings": {
+        "scene": "scenes/camera_obscura.owe",
+        "detector": "Inside",
+        "backend": "gpu",
+        "device": 1,
+        "threads": 0,
+        "passes": 1,
+        "seed": 1,
+        "resolution": "256x192",
+        "max_depth": 64
+      },
+      "runs": [
+        {
+          "integrator": "path",
+          "spp": 16,
+          "seconds": 0.0354336,
+          "mean_Y": 2.9411e-07,
+          "paths": 786432,
+          "inconsistencies": 9,
+          "leaks": 0,
+          "mpaths_per_second": 22.194527228393387,
+          "wall_seconds": 0.7483607350004604,
+          "non_transport_seconds": 0.7129271350004605,
+          "peak_host_rss_bytes": 585699328,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 0.017610902949544153,
+          "rel_mse_no_glints": 0.015604819146665774,
+          "mean_ratio": 0.8742162694997477
+        },
+        {
+          "integrator": "path",
+          "spp": 64,
+          "seconds": 0.140179,
+          "mean_Y": 3.1036e-07,
+          "paths": 3145728,
+          "inconsistencies": 35,
+          "leaks": 0,
+          "mpaths_per_second": 22.440793556809506,
+          "wall_seconds": 0.8670457839980372,
+          "non_transport_seconds": 0.7268667839980372,
+          "peak_host_rss_bytes": 586010624,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 8973.766969295542,
+          "rel_mse_no_glints": 10041.170163602894,
+          "mean_ratio": 0.9134173845963982
+        },
+        {
+          "integrator": "path",
+          "spp": 256,
+          "seconds": 0.605862,
+          "mean_Y": 7.90886e-07,
+          "paths": 12582912,
+          "inconsistencies": 148,
+          "leaks": 0,
+          "mpaths_per_second": 20.768610673717777,
+          "wall_seconds": 1.3531251919994247,
+          "non_transport_seconds": 0.7472631919994247,
+          "peak_host_rss_bytes": 586137600,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 1982334.9106724998,
+          "rel_mse_no_glints": 756737.5307830027,
+          "mean_ratio": 2.306356631216978
+        },
+        {
+          "integrator": "path",
+          "spp": 1024,
+          "seconds": 2.22979,
+          "mean_Y": 4.28083e-07,
+          "paths": 50331648,
+          "inconsistencies": 582,
+          "leaks": 0,
+          "mpaths_per_second": 22.572371389233965,
+          "wall_seconds": 2.9386245510031586,
+          "non_transport_seconds": 0.7088345510031586,
+          "peak_host_rss_bytes": 585555968,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 137813.87960712984,
+          "rel_mse_no_glints": 48018.96325018017,
+          "mean_ratio": 1.2697710320624411
+        }
+      ],
+      "failures": [],
+      "profiled": false,
+      "reference": {
+        "integrator": "path",
+        "spp": 8192,
+        "seconds": 90.1641,
+        "mean_Y": 3.37967e-07,
+        "glint_fraction": 0.10630289713541667,
+        "pfm_sha256": "e518207a8bf08187de08e602d0076091bf94d1ba7a8657088bd4a58ee385649f",
+        "wall_seconds": 90.67207030999998,
+        "non_transport_seconds": 0.5079703099999762,
+        "peak_host_rss_bytes": 586330112,
+        "rss_method": "isolated_resource_children_maxrss"
+      },
+      "measurement_id": "e4259812727aea5d217e87506360603bcbe4d4876b2bea5b8a054737036e88d6"
+    }
+  ],
+  "scans": [
+    {
+      "scene": "the_kunstkammer",
+      "suite": "scans",
+      "settings": {
+        "scene": "scenes/the_kunstkammer.owe",
+        "detector": "Room",
+        "backend": "gpu",
+        "device": 1,
+        "threads": 0,
+        "passes": 1,
+        "seed": 1,
+        "resolution": "960x600",
+        "max_depth": 12
+      },
+      "runs": [
+        {
+          "integrator": "path",
+          "spp": 16,
+          "seconds": 5.17657,
+          "mean_Y": 0.0428985,
+          "paths": 9216000,
+          "inconsistencies": 11,
+          "leaks": 0,
+          "mpaths_per_second": 1.7803294459458676,
+          "wall_seconds": 40.566429657999834,
+          "non_transport_seconds": 35.389859657999835,
+          "peak_host_rss_bytes": 4769218560,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 2.0751895714398136,
+          "rel_mse_no_glints": 2.0796954715004294,
+          "mean_ratio": 0.9988768820416416
+        },
+        {
+          "integrator": "path",
+          "spp": 64,
+          "seconds": 20.5063,
+          "mean_Y": 0.0428972,
+          "paths": 36864000,
+          "inconsistencies": 51,
+          "leaks": 0,
+          "mpaths_per_second": 1.797691441166861,
+          "wall_seconds": 56.12242752500606,
+          "non_transport_seconds": 35.616127525006064,
+          "peak_host_rss_bytes": 4763676672,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 0.5297026093222108,
+          "rel_mse_no_glints": 0.530302691593309,
+          "mean_ratio": 0.9992887341410837
+        }
+      ],
+      "failures": [],
+      "profiled": false,
+      "reference": {
+        "integrator": "path",
+        "spp": 256,
+        "seconds": 81.8316,
+        "mean_Y": 0.0429388,
+        "glint_fraction": 0.003612847222222222,
+        "pfm_sha256": "5ada895fbe7971893221996d4b3c007ba198ef48e5442f713dced8f1b3a62ee3",
+        "wall_seconds": 116.11559325399867,
+        "non_transport_seconds": 34.28399325399867,
+        "peak_host_rss_bytes": 4767936512,
+        "rss_method": "isolated_resource_children_maxrss"
+      },
+      "measurement_id": "6c315d02e7ebd6cec7375b0ecbc84fa75c96f580d9a86976ac5ad4847b20d22a"
+    },
+    {
+      "scene": "the_gregorian",
+      "suite": "scans",
+      "settings": {
+        "scene": "scenes/the_gregorian.owe",
+        "detector": "Beside",
+        "backend": "gpu",
+        "device": 1,
+        "threads": 0,
+        "passes": 1,
+        "seed": 1,
+        "resolution": "960x600",
+        "max_depth": 16
+      },
+      "runs": [
+        {
+          "integrator": "path",
+          "spp": 16,
+          "seconds": 2.65099,
+          "mean_Y": 4.95215e-05,
+          "paths": 9216000,
+          "inconsistencies": 0,
+          "leaks": 0,
+          "mpaths_per_second": 3.476437104628837,
+          "wall_seconds": 20.220087632005743,
+          "non_transport_seconds": 17.569097632005743,
+          "peak_host_rss_bytes": 2775298048,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 182.83675106329653,
+          "rel_mse_no_glints": 182.83675106329653,
+          "mean_ratio": 1.0066453848973094
+        },
+        {
+          "integrator": "path",
+          "spp": 64,
+          "seconds": 10.4217,
+          "mean_Y": 4.95256e-05,
+          "paths": 36864000,
+          "inconsistencies": 1,
+          "leaks": 0,
+          "mpaths_per_second": 3.5372348081407066,
+          "wall_seconds": 25.743425968998054,
+          "non_transport_seconds": 15.321725968998054,
+          "peak_host_rss_bytes": 2774073344,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 87.06615856582806,
+          "rel_mse_no_glints": 87.06615856582806,
+          "mean_ratio": 1.0103183737720691
+        }
+      ],
+      "failures": [],
+      "profiled": false,
+      "reference": {
+        "integrator": "path",
+        "spp": 256,
+        "seconds": 41.3731,
+        "mean_Y": 4.91013e-05,
+        "glint_fraction": 0.0,
+        "pfm_sha256": "a7b38721d53481e76e11d25d455ad2dac24dfcfca7936c3971bca394155b2d88",
+        "wall_seconds": 58.28687630299828,
+        "non_transport_seconds": 16.91377630299828,
+        "peak_host_rss_bytes": 2774183936,
+        "rss_method": "isolated_resource_children_maxrss"
+      },
+      "measurement_id": "b3e74ecd765d548dab73cb71b4dee41e5ceed8431efd652d2357ae2c24736ed1"
+    },
+    {
+      "scene": "the_peacock_lamp",
+      "suite": "scans",
+      "settings": {
+        "scene": "scenes/the_peacock_lamp.owe",
+        "detector": "Room",
+        "backend": "gpu",
+        "device": 1,
+        "threads": 0,
+        "passes": 1,
+        "seed": 1,
+        "resolution": "960x600",
+        "max_depth": 16
+      },
+      "runs": [
+        {
+          "integrator": "vcm",
+          "spp": 16,
+          "seconds": 36.4855,
+          "mean_Y": 1.17491e-05,
+          "paths": 18432000,
+          "inconsistencies": 113879,
+          "leaks": 0,
+          "mpaths_per_second": 0.5051869920927492,
+          "wall_seconds": 57.51769273100217,
+          "non_transport_seconds": 21.03219273100217,
+          "peak_host_rss_bytes": 2879414272,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 0.9402282809252259,
+          "rel_mse_no_glints": 0.9016838925807475,
+          "mean_ratio": 0.8959415964132565
+        },
+        {
+          "integrator": "vcm",
+          "spp": 64,
+          "seconds": 131.096,
+          "mean_Y": 1.19459e-05,
+          "paths": 73728000,
+          "inconsistencies": 457376,
+          "leaks": 0,
+          "mpaths_per_second": 0.5623970220296576,
+          "wall_seconds": 152.51177630000166,
+          "non_transport_seconds": 21.415776300001653,
+          "peak_host_rss_bytes": 2882314240,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 3.8586759606530334,
+          "rel_mse_no_glints": 0.2576380056538063,
+          "mean_ratio": 0.8857484579889814
+        }
+      ],
+      "failures": [],
+      "profiled": false,
+      "reference": {
+        "integrator": "vcm",
+        "spp": 256,
+        "seconds": 479.485,
+        "mean_Y": 1.37045e-05,
+        "glint_fraction": 0.0036371527777777778,
+        "pfm_sha256": "dcc0dd48d03b75228bfd9afe01e0cc506764897d1ca7db8be7c935052d78c40b",
+        "wall_seconds": 500.94883345100243,
+        "non_transport_seconds": 21.463833451002415,
+        "peak_host_rss_bytes": 2930540544,
+        "rss_method": "isolated_resource_children_maxrss"
+      },
+      "measurement_id": "f592dfc69ab86392722ce18d52da4ff04edfb111d74db335b55f6fa0845dc717"
+    },
+    {
+      "scene": "the_invisible_window",
+      "suite": "scans",
+      "settings": {
+        "scene": "scenes/the_invisible_window.owe",
+        "detector": "Wall",
+        "backend": "gpu",
+        "device": 1,
+        "threads": 0,
+        "passes": 1,
+        "seed": 1,
+        "resolution": "960x600",
+        "max_depth": 10,
+        "photons": 16
+      },
+      "runs": [
+        {
+          "integrator": "sppm",
+          "spp": 16,
+          "seconds": 496.545,
+          "mean_Y": 12673.1,
+          "paths": 156672000,
+          "inconsistencies": 35,
+          "leaks": 9,
+          "mpaths_per_second": 0.3155242727245265,
+          "wall_seconds": 498.91367066299426,
+          "non_transport_seconds": 2.3686706629942478,
+          "peak_host_rss_bytes": 1408208896,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 0.03235415928328741,
+          "rel_mse_no_glints": 0.03235415928328741,
+          "mean_ratio": 0.9422060070358932
+        },
+        {
+          "integrator": "sppm",
+          "spp": 64,
+          "seconds": 2047.06,
+          "mean_Y": 12332.3,
+          "paths": 626688000,
+          "inconsistencies": 143,
+          "leaks": 18,
+          "mpaths_per_second": 0.30614051371234846,
+          "wall_seconds": 2049.790135920004,
+          "non_transport_seconds": 2.730135920004159,
+          "peak_host_rss_bytes": 1405747200,
+          "rss_method": "isolated_resource_children_maxrss",
+          "rel_mse": 0.011464471904228713,
+          "rel_mse_no_glints": 0.011464471904228713,
+          "mean_ratio": 0.9904082576652888
+        }
+      ],
+      "failures": [],
+      "profiled": false,
+      "reference": {
+        "integrator": "sppm",
+        "spp": 256,
+        "seconds": 8104.42,
+        "mean_Y": 12384.3,
+        "glint_fraction": 0.0,
+        "pfm_sha256": "197e993495b8db5f6d1289ea1c52c7b34bdee0153d7b90b62f49262dfd48cae0",
+        "wall_seconds": 8107.816791783,
+        "non_transport_seconds": 3.3967917829995713,
+        "peak_host_rss_bytes": 1426997248,
+        "rss_method": "isolated_resource_children_maxrss"
+      },
+      "measurement_id": "18d535b64ac340e5e0d37aae2d8b16263dbf92be88074fa98dbd1d238abe638f"
+    }
+  ],
+  "provenance": {
+    "manifest_sha256": "3806af6426f4e0943bd42f4eff025de534b2fd85cc1f1aa32d198e23e254142f",
+    "source_archive_sha256": "435df67e70f0d5aa0c4c5ce63d71f54293228ed6a6a9f7034b4b34a044af8585",
+    "source_patch_sha256": "e6c10de3cdb56cc45ea349d6695d412f64d6ffd863fbf20fbd40e7748a77801c"
+  }
+}

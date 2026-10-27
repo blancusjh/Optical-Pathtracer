@@ -8,6 +8,22 @@ namespace owe {
 
 namespace {
 
+// Where a ray of direction d through point (x, y) of the entrance pupil plane (at zEP) starts, at zStart.
+Vec3 launchOrigin(double zEP, double x, double y, const Vec3& d, double zStart) {
+    Vec3 P{x, y, zEP};
+    return P + d * ((zStart - zEP) / d.z);
+}
+
+// The direction of a field angle (degrees) in the meridional (y, z) plane.
+Vec3 fieldDirection(double deg) { return {0, std::sin(radians(deg)), std::cos(radians(deg))}; }
+
+// A prescription as matter in a world of its own (blackened rims, no tube), built.
+BuiltInstrument buildLensWorld(const Prescription& p, World& w) {
+    BuiltInstrument bi = buildPrescription(w, p, "lens", -1, Transform{}, 0.0, catalogIndex(), LensSpec::Rim::Black);
+    w.build();
+    return bi;
+}
+
 struct LensWorld {
     Scene scene;
     BuiltInstrument bi;
@@ -15,8 +31,7 @@ struct LensWorld {
 };
 
 void makeLensWorld(const Prescription& p, LensWorld& lw) {
-    lw.bi = buildPrescription(lw.scene.world, p, "lens", -1, Transform{}, 0.0, catalogIndex(), LensSpec::Rim::Black);
-    lw.scene.world.build();
+    lw.bi = buildLensWorld(p, lw.scene.world);
     lw.surfaces = 0;
     lw.mirrors = 0;
     for (size_t i = 0; i < p.surfaces.size(); ++i) {
@@ -51,9 +66,115 @@ TracedRay traceThrough(const LensWorld& lw, const Vec3& origin, const Vec3& dir,
     return r;
 }
 
-Vec3 launchOrigin(double zEP, double x, double y, const Vec3& d, double zStart) {
-    Vec3 P{x, y, zEP};
-    return P + d * ((zStart - zEP) / d.z);
+
+// An afocal bundle: the apparent direction of its mean ray and the angular RMS about it.
+void afocalSpot(const std::vector<TracedRay>& rays, SpotResult& s) {
+    double n = double(rays.size()), mx = 0, my = 0;
+    for (auto& r : rays) { mx += r.d.x / r.d.z / n; my += r.d.y / r.d.z / n; }
+    double v = 0;
+    for (auto& r : rays) {
+        double ax = std::atan(r.d.x / r.d.z) - std::atan(mx), ay = std::atan(r.d.y / r.d.z) - std::atan(my);
+        v += ax * ax + ay * ay;
+    }
+    s.apparentAngle = std::atan(my);
+    s.angularRms = std::sqrt(v / n);
+}
+
+// A focused bundle: the plane of least spot variance (closed form), and the RMS spot radius there
+// and at the paraxial image zImg (with its centroid's height).
+void focusedSpot(const std::vector<TracedRay>& rays, double zImg, double lastVertexZ, SpotResult& s) {
+    double n = double(rays.size());
+    Vec2 ma{}, mb{};
+    std::vector<Vec2> A(rays.size()), B(rays.size());
+    for (size_t i = 0; i < rays.size(); ++i) {
+        const auto& r = rays[i];
+        B[i] = {r.d.x / r.d.z, r.d.y / r.d.z};
+        A[i] = {r.p.x - B[i].x * r.p.z, r.p.y - B[i].y * r.p.z};
+        ma.x += A[i].x / n; ma.y += A[i].y / n; mb.x += B[i].x / n; mb.y += B[i].y / n;
+    }
+    double cov = 0, varb = 0;
+    for (size_t i = 0; i < rays.size(); ++i) {
+        cov += (A[i].x - ma.x) * (B[i].x - mb.x) + (A[i].y - ma.y) * (B[i].y - mb.y);
+        varb += sqr(B[i].x - mb.x) + sqr(B[i].y - mb.y);
+    }
+    double zBest = varb > 0 ? -cov / varb : zImg;
+    // The spot's RMS radius in the plane z (and its centroid's height).
+    auto rmsAt = [&](double z, double* cy) {
+        Vec2 c{};
+        for (size_t i = 0; i < rays.size(); ++i) c += (A[i] + B[i] * z) / n;
+        double v = 0;
+        for (size_t i = 0; i < rays.size(); ++i) v += dot(A[i] + B[i] * z - c, A[i] + B[i] * z - c);
+        if (cy) *cy = c.y;
+        return std::sqrt(v / n);
+    };
+    s.bestFocusZ = zBest - lastVertexZ;
+    s.rmsBest = rmsAt(zBest, nullptr);
+    s.rmsParaxial = rmsAt(zImg, &s.centroidY);
+}
+
+// The spot of field angle f (degrees) at wavelength lambda: rings of the entrance pupil traced
+// through the lens, launched from zStart.
+SpotResult spotAt(const LensWorld& lw, double lambda, double f, int rings, double zStart, double zImg) {
+    const Paraxial& px = lw.bi.paraxial;
+    const double rEP = px.entrancePupilRadius;
+    SpotResult s;
+    s.lambda = lambda;
+    s.fieldDeg = f;
+    const Vec3 d = fieldDirection(f);
+    std::vector<TracedRay> rays;
+    for (int k = 0; k <= rings; ++k) {
+        int n = k == 0 ? 1 : 6 * k;
+        for (int j = 0; j < n; ++j) {
+            double rr = rEP * double(k) / rings * 0.999;
+            double a = 2 * Pi * j / n;
+            TracedRay t = traceThrough(lw, launchOrigin(px.entrancePupilZ, rr * std::cos(a), rr * std::sin(a), d, zStart),
+                                       d, lambda);
+            s.launched++;
+            if (t.ok) rays.push_back(t);
+        }
+    }
+    s.arrived = int(rays.size());
+    if (rays.size() >= 3) {
+        if (px.afocal) afocalSpot(rays, s);
+        else focusedSpot(rays, zImg, lw.bi.lastVertexZ, s);
+    }
+    return s;
+}
+
+// Longitudinal spherical aberration on axis: where marginal rays at ten pupil heights cross it,
+// against the paraxial focus.
+std::vector<std::pair<double, double>> sphericalAberration(const Prescription& p, const LensWorld& lw, double lambda,
+                                                           double zStart) {
+    const Paraxial& px = lw.bi.paraxial;
+    std::vector<std::pair<double, double>> lsa;
+    Paraxial pl = paraxialAnalysis(p, lambda, catalogIndex());
+    double zPar = lw.bi.lastVertexZ + pl.bfl;
+    for (int k = 1; k <= 10; ++k) {
+        double h = 0.1 * k * 0.999;
+        TracedRay t = traceThrough(lw, launchOrigin(px.entrancePupilZ, 0, h * px.entrancePupilRadius, {0, 0, 1}, zStart),
+                                   {0, 0, 1}, lambda);
+        if (!t.ok || t.d.y == 0) continue;
+        double zc = t.p.z - t.p.y * t.d.z / t.d.y;
+        lsa.push_back({h, zc - zPar});
+    }
+    return lsa;
+}
+
+// Distortion from chief rays: the real image height against EFL·tan(field), in percent.
+std::vector<std::pair<double, double>> distortion(const LensWorld& lw, const std::vector<double>& fields, double lambda,
+                                                  double zStart, double zImg) {
+    const Paraxial& px = lw.bi.paraxial;
+    std::vector<std::pair<double, double>> out;
+    for (double f : fields) {
+        if (f == 0) continue;
+        const Vec3 d = fieldDirection(f);
+        TracedRay t = traceThrough(lw, launchOrigin(px.entrancePupilZ, 0, 0, d, zStart), d, lambda);
+        if (!t.ok) continue;
+        double yReal = t.p.y + t.d.y / t.d.z * (zImg - t.p.z);
+        double yPar = px.efl * std::tan(radians(f));
+        out.push_back({f, 100.0 * (yReal - yPar) / yPar});
+    }
+    return out;
 }
 
 }  // namespace
@@ -66,108 +187,20 @@ LensReport analyzeLens(const Prescription& p, const std::vector<double>& fields,
     const Paraxial& px = lw.bi.paraxial;
     rep.paraxial = px;
     double zStart = -0.05 - 0.1 * px.length;
-    double rEP = px.entrancePupilRadius;
     double zImg = lw.bi.lastVertexZ + (std::isinf(px.imageDistance) ? 0 : px.imageDistance);
-
     for (double lambda : lambdas)
-        for (double f : fields) {
-            SpotResult s;
-            s.lambda = lambda;
-            s.fieldDeg = f;
-            Vec3 d{0, std::sin(radians(f)), std::cos(radians(f))};
-            std::vector<TracedRay> rays;
-            for (int k = 0; k <= rings; ++k) {
-                int n = k == 0 ? 1 : 6 * k;
-                for (int j = 0; j < n; ++j) {
-                    double rr = rEP * double(k) / rings * 0.999;
-                    double a = 2 * Pi * j / n;
-                    TracedRay t = traceThrough(lw, launchOrigin(px.entrancePupilZ, rr * std::cos(a), rr * std::sin(a), d, zStart),
-                                               d, lambda);
-                    s.launched++;
-                    if (t.ok) rays.push_back(t);
-                }
-            }
-            s.arrived = int(rays.size());
-            if (px.afocal && rays.size() >= 3) {
-                double n = double(rays.size()), mx = 0, my = 0;
-                for (auto& r : rays) { mx += r.d.x / r.d.z / n; my += r.d.y / r.d.z / n; }
-                double v = 0;
-                for (auto& r : rays) {
-                    double ax = std::atan(r.d.x / r.d.z) - std::atan(mx), ay = std::atan(r.d.y / r.d.z) - std::atan(my);
-                    v += ax * ax + ay * ay;
-                }
-                s.apparentAngle = std::atan(my);
-                s.angularRms = std::sqrt(v / n);
-            } else if (rays.size() >= 3) {
-                // Best focus: minimise the spot variance over z (closed form).
-                double n = double(rays.size());
-                Vec2 ma{}, mb{};
-                std::vector<Vec2> A(rays.size()), B(rays.size());
-                for (size_t i = 0; i < rays.size(); ++i) {
-                    const auto& r = rays[i];
-                    B[i] = {r.d.x / r.d.z, r.d.y / r.d.z};
-                    A[i] = {r.p.x - B[i].x * r.p.z, r.p.y - B[i].y * r.p.z};
-                    ma.x += A[i].x / n; ma.y += A[i].y / n; mb.x += B[i].x / n; mb.y += B[i].y / n;
-                }
-                double cov = 0, varb = 0;
-                for (size_t i = 0; i < rays.size(); ++i) {
-                    cov += (A[i].x - ma.x) * (B[i].x - mb.x) + (A[i].y - ma.y) * (B[i].y - mb.y);
-                    varb += sqr(B[i].x - mb.x) + sqr(B[i].y - mb.y);
-                }
-                double zBest = varb > 0 ? -cov / varb : zImg;
-                auto rmsAt = [&](double z, double* cy, std::vector<Vec2>* pts) {
-                    Vec2 c{};
-                    for (size_t i = 0; i < rays.size(); ++i) { c.x += (A[i].x + B[i].x * z) / n; c.y += (A[i].y + B[i].y * z) / n; }
-                    double v = 0;
-                    for (size_t i = 0; i < rays.size(); ++i) {
-                        double dx = A[i].x + B[i].x * z - c.x, dy = A[i].y + B[i].y * z - c.y;
-                        v += dx * dx + dy * dy;
-                        if (pts) pts->push_back({dx, dy});
-                    }
-                    if (cy) *cy = c.y;
-                    return std::sqrt(v / n);
-                };
-                s.bestFocusZ = zBest - lw.bi.lastVertexZ;
-                s.rmsBest = rmsAt(zBest, nullptr, nullptr);
-                s.rmsParaxial = rmsAt(zImg, &s.centroidY, &s.spot);
-            }
-            rep.spots.push_back(s);
-        }
-
-    // Longitudinal spherical aberration on axis at the first wavelength.
-    double l0 = lambdas.empty() ? p.wavelength : lambdas.front();
-    if (!px.afocal) {
-        Paraxial pl = paraxialAnalysis(p, l0, catalogIndex());
-        double zPar = lw.bi.lastVertexZ + pl.bfl;
-        for (int k = 1; k <= 10; ++k) {
-            double h = 0.1 * k * 0.999;
-            TracedRay t = traceThrough(lw, launchOrigin(px.entrancePupilZ, 0, h * rEP, {0, 0, 1}, zStart), {0, 0, 1}, l0);
-            if (!t.ok || t.d.y == 0) continue;
-            double zc = t.p.z - t.p.y * t.d.z / t.d.y;
-            rep.lsa.push_back({h, zc - zPar});
-        }
-    }
-    // Chromatic focal shift (best focus on axis).
-    {
-        auto focusAt = [&](double l) {
-            for (auto& s : rep.spots)
-                if (s.lambda == l && s.fieldDeg == 0 && s.arrived >= 3) return s.bestFocusZ;
-            return std::nan("");
-        };
-        double fF = focusAt(LambdaF), fC = focusAt(LambdaC);
-        rep.chromaticFocalShift = (std::isnan(fF) || std::isnan(fC)) ? std::nan("") : fF - fC;
-    }
-    // Distortion from chief rays.
-    if (!px.afocal)
-        for (double f : fields) {
-            if (f == 0) continue;
-            Vec3 d{0, std::sin(radians(f)), std::cos(radians(f))};
-            TracedRay t = traceThrough(lw, launchOrigin(px.entrancePupilZ, 0, 0, d, zStart), d, l0);
-            if (!t.ok) continue;
-            double yReal = t.p.y + t.d.y / t.d.z * (zImg - t.p.z);
-            double yPar = px.efl * std::tan(radians(f));
-            rep.distortion.push_back({f, 100.0 * (yReal - yPar) / yPar});
-        }
+        for (double f : fields) rep.spots.push_back(spotAt(lw, lambda, f, rings, zStart, zImg));
+    const double l0 = lambdas.empty() ? p.wavelength : lambdas.front();
+    if (!px.afocal) rep.lsa = sphericalAberration(p, lw, l0, zStart);
+    // Chromatic focal shift: best focus on axis at F against C.
+    auto focusAt = [&](double l) {
+        for (auto& s : rep.spots)
+            if (s.lambda == l && s.fieldDeg == 0 && s.arrived >= 3) return s.bestFocusZ;
+        return std::nan("");
+    };
+    double fF = focusAt(LambdaF), fC = focusAt(LambdaC);
+    rep.chromaticFocalShift = (std::isnan(fF) || std::isnan(fC)) ? std::nan("") : fF - fC;
+    if (!px.afocal) rep.distortion = distortion(lw, fields, l0, zStart, zImg);
     return rep;
 }
 
@@ -238,19 +271,16 @@ std::string LensReport::text() const {
 }
 
 std::vector<PathRecord> lensFan(const Prescription& p, double fieldDeg, double lambda, int rays, Scene& sceneOut) {
-    BuiltInstrument bi = buildPrescription(sceneOut.world, p, "lens", -1, Transform{}, 0.0, catalogIndex(), LensSpec::Rim::Black);
-    sceneOut.world.build();
+    BuiltInstrument bi = buildLensWorld(p, sceneOut.world);
     const Paraxial& px = bi.paraxial;
     double zStart = -0.02 - 0.1 * px.length;
-    Vec3 d{0, std::sin(radians(fieldDeg)), std::cos(radians(fieldDeg))};
+    const Vec3 d = fieldDirection(fieldDeg);
     Tracer tr(sceneOut);
     std::vector<PathRecord> out;
     for (int i = 0; i < rays; ++i) {
         double y = px.entrancePupilRadius * (rays == 1 ? 0.0 : (2.0 * i / (rays - 1) - 1)) * 0.999;
         Rng rng(7, uint64_t(i));
-        Vec3 P{0, y, px.entrancePupilZ};
-        Vec3 o = P + d * ((zStart - px.entrancePupilZ) / d.z);
-        PathRecord rec = tr.walk(Ray{o, d}, sceneOut.world.ambientRegion(), lambda, WalkMode::PrimaryTransmission, rng, 64);
+        PathRecord rec = tr.walk(Ray{launchOrigin(px.entrancePupilZ, 0, y, d, zStart), d}, sceneOut.world.ambientRegion(), lambda, WalkMode::PrimaryTransmission, rng, 64);
         // Clip escaping segments at a sensible distance behind the lens.
         if (rec.v.size() >= 2 && rec.v.back().event == EventKind::Escape) {
             const PathVertex& last = rec.v[rec.v.size() - 2];

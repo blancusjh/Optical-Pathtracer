@@ -1,0 +1,32 @@
+Daytime-only exterior update,7 October2026.
+The owner explicitly excluded night skies: neither night scene nor NASA data is
+changed. night_scenes_before.sha256 records both scene files before this update.
+
+generate_daylight.py bakes the Hosek-Wilkie2012 sky using Blender Cycles CUDA,
+with an explicit equirectangular direction graph: phi=2*pi*u,theta=pi*(1-v).
+owe solar azimuth is measured from+y toward+x, so the direction is
+(cos(elevation)*sin(azimuth),cos(elevation)*cos(azimuth),sin(elevation)).
+The generated maps need rotation=0. The model has no solar disc; each scene's
+existing analytic sun remains the only direct solar emitter.
+
+These are clear-atmosphere simulations,not photographs or measured weather.
+Turbidity2.4,ground albedo.18. Diffuse horizontal irradiance is explicitly
+normalised to10% of direct-normal solar irradiance. The lower hemisphere models
+Lambertian distant terrain with reflectance(.085,.12,.045), illuminated by the
+same sun+sky. This is a simple distant-ground approximation,not a landscape scan.
+
+Original4096x2048 raw and calibrated HDR files stay in assets/daylight/.
+No downscaled file is used in a scene. /tmp thumbnails are inspection-only.
+The fetched Poly Haven daytime metadata was exploratory and is not used: its
+48degree sun would not match either scene's16degree or90degree sun.
+
+Reference: https://cgg.mff.cuni.cz/projects/SkylightModelling/
+Model implemented by Blender; GPU evaluated. Output maps are project-generated
+radiance data,not third-party photographic assets. No engine source change.
+
+Regeneration reads sun elevation,azimuth,luminance and angular diameter directly
+from each daytime .owe file. If those change,regenerate the two HDRs before
+rendering: blender --background --factory-startup --python
+assets/curation/exteriors/generate_daylight.py
+(Requires Cycles CUDA GPU access.) These are baked maps,not an engine-side
+procedural atmosphere automatically recomputed on a CLI sun override.

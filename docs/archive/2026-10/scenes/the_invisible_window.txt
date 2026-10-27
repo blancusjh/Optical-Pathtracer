@@ -1,0 +1,176 @@
+Historical record, retained for provenance. Current state: ../../../STATUS.md
+
+10 OCTOBER 2026 — COMPLETED ROOM AND WALL GALLERY
+
+The adopted scene uses mapped lime plaster, fumed oak and marble, with Room and
+Wall framing that includes the complete apparatus/projection. Nineteen physical
+optical blocks, including Sun, PMMA panel, heliostat, receiver, shutters and
+frames, are byte-identical across this material/camera adoption. The frozen panel
+OBJ and product JSON are unchanged. Invariants and capture identities are recorded
+in benchmarks/results/20261010_gallery.json.
+
+A corrected-engine estimator review compared native Room VCM 16, SPPM 16 and VCM 192
+images. SPPM retained clearer plaster, floor and ceiling structure at comparable
+cost, so the final budgets are Room 64 and Wall 128, each with 16 photons per pixel,
+depth 10, seed 7, one pass at 960×600. This visual choice is not an equal-error or
+convergence measurement. Raw images receive no denoising or retouching.
+
+Room 64 is reviewed and promoted to docs/gallery/invisible_window_room.png.
+The complete transparent panel and projected lancet have clear separation;
+plaster, timber, ceiling junction and tile joints remain legible. Fine grain and
+coloured points around the pane/dark receiver remain. The near-white projection
+retains face, hands and banderole linework at Room EV -12; Wall EV -15 is the detail
+view. Native transport took 943.538 s (process 961.577 s), with 626,688,000 paths,
+3,284,531,893 segments, 168 region inconsistencies and 21 leaks. Raw RGB is finite.
+These diagnostics remain unresolved; local visual acceptance is not a claim of
+clean transport.
+
+Wall 128 is also reviewed and promoted to docs/gallery/invisible_window_wall.png.
+The entire oblique lancet fits with clearance at the arch and bottom. Portrait,
+raised hand, drapery and ribbon structure remain readable at EV -15; the ribbon's
+lettering is not legible. Optical softness and sampling grain limit fine detail,
+and sparse coloured points remain in the dark surround. Both root and independent
+review accepted the native image for this bounded local gallery milestone.
+Transport took 1782.620 s (process 1799.341 s), with 1,253,376,000 paths,
+6,646,668,483 segments, 243 region inconsistencies and 34 leaks. Raw RGB is finite.
+The first diagnostic is at Heliostat.face with Panel.interior[PMMA]. Neither
+review nor zero postprocessing removes these unresolved transport limitations.
+
+Both captures and their raw data/logs are retained under
+out/gallery/final_review_20261010_v2/invisible_window_{room,wall}.*.
+Promoted native JSON and review sidecars accompany both PNGs in docs/gallery/.
+
+The final engine passed 157/157 hardware traversal tests, 21/21 targeted software
+traversal tests and 4/4 viewer/layering checks. Portable engine evidence is in
+benchmarks/results/20261009_gallery_engine.json. Gallery times are capture records,
+not isolated performance comparisons. The target photograph's source/licence
+remains unknown, as recorded in the manifest and promoted sidecars; the user
+explicitly deferred that question for this local milestone.
+
+--- HISTORICAL CHECKS AND PREVIEWS: PENDING STATEMENTS BELOW ARE SUPERSEDED ---
+
+8 OCTOBER 2026 — CONTACT AND JOINERY CHECK
+
+Review04 fits the door jambs below the lintel at z1.78m and extends the lintel
+across their outer faces. Doorway clear aperture is unchanged. This removes
+coplanar faces where the old2m jambs overlapped the upper22cm lintel.
+CPU Room80x50,16spp,seed7,depth10:531inconsistencies became1, with0leaks.
+The final event was a same-triangle self-hit at the PMMA panel's flat back:
+reconstructed normal residual4.8e-14m exceeded the carried2.84e-14m error.
+Carrying the mesh intersection's measured plane residual fixes this numerically;
+the panel vertices and optical system remain unchanged.
+
+The corrected CPU pilot has64000paths,414799segments,0inconsistencies,0leaks,
+meanY2.149. Log: out/performance_20261008/window_contact_cpu80_mesh_residual.log.
+Frozen CPU binary: owe_cpu_contact_mesh_residual_81ca17f1 in the same directory.
+This path-traced low-budget pilot checks transport; it does not resolve the
+caustic and is not a final aesthetic image. GPU validation remains pending.
+
+--- EARLIER COMPOSITION PREVIEWS ---
+
+8 OCTOBER 2026 — MATERIAL AND COMPOSITION PREVIEWS (final capture pending)
+
+Review variants and raw native outputs are under out/curation_20261008/.
+review03 retains the frozen PMMA panel, Sun, heliostat, receiver and throw.
+The lower retaining slip corrects a measured 0.4nm overlap at the panel bottom;
+no panel vertex changes. Full-lancet Wall and contextual Room framing now fit.
+Mapped Poly Haven plaster, walnut and marble replace the remaining flat room
+materials. Room display EV -12, Wall -15; these do not change raw radiance.
+
+Three critiques of the opened Room VCM64 preview:
+Composition: pane left and projection right, plumb verticals, quiet centre.
+Light: reflected illumination reveals the apparatus at EV -12 without added fill;
+Wall remains the brighter projection detail, not the contextual hero.
+Materials: restrained wood/plaster/marble identify the chamber; spectral grain
+and unresolved contacts still prevent acceptance as a final image.
+
+VCM64 preview:960x600,seed7,depth10,1photon/pixel/iteration,21.0012s transport,
+meanY488.79,1722inconsistencies,32leaks. SPPM32 previews use a different photon
+budget, so timings do not establish equal-quality performance. All are from the
+frozen CIE candidate before contact repair; corrected-engine comparison pending.
+Main scene now includes the verified joinery/retaining-slip repairs; original
+materials and framing remain until corrected benchmark capture finishes. The
+pre-repair source is archived with the earlier benchmark evidence.
+Target-photo provenance is set aside at the user's direction for local work;
+its source/licence remains unknown in the records.
+
+--- EARLIER DAYLIGHT UPDATE ---
+
+DAYTIME EXTERIOR UPDATE — reviewed,7 October2026
+The owner requested DAY ONLY and exact agreement with the existing sun.
+The earlier unfinished-scene handoff remains below as history; this focused
+update replaces only its missing daylight environment,not the frozen product.
+Sky: generated4096x2048 Hosek-Wilkie model,solar elevation90degrees,azimuth0.
+No solar disc is baked; the original analytic overhead sun and its radiance,
+heliostat,aperture,PMMA mesh and receiver remain unchanged.
+Turbidity2.4,diffuse horizontal irradiance=10% of direct-normal solar irradiance
+is an explicit clear-day assumption. Parameters: assets/daylight/MANIFEST.json.
+No night scene or NASA data was changed. GPU review records follow below.
+
+--- PREVIOUS HANDOFF ---
+
+HANDOFF STATUS — 7 October 2026
+UNFINISHED. The requested new curation pass did not reach this fourth scene
+before the owner's wrap-up request. scenes/the_invisible_window.owe is unchanged.
+No new final_* images have been produced. Existing out/scenes/invisible_window/
+images are earlier previews and must not be represented as completed new work.
+
+Existing plan: Vermeer, Woman Holding a Balance; Hammershoi, Interior, Sunlight
+on the Floor. Clear PMMA is the physical product; a real overhead Sun and silver
+heliostat project the Sacred Heart onto lime plaster. Mineral neutrals/walnut.
+
+Existing previews opened during preparation: Wall crops the full lancet; Room
+has a weak, narrow view of the projection; Panel shows severe sampling grain.
+Next work, not executed: full-lancet Wall framing; more oblique Room framing
+showing both optical endpoints; CC0 Poly Haven full-resolution plaster/oak and
+marble sets already downloaded; enough GPU SPPM iterations to resolve the pane.
+No additional Sketchfab model identified as necessary; no wishlist commitment.
+
+The existing product is monochrome inverse-caustic imagery with real PMMA
+dispersion, not coloured or emissive stained glass. The original source photo
+assets/caustic_panel/cristo-vidriera.jpg has unknown licence; do not claim CC0.
+No new environment texture or model is yet wired into this scene.
+
+Frozen products verified unchanged:
+models/caustic/sacred_heart_panel.obj
+1e16e59cc374d8323c649dbf9aae175990c2f0e912bb90e1358fa6673a2a4f32
+models/caustic/sacred_heart_panel.json
+8869de9068f4b81826b4648d1263729d881a64ee58d4cdf46e9b444ecb54f74d
+
+Engine findings: none newly tested for this scene. Earlier VCM cache/contact
+notes remain in out/scenes/invisible_window/review.txt; they were not reverified.
+Future priorities: SPPM spectral convergence; photometric/caustic diagnostics.
+Image normal/roughness support already exists; use gentle plaster normals so
+the receiving wall's texture does not compete with the projected image.
+
+Daylight architecture: added a1.8m roofed stone entrance vestibule beyond the
+existing doorway. The Room observer stands inside it. This physically excludes
+most direct sky from the darkroom entrance while retaining a real open passage;
+there is no camera-only background,black card,absorber enclosure or hidden fill.
+Roof footprint does not cover the heliostat: the overhead solar beam is unchanged.
+The panel,frame,aperture,mirror pose,throw and receiver were not moved.
+
+Daylight review01 opened,640x400 GPU SPPM64,16 photons/pixel/iteration,
+28.96s wall,1185.63MiB peak. Composition: original doorway view retains both
+optical endpoints; no camera or optical geometry change needed for this update.
+Light: the projection remains the strongest accent with the real noon sky, but
+bright facial tones approach white; lower Room exposure from-14 to-15EV.
+Materials: sky sampling grain remains on the transparent pane and stone;
+raise to128 iterations at960x600. No material tint or post-processing correction.
+Log49 leaks/3956 inconsistencies,first at Panel.surface/FrameBelow.surface;
+contact finding reported,not fixed by changing the frozen product.
+Repro: build/owe render scenes/the_invisible_window.owe --backend gpu --device 1
+ --detector Room --integrator sppm --spp 64 --photons 16 --resolution 640x400 --out /tmp/daylight_room
+
+Daylight final Room opened,960x600 GPU SPPM128,16 photons/pixel/iteration;
+115.45s wall,112.06s transport,1197.70MiB peak.
+Composition: both endpoints remain visible in the original doorway framing.
+Light: noon sky is consistent with the vertical sun; reduced exposure retains
+more projected detail and the Sacred Heart remains the dominant bright accent.
+Materials: panel remains colourless and transparent; some spectral sampling grain
+persists. The broader unfinished material/art-direction pass is NOT claimed done.
+This final_room.png is the reviewed daylight update; older Wall/Panel previews
+predate it. No map downscaling,post-processing,engine edits or source changes.
+Reported region inconsistencies: 17482; leaks: 253.
+These existing boundary/contact diagnostics remain unresolved; frozen panel hash
+matches the original. Exact final settings and engine statistics are in its JSON.

@@ -3,6 +3,7 @@
 // the latest estimate through the same display pipeline as the PNG writer, and sends requests:
 // another view, another backend or resolution, scene edits, a pixel probe, a save.
 #include "viewer.hpp"
+#include "cli.hpp"
 #include "navigation.hpp"
 
 #include <SDL3/SDL.h>
@@ -28,6 +29,7 @@
 #include "owe/analysis/analysis.hpp"
 #include "owe/analysis/inspect.hpp"
 #include "owe/backends/registry.hpp"
+#include "owe/core/parallel.hpp"
 #include "owe/render/exposure.hpp"
 #include "owe/render/output.hpp"
 #include "owe/render/record.hpp"
@@ -64,11 +66,7 @@ struct Catalog {
 
     // "file.owe" or "file.owe:Detector" (matched by path or file name); -1 if absent.
     int find(const std::string& spec) const {
-        std::string file = spec, det;
-        if (auto c = spec.rfind(':'); c != std::string::npos && spec.substr(c).find('/') == std::string::npos) {
-            file = spec.substr(0, c);
-            det = spec.substr(c + 1);
-        }
+        const auto [file, det] = splitSceneSpec(spec);
         for (size_t s = 0; s < scenes.size(); ++s) {
             const SceneEntry& e = scenes[s];
             std::error_code ec;
@@ -214,7 +212,7 @@ struct Snapshot {
     std::vector<EyepieceTarget> eyepieces;
     long long spp = 0;
     int passes = 0;
-    double seconds = 0, lastPass = 0;
+    double seconds = 0;
     TransportStats stats;
     std::string backend, integrator, description, note;
     int width = 0, height = 0;
@@ -314,7 +312,8 @@ private:
         Tone tone;
     };
 
-    void loop() {
+    // The worker thread's own state, touched only by loop() and its steps.
+    struct Session {
         std::unique_ptr<Scene> scene;
         std::string scenePath;
         std::vector<std::string> sceneEdits;
@@ -324,11 +323,28 @@ private:
         int nativeWidth = 0, nativeHeight = 0;
         bool exploring = false, preview = false;
         NavigationCamera camera;
-        uint64_t current = 0;
-        const int threads = std::max(1, int(std::thread::hardware_concurrency()) - 1);  // one core for the UI
-        const double kTargetPass = 0.12;  // seconds: ~8 image updates per second
-        auto converged = [&] { return maxSpp_ > 0 && R && R->samplesPerPixel() >= maxSpp_; };
+        uint64_t current = 0;  // the request whose images are shown
+    };
+    static constexpr double kTargetPass = 0.12;  // seconds: ~8 image updates per second
 
+    bool converged() const { return maxSpp_ > 0 && w_.R && w_.R->samplesPerPixel() >= maxSpp_; }
+    // A renderer's failure: it is released and the error shown (under the lock).
+    void failed(const std::exception& e) {
+        w_.R.reset();
+        std::lock_guard<std::mutex> lk(m_);
+        snap_.state = "error";
+        snap_.error = e.what();
+    }
+    // Forgets the shown progress of the previous renderer (under the lock).
+    void resetProgress() {
+        snap_.spp = 0;
+        snap_.passes = 0;
+        snap_.seconds = 0;
+        snap_.stats = TransportStats{};
+        snap_.probeText.clear();
+    }
+
+    void loop() {
         for (;;) {
             std::optional<ViewRequest> req;
             std::optional<NavigationRequest> nav;
@@ -339,7 +355,7 @@ private:
             uint64_t reqId;
             {
                 std::unique_lock<std::mutex> lk(m_);
-                cv_.wait(lk, [&] { return quit_ || pending_ || navigation_ || save_ || probe_ || (R && !paused_ && !converged()); });
+                cv_.wait(lk, [&] { return quit_ || pending_ || navigation_ || save_ || probe_ || (w_.R && !paused_ && !converged()); });
                 if (quit_) return;
                 req = std::exchange(pending_, std::nullopt);
                 nav = std::exchange(navigation_, std::nullopt);
@@ -348,264 +364,245 @@ private:
                 paused = paused_;
                 maxSpp = maxSpp_;
                 reqId = requestId_;
-                if (!req && R) snap_.state = paused ? "paused" : converged() ? "converged" : "rendering";
+                if (!req && w_.R) snap_.state = paused ? "paused" : converged() ? "converged" : "rendering";
             }
-
             if (req) {
-                R.reset();  // the renderer refers to the scene: release it first
-                {
-                    std::lock_guard<std::mutex> lk(m_);
-                    if (requestId_ != reqId) continue;
-                }
-                auto phase = [&](const std::string& what) {
-                    std::lock_guard<std::mutex> lk(m_);
-                    if (snap_.request == reqId) snap_.phase = what;
-                };
-                try {
-                    if (!scene || scenePath != req->scenePath || sceneEdits != req->edits) {
-                        phase("reading the scene and its models");
-                        scene.reset();
-                        auto sc = std::make_unique<Scene>(loadSceneWithEdits(req->scenePath, req->edits));
-                        explorer = -1;
-                        native.clear();
-                        for (auto& d : sc->detectors) native[d->name] = {d->width, d->height};
-                        scene = std::move(sc);
-                        scenePath = req->scenePath;
-                        sceneEdits = req->edits;
-                    }
-                    int d = req->detector.empty()
-                                ? (scene->render.detector.empty() ? 0 : scene->findDetector(scene->render.detector))
-                                : scene->findDetector(req->detector);
-                    if (d < 0) throw std::runtime_error("no detector named '" + req->detector + "'");
-                    Detector& base = *scene->detectors[size_t(d)];
-                    auto [nw, nh] = native[base.name];
-                    nativeWidth = base.width = std::max(8, int(std::lround(nw * req->scale)));
-                    nativeHeight = base.height = std::max(8, int(std::lround(nh * req->scale)));
-                    scene->useDetector(d);
-                    base.prepare(scene->world);
-                    camera = req->camera.value_or(NavigationCamera::from(base, &scene->world));
-                    exploring = req->camera.has_value();
-                    preview = false;
-                    RenderSettings rs = scene->settingsFor(d);
-                    if (exploring) {
-                        if (explorer < 0) {
-                            explorer = int(scene->detectors.size());
-                            scene->detectors.push_back(std::make_unique<IdealObserver>());
-                        }
-                        auto& eye = static_cast<IdealObserver&>(*scene->detectors[size_t(explorer)]);
-                        eye.name = base.name + " (explore)";
-                        adoptPixelResponse(eye, base);
-                        eye.width = nativeWidth;
-                        eye.height = nativeHeight;
-                        camera.apply(eye, scene->world);
-                        d = explorer;
-                        scene->useDetector(d);
-                    }
-                    Detector& D = *scene->detectors[size_t(d)];
-                    rs.backend = req->backend;
-                    rs.device = req->device;
-                    rs.threads = threads;
-                    // Exploring keeps the scene's integrator: caustics seen from a free eye are formed
-                    // by light tracing, as in the scene's own views, instead of rare camera paths.
-                    if (req->pathOnly) rs.integrator = "path";
-                    adaptToBackend(rs);  // e.g. hybrid → path on a backend without it
-                    phase("preparing the " + rs.backend + " renderer");
-                    R = makeRenderer(*scene, d, rs);
-                    det = d;
-                    spp = 1;
-                    current = reqId;
-                    std::lock_guard<std::mutex> lk(m_);
-                    if (snap_.request == reqId) {
-                        snap_.state = "rendering";
-                        snap_.camera = camera;
-                        snap_.surfaceDistance = camera.surfaceDistance(scene->world);
-                        snap_.exploring = exploring;
-                        snap_.accommodated = false;  // the view's own focus
-                        snap_.eyepieces.clear();
-                        for (const auto& name : req->eyepieces) {
-                            int index = scene->findDetector(name);
-                            if (index >= 0) {
-                                auto* eye = dynamic_cast<IdealObserver*>(scene->detectors[size_t(index)].get());
-                                if (eye) snap_.eyepieces.push_back({name, eye->position, 2 * eye->pupilRadius, eye->forward()});
-                            }
-                        }
-                        snap_.backend = R->backend();
-                        snap_.integrator = rs.integrator;
-                        snap_.description = D.describe();
-                        auto note = scene->notes.find(D.name);
-                        snap_.note = note == scene->notes.end() ? "" : note->second;
-                        snap_.width = D.width;
-                        snap_.height = D.height;
-                        snap_.exposure = rs.exposure;
-                        snap_.autoExposure = rs.autoExposure;
-                        snap_.whiteBalance = rs.whiteBalance;
-                        snap_.tone = rs.tone;
-                        snap_.spp = 0;
-                        snap_.passes = 0;
-                        snap_.seconds = snap_.lastPass = 0;
-                        snap_.stats = TransportStats{};
-                        snap_.image = Image{};
-                        snap_.probeText.clear();
-                        snap_.version++;
-                    }
-                } catch (const std::exception& e) {
-                    R.reset();
-                    scene.reset();
-                    scenePath.clear();
-                    std::lock_guard<std::mutex> lk(m_);
-                    if (snap_.request == reqId) {
-                        snap_.state = "error";
-                        snap_.error = e.what();
-                    }
-                }
+                load(*req, reqId);
                 continue;
             }
-
-            if (nav && scene && R) {
-                try {
-                    camera = nav->camera;
-                    preview = nav->preview;
-                    // The eye focuses where the object's image is: through a telescope, a mirror or
-                    // a magnifier that is not the glass surface in front of it.
-                    auto accommodate = [&](const Vec3& dir) {
-                        Accommodation a = accommodation(*scene, camera.position, dir, scene->world.locate(camera.position),
-                                                        camera.pupil);
-                        if (a.found) camera.focus = a.distance;
-                        return a.found;
-                    };
-                    if (nav->focusPoint) {
-                        double tanY = std::tan(camera.fov * 0.5);
-                        Vec3 dir = normalize(camera.forward + camera.right() * ((2 * nav->focusPoint->x - 1) * tanY * nativeWidth / nativeHeight)
-                                             + camera.up * ((1 - 2 * nav->focusPoint->y) * tanY));
-                        SurfaceHit hit;
-                        if (scene->world.intersect(Ray{camera.position, dir}, Inf, hit)) {
-                            camera.forward = dir;
-                            camera.up = normalize(cross(camera.right(), camera.forward));
-                            camera.distance = std::max(1e-5, hit.t);  // orbit about the surface clicked
-                            if (!accommodate(dir)) camera.focus = camera.distance;
-                        }
-                    } else if (nav->accommodate && camera.pupil > 0) {
-                        accommodate(camera.forward);
-                    }
-                    RenderSettings rs = R->settings();
-                    if (!exploring) {
-                        const std::string name = R->detector().name + " (explore)";
-                        const int base = det;
-                        R.reset();
-                        if (explorer < 0) {
-                            explorer = int(scene->detectors.size());
-                            scene->detectors.push_back(std::make_unique<IdealObserver>());
-                        }
-                        scene->detectors[size_t(explorer)]->name = name;
-                        adoptPixelResponse(static_cast<IdealObserver&>(*scene->detectors[size_t(explorer)]),
-                                           *scene->detectors[size_t(base)]);
-                        det = explorer;
-                        exploring = true;
-                        scene->useDetector(det);
-                    }
-                    auto& eye = static_cast<IdealObserver&>(*scene->detectors[size_t(det)]);
-                    eye.width = preview ? std::min(nativeWidth, 320) : nativeWidth;
-                    eye.height = std::max(8, int(std::lround(double(nativeHeight) * eye.width / nativeWidth)));
-                    camera.apply(eye, scene->world);
-                    // The current integrator (the scene's, or path if asked); a free eye is an
-                    // observer, so light and hybrid both apply.
-                    if (!R || !R->resetObserver()) R = makeRenderer(*scene, det, rs);
-                    spp = 1;
-                    paused = false;
-                    std::lock_guard<std::mutex> lk(m_);
-                    snap_.exploring = true;
-                    snap_.camera = camera;
-                    snap_.surfaceDistance = camera.surfaceDistance(scene->world);
-                    if (nav->focusPoint) snap_.focusVersion++;
-                    snap_.accommodated = nav->accommodate || nav->focusPoint.has_value();
-                    snap_.description = eye.describe();
-                    snap_.integrator = rs.integrator;
-                    snap_.width = eye.width;
-                    snap_.height = eye.height;
-                    snap_.spp = 0;
-                    snap_.passes = 0;
-                    snap_.seconds = 0;
-                    snap_.stats = {};
-                    snap_.probeText.clear();
-                    snap_.state = "rendering";
-                } catch (const std::exception& e) {
-                    R.reset();
-                    std::lock_guard<std::mutex> lk(m_);
-                    snap_.state = "error";
-                    snap_.error = e.what();
-                    continue;
-                }
+            if (nav && w_.scene && w_.R) {
+                if (!navigate(*nav)) continue;
+                paused = false;
             }
+            if (save && w_.R) saveImage(*save);
+            if (probe && w_.R && w_.scene) probePixelAt(probe->first, probe->second);
+            if (w_.R && !paused && !(maxSpp > 0 && w_.R->samplesPerPixel() >= maxSpp)) renderPass(maxSpp);
+        }
+    }
 
-            if (save && R) {
-                std::string msg;
-                try {
-                    fs::create_directories(fs::path(save->prefix).parent_path());
-                    Image img = R->resolve();
-                    writePNG(save->prefix + ".png", img, save->ev, save->autoEv, save->wb, save->tone);
-                    writePFM(save->prefix + ".pfm", img);
-                    RenderSettings settings = R->settings();
-                    settings.exposure = save->ev;
-                    settings.autoExposure = save->autoEv;
-                    settings.whiteBalance = save->wb;
-                    settings.tone = save->tone == Tone::AgX ? "agx" : "standard";
-                    std::ofstream(save->prefix + ".json") << renderMetadataJSON(*scene, *R, settings);
-                    msg = "saved " + save->prefix + ".png, .pfm, .json";
-                } catch (const std::exception& e) {
-                    msg = std::string("save failed: ") + e.what();
-                }
-                std::lock_guard<std::mutex> lk(m_);
-                snap_.message = msg;
+    // Loads the requested view (its scene only when it changed) and starts its renderer.
+    void load(const ViewRequest& req, uint64_t reqId) {
+        Session& w = w_;
+        w.R.reset();  // the renderer refers to the scene: release it first
+        {
+            std::lock_guard<std::mutex> lk(m_);
+            if (requestId_ != reqId) return;
+        }
+        auto phase = [&](const std::string& what) {
+            std::lock_guard<std::mutex> lk(m_);
+            if (snap_.request == reqId) snap_.phase = what;
+        };
+        try {
+            if (!w.scene || w.scenePath != req.scenePath || w.sceneEdits != req.edits) {
+                phase("reading the scene and its models");
+                w.scene.reset();
+                auto sc = std::make_unique<Scene>(loadSceneWithEdits(req.scenePath, req.edits));
+                w.explorer = -1;
+                w.native.clear();
+                for (auto& d : sc->detectors) w.native[d->name] = {d->width, d->height};
+                w.scene = std::move(sc);
+                w.scenePath = req.scenePath;
+                w.sceneEdits = req.edits;
             }
-
-            if (probe && R && scene) {
-                std::string text;
-                try {
-                    PixelProbe pr = probePixel(*scene, det, probe->first, probe->second, 2000, scene->render.seed);
-                    text = pr.text(scene->world);
-                } catch (const std::exception& e) {
-                    text = std::string("probe failed: ") + e.what();
-                }
-                std::lock_guard<std::mutex> lk(m_);
-                snap_.probeText = text;
-                snap_.probeX = probe->first;
-                snap_.probeY = probe->second;
-                snap_.probeVersion++;
+            Scene& scene = *w.scene;
+            int d = req.detector.empty() ? (scene.render.detector.empty() ? 0 : scene.findDetector(scene.render.detector))
+                                         : scene.findDetector(req.detector);
+            if (d < 0) throw std::runtime_error("no detector named '" + req.detector + "'");
+            Detector& base = *scene.detectors[size_t(d)];
+            auto [nw, nh] = w.native[base.name];
+            w.nativeWidth = base.width = std::max(8, int(std::lround(nw * req.scale)));
+            w.nativeHeight = base.height = std::max(8, int(std::lround(nh * req.scale)));
+            scene.useDetector(d);
+            base.prepare(scene.world);
+            w.camera = req.camera.value_or(NavigationCamera::from(base, &scene.world));
+            w.exploring = req.camera.has_value();
+            w.preview = false;
+            RenderSettings rs = scene.settingsFor(d);
+            if (w.exploring) {
+                IdealObserver& eye = freeEye(scene, w.explorer, base);
+                eye.width = w.nativeWidth;
+                eye.height = w.nativeHeight;
+                w.camera.apply(eye, scene.world);
+                d = w.explorer;
+                scene.useDetector(d);
             }
-
-            if (R && !paused && !(maxSpp > 0 && R->samplesPerPixel() >= maxSpp)) {
-                int n = preview ? 1 : spp;
-                if (maxSpp > 0) n = int(std::min<long long>(n, maxSpp - R->samplesPerPixel()));
-                auto t0 = Clock::now();
-                try {
-                    R->runPass(n);
-                } catch (const std::exception& e) {
-                    R.reset();
-                    std::lock_guard<std::mutex> lk(m_);
-                    snap_.state = "error";
-                    snap_.error = e.what();
-                    continue;
-                }
-                double dt = since(t0);
-                Image img = R->resolve();
-                {
-                    std::lock_guard<std::mutex> lk(m_);
-                    if (snap_.request == current) {
-                        snap_.image = std::move(img);
-                        snap_.version++;
-                        snap_.spp = R->samplesPerPixel();
-                        snap_.passes = R->passes();
-                        snap_.seconds = R->seconds();
-                        snap_.lastPass = dt;
-                        snap_.stats = R->stats();
-                        snap_.state = paused_ ? "paused" : converged() ? "converged" : "rendering";
-                    }
-                }
-                // Size passes to keep the image updating a few times per second.
-                spp = std::clamp(int(n * kTargetPass / std::max(dt, 1e-3)), std::max(1, n / 2), std::max(1, 2 * n));
-                spp = std::clamp(spp, 1, 4096);
+            Detector& D = *scene.detectors[size_t(d)];
+            rs.backend = req.backend;
+            rs.device = req.device;
+            rs.threads = std::max(1, int(hardwareThreads()) - 1);  // one core for the UI
+            // Exploring keeps the scene's integrator: caustics seen from a free eye are formed
+            // by light tracing, as in the scene's own views, instead of rare camera paths.
+            if (req.pathOnly) rs.integrator = "path";
+            adaptToBackend(rs);  // e.g. hybrid → path on a backend without it
+            phase("preparing the " + rs.backend + " renderer");
+            w.R = makeRenderer(scene, d, rs);
+            w.det = d;
+            w.spp = 1;
+            w.current = reqId;
+            std::lock_guard<std::mutex> lk(m_);
+            if (snap_.request != reqId) return;
+            snap_.state = "rendering";
+            snap_.camera = w.camera;
+            snap_.surfaceDistance = w.camera.surfaceDistance(scene.world);
+            snap_.exploring = w.exploring;
+            snap_.accommodated = false;  // the view's own focus
+            snap_.eyepieces.clear();
+            for (const auto& name : req.eyepieces) {
+                int index = scene.findDetector(name);
+                auto* eye = index >= 0 ? dynamic_cast<IdealObserver*>(scene.detectors[size_t(index)].get()) : nullptr;
+                if (eye) snap_.eyepieces.push_back({name, eye->position, 2 * eye->pupilRadius, eye->forward()});
+            }
+            snap_.backend = w.R->backend();
+            snap_.integrator = rs.integrator;
+            snap_.description = D.describe();
+            snap_.note = scene.noteFor(D.name);
+            snap_.width = D.width;
+            snap_.height = D.height;
+            snap_.exposure = rs.exposure;
+            snap_.autoExposure = rs.autoExposure;
+            snap_.whiteBalance = rs.whiteBalance;
+            snap_.tone = rs.tone;
+            resetProgress();
+            snap_.image = Image{};
+            snap_.version++;
+        } catch (const std::exception& e) {
+            w.R.reset();
+            w.scene.reset();
+            w.scenePath.clear();
+            std::lock_guard<std::mutex> lk(m_);
+            if (snap_.request == reqId) {
+                snap_.state = "error";
+                snap_.error = e.what();
             }
         }
+    }
+
+    // Moves the free eye (from a saved view, it becomes one); false on a failure.
+    bool navigate(const NavigationRequest& nav) {
+        Session& w = w_;
+        try {
+            Scene& scene = *w.scene;
+            w.camera = nav.camera;
+            w.preview = nav.preview;
+            // The eye focuses where the object's image is: through a telescope, a mirror or
+            // a magnifier that is not the glass surface in front of it.
+            auto accommodate = [&](const Vec3& dir) {
+                Accommodation a = accommodation(scene, w.camera.position, dir, scene.world.locate(w.camera.position), w.camera.pupil);
+                if (a.found) w.camera.focus = a.distance;
+                return a.found;
+            };
+            if (nav.focusPoint) {
+                double tanY = std::tan(w.camera.fov * 0.5);
+                Vec3 dir = normalize(w.camera.forward +
+                                     w.camera.right() * ((2 * nav.focusPoint->x - 1) * tanY * w.nativeWidth / w.nativeHeight) +
+                                     w.camera.up * ((1 - 2 * nav.focusPoint->y) * tanY));
+                SurfaceHit hit;
+                if (scene.world.intersect(Ray{w.camera.position, dir}, Inf, hit)) {
+                    w.camera.forward = dir;
+                    w.camera.up = normalize(cross(w.camera.right(), w.camera.forward));
+                    w.camera.distance = std::max(1e-5, hit.t);  // orbit about the surface clicked
+                    if (!accommodate(dir)) w.camera.focus = w.camera.distance;
+                }
+            } else if (nav.accommodate && w.camera.pupil > 0) {
+                accommodate(w.camera.forward);
+            }
+            RenderSettings rs = w.R->settings();
+            if (!w.exploring) {
+                w.R.reset();
+                freeEye(scene, w.explorer, *scene.detectors[size_t(w.det)]);
+                w.det = w.explorer;
+                w.exploring = true;
+                scene.useDetector(w.det);
+            }
+            auto& eye = static_cast<IdealObserver&>(*scene.detectors[size_t(w.det)]);
+            eye.width = w.preview ? std::min(w.nativeWidth, 320) : w.nativeWidth;
+            eye.height = std::max(8, int(std::lround(double(w.nativeHeight) * eye.width / w.nativeWidth)));
+            w.camera.apply(eye, scene.world);
+            // The current integrator (the scene's, or path if asked); a free eye is an
+            // observer, so light and hybrid both apply.
+            if (!w.R || !w.R->resetObserver()) w.R = makeRenderer(scene, w.det, rs);
+            w.spp = 1;
+            std::lock_guard<std::mutex> lk(m_);
+            snap_.exploring = true;
+            snap_.camera = w.camera;
+            snap_.surfaceDistance = w.camera.surfaceDistance(scene.world);
+            if (nav.focusPoint) snap_.focusVersion++;
+            snap_.accommodated = nav.accommodate || nav.focusPoint.has_value();
+            snap_.description = eye.describe();
+            snap_.integrator = rs.integrator;
+            snap_.width = eye.width;
+            snap_.height = eye.height;
+            resetProgress();
+            snap_.state = "rendering";
+            return true;
+        } catch (const std::exception& e) {
+            failed(e);
+            return false;
+        }
+    }
+
+    void saveImage(const SaveJob& job) {
+        std::string msg;
+        try {
+            fs::create_directories(fs::path(job.prefix).parent_path());
+            Image img = w_.R->resolve();
+            RenderSettings settings = w_.R->settings();
+            settings.exposure = job.ev;
+            settings.autoExposure = job.autoEv;
+            settings.whiteBalance = job.wb;
+            settings.tone = job.tone == Tone::AgX ? "agx" : "standard";
+            writeRenderFiles(job.prefix, *w_.scene, *w_.R, settings, img);
+            msg = "saved " + job.prefix + ".png, .pfm, .json";
+        } catch (const std::exception& e) {
+            msg = std::string("save failed: ") + e.what();
+        }
+        std::lock_guard<std::mutex> lk(m_);
+        snap_.message = msg;
+    }
+
+    void probePixelAt(int x, int y) {
+        std::string text;
+        try {
+            PixelProbe pr = probePixel(*w_.scene, w_.det, x, y, 2000, w_.scene->render.seed);
+            text = pr.text(w_.scene->world);
+        } catch (const std::exception& e) {
+            text = std::string("probe failed: ") + e.what();
+        }
+        std::lock_guard<std::mutex> lk(m_);
+        snap_.probeText = text;
+        snap_.probeX = x;
+        snap_.probeY = y;
+        snap_.probeVersion++;
+    }
+
+    // One pass, sized to keep the image updating a few times per second.
+    void renderPass(long long maxSpp) {
+        Session& w = w_;
+        int n = w.preview ? 1 : w.spp;
+        if (maxSpp > 0) n = int(std::min<long long>(n, maxSpp - w.R->samplesPerPixel()));
+        auto t0 = Clock::now();
+        try {
+            w.R->runPass(n);
+        } catch (const std::exception& e) {
+            failed(e);
+            return;
+        }
+        double dt = since(t0);
+        Image img = w.R->resolve();
+        {
+            std::lock_guard<std::mutex> lk(m_);
+            if (snap_.request == w.current) {
+                snap_.image = std::move(img);
+                snap_.version++;
+                snap_.spp = w.R->samplesPerPixel();
+                snap_.passes = w.R->passes();
+                snap_.seconds = w.R->seconds();
+                snap_.stats = w.R->stats();
+                snap_.state = paused_ ? "paused" : converged() ? "converged" : "rendering";
+            }
+        }
+        w.spp = std::clamp(int(n * kTargetPass / std::max(dt, 1e-3)), std::max(1, n / 2), std::max(1, 2 * n));
+        w.spp = std::clamp(w.spp, 1, 4096);
     }
 
     std::mutex m_;
@@ -618,7 +615,8 @@ private:
     std::optional<SaveJob> save_;
     std::optional<std::pair<int, int>> probe_;
     Snapshot snap_;
-    std::thread thread_;
+    Session w_;
+    std::thread thread_;  // last: it starts the loop once every member above exists
 };
 
 // ---------------------------------------------------------------- the window
@@ -661,8 +659,7 @@ public:
         cat_ = scanScenes(paths);
         if (!o.view.empty() && cat_.find(o.view) < 0) {
             // A scene outside the listed paths: add it.
-            std::string file = o.view.substr(0, o.view.rfind(':') == std::string::npos ? o.view.size() : o.view.rfind(':'));
-            Catalog extra = scanScenes({file});
+            Catalog extra = scanScenes({splitSceneSpec(o.view).first});
             for (auto& v : extra.views) v.scene += int(cat_.scenes.size());
             for (auto& s : extra.scenes) {
                 for (int& v : s.views) v += int(cat_.views.size());
@@ -799,6 +796,11 @@ private:
         flight_ = lookHeld_ = false;
         if (window_) SDL_SetWindowRelativeMouseMode(window_, false);
     }
+    void toggleFlight() {
+        flight_ = !flight_;
+        if (window_) SDL_SetWindowRelativeMouseMode(window_, flight_);
+        tour_ = false;
+    }
     void moved() {
         exploring_ = motionPending_ = true;
         paused_ = tour_ = false;
@@ -825,6 +827,7 @@ private:
         return result;
     }
     void drawNavigation();
+    void drawEyepieces();
     void refreshTexture(SDL_Renderer* ren);
     // Manual, Locked or Adaptive; the displayed brightness does not change at the switch.
     void setExposureMode(ExposureMode m) {
@@ -837,10 +840,20 @@ private:
         displayDirty_ = true;
     }
     void drawSidebar(float width);
+    void drawViews(float width);
+    void drawRenderPanel();
+    void drawDisplayPanel();
+    void drawCameraPanel(const ViewEntry& v);
+    void drawEditsPanel();
+    void drawStatus(const ViewEntry* v);
     void drawImage();
     void drawProbe();
     void handleKeys();
     bool screenshot(SDL_Renderer* ren, const std::string& path);
+    void setUpImGui(SDL_Window* win, SDL_Renderer* ren);
+    void pollEvents(SDL_Window* win);
+    void drawFrame();
+    bool advance(SDL_Renderer* ren);
 
     ViewerOptions opt_;
     Catalog cat_;
@@ -871,7 +884,6 @@ private:
     ImageDraw imageDraw_;
     SDL_Texture* tex_ = nullptr;
     int texW_ = 0, texH_ = 0;
-    uint64_t shownVersion_ = ~0ull;
     // Camera controls, scene edits, tour, probe, panels.
     float fNumber_ = 0, focus_ = 0;
     std::map<std::string, std::vector<std::string>> edits_;
@@ -883,7 +895,7 @@ private:
     bool probeOpen_ = false;
     uint64_t probeSeen_ = 0;
     uint64_t focusSeen_ = 0;
-    bool showPanel_ = true, quit_ = false;
+    bool showPanel_ = true, quit_ = false, fullscreen_ = false;
     ImFont* mono_ = nullptr;
     float uiScale_ = 1;
     int shots_ = 0;
@@ -949,7 +961,6 @@ void Viewer::refreshTexture(SDL_Renderer* ren) {
     }
     SDL_SetTextureScaleMode(tex_, pixelated_ ? SDL_SCALEMODE_NEAREST : SDL_SCALEMODE_LINEAR);
     SDL_UpdateTexture(tex_, nullptr, rgb.data(), img.width * 3);
-    shownVersion_ = snap_.version;
     displayDirty_ = false;
 }
 
@@ -1015,34 +1026,38 @@ void Viewer::navigationInput(bool hovered, float imageHeight) {
     if (changed) moved();
 }
 
+void Viewer::drawEyepieces() {
+    ImGui::TextUnformatted("Look through a telescope");
+    // select() queues a new worker request; the polled target list stays stable this frame.
+    for (const auto& target : snap_.eyepieces) {
+        if (ImGui::Button(("Look through " + target.detector).c_str())) {
+            for (int vi : sceneOf(current_)->views) {
+                if (cat_.views[size_t(vi)].detector == target.detector) { select(vi); tour_ = false; break; }
+            }
+        }
+        ImGui::SetItemTooltip("Places your eye at the computed exit pupil, aligns the telescope axis, and adopts its eye focus, field of view and exposure. Eye pupil %.2f mm.", target.pupilDiameter * 1000);
+    }
+    int nearby = nearbyEyepiece();
+    if (nearby >= 0) {
+        const auto& name = cat_.views[size_t(nearby)].detector;
+        ImGui::TextWrapped("Nearby: %s. Enter to look through, or stay free and zoom with [ ].", name.c_str());
+        for (const auto& target : snap_.eyepieces) if (target.detector == name) {
+            Vec3 offset = camera_.position - target.position;
+            double axial = dot(offset, target.towardObjective);
+            double lateral = length(offset - target.towardObjective * axial);
+            ImGui::TextWrapped("From exit pupil: %.2f mm %s, %.2f mm off axis",
+                               1000 * std::abs(axial), axial >= 0 ? "toward glass" : "behind", 1000 * lateral);
+            ImGui::SetItemTooltip("The exit pupil is where the instrument's outgoing image bundle meets the eye; it is separate from the glass surface. These distances only measure your free position.");
+            ImGui::Text("View direction: %.2f deg from axis",
+                        degrees(std::acos(clamp(dot(camera_.forward, target.towardObjective), -1, 1))));
+        }
+    }
+}
+
 void Viewer::drawNavigation() {
     if (!ImGui::CollapsingHeader("Explore", ImGuiTreeNodeFlags_DefaultOpen)) return;
     if (snap_.request == requestId_ && !snap_.eyepieces.empty()) {
-        ImGui::TextUnformatted("Look through a telescope");
-        // select() queues a new worker request; the polled target list stays stable this frame.
-        for (const auto& target : snap_.eyepieces) {
-            if (ImGui::Button(("Look through " + target.detector).c_str())) {
-                for (int vi : sceneOf(current_)->views) {
-                    if (cat_.views[size_t(vi)].detector == target.detector) { select(vi); tour_ = false; break; }
-                }
-            }
-            ImGui::SetItemTooltip("Places your eye at the computed exit pupil, aligns the telescope axis, and adopts its eye focus, field of view and exposure. Eye pupil %.2f mm.", target.pupilDiameter * 1000);
-        }
-        int nearby = nearbyEyepiece();
-        if (nearby >= 0) {
-            const auto& name = cat_.views[size_t(nearby)].detector;
-            ImGui::TextWrapped("Nearby: %s. Enter to look through, or stay free and zoom with [ ].", name.c_str());
-            for (const auto& target : snap_.eyepieces) if (target.detector == name) {
-                Vec3 offset = camera_.position - target.position;
-                double axial = dot(offset, target.towardObjective);
-                double lateral = length(offset - target.towardObjective * axial);
-                ImGui::TextWrapped("From exit pupil: %.2f mm %s, %.2f mm off axis",
-                                   1000 * std::abs(axial), axial >= 0 ? "toward glass" : "behind", 1000 * lateral);
-                ImGui::SetItemTooltip("The exit pupil is where the instrument's outgoing image bundle meets the eye; it is separate from the glass surface. These distances only measure your free position.");
-                ImGui::Text("View direction: %.2f deg from axis",
-                            degrees(std::acos(clampd(dot(camera_.forward, target.towardObjective), -1, 1))));
-            }
-        }
+        drawEyepieces();
         ImGui::Separator();
     }
     ImGui::TextWrapped("Middle drag: orbit | Shift + middle: pan | Wheel: dolly");
@@ -1051,11 +1066,7 @@ void Viewer::drawNavigation() {
     ImGui::TextWrapped("Hold right mouse: look + WASD move, Q/E down/up");
     ImGui::TextWrapped("Shift: faster | Ctrl: precision move/look | Z/C: roll | Esc: release");
     ImGui::BeginDisabled(!navigationReady_);
-    if (ImGui::Button(flight_ ? "Stop flying" : "Fly (Shift+F)")) {
-        flight_ = !flight_;
-        SDL_SetWindowRelativeMouseMode(window_, flight_);
-        tour_ = false;
-    }
+    if (ImGui::Button(flight_ ? "Stop flying" : "Fly (Shift+F)")) toggleFlight();
     ImGui::SameLine();
     if (ImGui::Button("Reset (Home)")) select(current_);
     ImGui::Checkbox("walk at constant height", &walk_);
@@ -1125,165 +1136,176 @@ void Viewer::drawSidebar(float width) {
     ImGui::BeginChild("sidebar", ImVec2(width, 0), ImGuiChildFlags_Borders);
     const ViewEntry* v = view();
     drawNavigation();
-
-    if (ImGui::CollapsingHeader("Views", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::TextDisabled("Left/Right: scene  Up/Down: view  T: tour");
-        for (size_t s = 0; s < cat_.scenes.size(); ++s) {
-            const SceneEntry& e = cat_.scenes[s];
-            bool holds = v && v->scene == int(s);
-            if (holds) ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
-            bool open = ImGui::TreeNodeEx(e.path.c_str(), holds ? ImGuiTreeNodeFlags_Selected : 0, "%s", e.title.c_str());
-            if (!e.blurb.empty() && ImGui::BeginItemTooltip()) {
-                ImGui::PushTextWrapPos(ImGui::GetFontSize() * 30);
-                ImGui::TextUnformatted(e.blurb.c_str());
-                ImGui::PopTextWrapPos();
-                ImGui::EndTooltip();
-            }
-            if (!open) continue;
-            if (!e.error.empty()) ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "%s", e.error.c_str());
-            for (int vi : e.views) {
-                const ViewEntry& ve = cat_.views[size_t(vi)];
-                std::string label = ve.detector + (ve.detector == e.defaultDetector ? "  *" : "");
-                if (ImGui::Selectable((label + "##" + std::to_string(vi)).c_str(), vi == current_)) select(vi);
-                ImGui::SameLine(width * 0.62f);
-                ImGui::TextDisabled("%s", ve.kind == "sensor" ? "readout" : ve.kind.c_str());
-                if (ve.kind == "sensor") ImGui::SetItemTooltip("Incident irradiance on the sensor, not a camera viewpoint. Select an observer to see the physical screen.");
-            }
-            ImGui::TreePop();
-        }
-    }
-
-    if (ImGui::CollapsingHeader("Render", ImGuiTreeNodeFlags_DefaultOpen)) {
-        // One button per backend: the same scene and view, transported elsewhere.
-        for (size_t i = 0; i < usable_.size(); ++i) {
-            if (i) ImGui::SameLine();
-            const Backend* b = usable_[i];
-            if (ImGui::RadioButton(b->name().c_str(), backend_ == b->name())) switchBackend(b->name());
-            ImGui::SetItemTooltip("%s", b->summary().c_str());
-        }
-        for (const auto& [b, why] : unusable_) {
-            ImGui::SameLine();
-            ImGui::BeginDisabled();
-            ImGui::RadioButton(b->name().c_str(), false);
-            ImGui::EndDisabled();
-            ImGui::SetItemTooltip("%s", why.c_str());
-        }
-        const auto& devices = devices_[backend_];
-        if (devices.size() > 1) {
-            std::string cur = "best available";
-            for (const auto& d : devices) if (d.index == device_) cur = d.name;
-            if (ImGui::BeginCombo("device", cur.c_str())) {
-                if (ImGui::Selectable("best available", device_ < 0)) { device_ = -1; send(); }
-                for (auto& d : devices)
-                    if (ImGui::Selectable(d.name.c_str(), device_ == d.index)) { device_ = d.index; send(); }
-                ImGui::EndCombo();
-            }
-        }
-        ImGui::SliderFloat("resolution", &scale_, 0.1f, 1.5f, "%.2f ×");
-        if (ImGui::IsItemDeactivatedAfterEdit()) send();
-        ImGui::SetItemTooltip("relative to the detector's own resolution");
-        if (backend(backend_).supports("hybrid") || backend(backend_).supports("light")) {
-            if (ImGui::Checkbox("path integrator only", &pathOnly_)) send();
-            ImGui::SetItemTooltip("otherwise the scene's integrator (light or hybrid) is used");
-        }
-        const char* stops[] = {"256", "1024", "4096", "16384", "never"};
-        if (ImGui::Combo("stop at spp", &maxSppIndex_, stops, 5)) {
-            const long long n[] = {256, 1024, 4096, 16384, 0};
-            worker_.setMaxSpp(n[maxSppIndex_]);
-        }
-        if (ImGui::Button(paused_ ? "Resume" : "Pause")) worker_.setPaused(paused_ = !paused_);
-        ImGui::SameLine();
-        if (ImGui::Button("Restart")) send();
-        ImGui::SameLine();
-        if (ImGui::Button("Save")) saveCurrent();
-        ImGui::SetItemTooltip("out/view_<scene>_<detector>.png, .pfm, .json");
-    }
-
-    if (ImGui::CollapsingHeader("Display", ImGuiTreeNodeFlags_DefaultOpen)) {
-        int mode = int(exposure_.mode());
-        bool changed = ImGui::RadioButton("manual", &mode, int(ExposureMode::Manual));
-        ImGui::SetItemTooltip("A fixed exposure.");
-        ImGui::SameLine();
-        changed |= ImGui::RadioButton("locked", &mode, int(ExposureMode::Locked));
-        ImGui::SetItemTooltip("Meter each new view once, then keep that exposure while you move (L meters again).");
-        ImGui::SameLine();
-        changed |= ImGui::RadioButton("adaptive", &mode, int(ExposureMode::Adaptive));
-        ImGui::SetItemTooltip("Follow the meter gradually, at most %.1f EV/s brighter and %.1f EV/s darker.",
-                              exposure_.rates.brighten, exposure_.rates.darken);
-        if (changed) setExposureMode(ExposureMode(mode));
-        float ev = float(exposure_.compensation());
-        const bool manual = exposure_.mode() == ExposureMode::Manual;
-        if (ImGui::SliderFloat(manual ? "exposure" : "compensation", &ev, -20, 32, "%+.1f EV")) {
-            exposure_.setCompensation(ev);
-            displayDirty_ = true;
-        }
-        if (manual) {
-            ImGui::Text("shown: %+.1f EV", exposure_.resolvedEV());
-        } else {
-            ImGui::Text("meter %+.1f EV · shown %+.1f EV%s", exposure_.automaticEV(), exposure_.resolvedEV(),
-                        exposure_.adapting() ? " · adapting" : exposure_.locked() ? " · locked" : "");
-            ImGui::SameLine();
-            if (ImGui::SmallButton("meter now")) exposure_.remeter();
-        }
-        if (ImGui::SliderFloat("white", &whiteBalance_, 0, 12000, whiteBalance_ > 0 ? "%.0f K" : "off")) displayDirty_ = true;
-        ImGui::SetItemTooltip("white point (Planckian); 0 = none");
-        if (ImGui::Checkbox("filmic", &filmic_)) displayDirty_ = true;
-        ImGui::SetItemTooltip("AgX view transform: bright colours go gradually to white over 16.5 stops;\n"
-                              "off: linear to white with a short roll-off");
-        ImGui::SameLine();
-        if (ImGui::Checkbox("pixelated", &pixelated_)) displayDirty_ = true;
-        ImGui::SameLine();
-        if (ImGui::Button("scene defaults")) adoptSceneDisplay_ = true;
-        ImGui::TextDisabled("display only: the raw estimate is never altered");
-    }
-
-    if (v && v->kind == "camera" && ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::SliderFloat("f-number", &fNumber_, 1.0f, 32.0f, "f/%.1f", ImGuiSliderFlags_Logarithmic);
-        if (ImGui::IsItemDeactivatedAfterEdit()) setEdit(v->detector + ".f_number", std::to_string(fNumber_));
-        ImGui::SliderFloat("focus", &focus_, 0.3f, 1000.0f, "%.2f m", ImGuiSliderFlags_Logarithmic);
-        if (ImGui::IsItemDeactivatedAfterEdit()) setEdit(v->detector + ".focus", std::to_string(focus_) + " m");
-        ImGui::TextDisabled("the stop resizes and the sensor moves to real focus");
-    }
-
-    if (v && ImGui::CollapsingHeader("Scene edits")) {
-        ImGui::TextDisabled("Block.key=value, e.g. Lens.medium=N-SF11");
-        bool apply = ImGui::InputText("##edit", editBuf_, sizeof editBuf_, ImGuiInputTextFlags_EnterReturnsTrue);
-        ImGui::SameLine();
-        apply |= ImGui::Button("Apply");
-        if (apply && std::strchr(editBuf_, '=')) {
-            std::string e = editBuf_;
-            setEdit(e.substr(0, e.find('=')), e.substr(e.find('=') + 1));
-            editBuf_[0] = 0;
-        }
-        auto& ed = edits_[sceneOf(current_)->path];
-        for (size_t i = 0; i < ed.size(); ++i) {
-            ImGui::PushID(int(i));
-            bool remove = ImGui::SmallButton("x");
-            ImGui::SameLine();
-            ImGui::TextUnformatted(ed[i].c_str());
-            ImGui::PopID();
-            if (remove) {
-                ed.erase(ed.begin() + long(i));
-                send();
-                break;
-            }
-        }
-    }
-
+    if (ImGui::CollapsingHeader("Views", ImGuiTreeNodeFlags_DefaultOpen)) drawViews(width);
+    if (ImGui::CollapsingHeader("Render", ImGuiTreeNodeFlags_DefaultOpen)) drawRenderPanel();
+    if (ImGui::CollapsingHeader("Display", ImGuiTreeNodeFlags_DefaultOpen)) drawDisplayPanel();
+    if (v && v->kind == "camera" && ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) drawCameraPanel(*v);
+    if (v && ImGui::CollapsingHeader("Scene edits")) drawEditsPanel();
     if (ImGui::CollapsingHeader("Tour")) {
         ImGui::Checkbox("cycle through every view", &tour_);
         ImGui::SliderFloat("seconds per view", &tourSeconds_, 2, 120, "%.0f s");
         if (tour_) ImGui::Text("next view in %.0f s", std::max(0.0, tourSeconds_ - since(viewStart_)));
     }
-
     ImGui::Separator();
+    drawStatus(v);
+    ImGui::EndChild();
+}
+
+void Viewer::drawViews(float width) {
+    const ViewEntry* v = view();
+    ImGui::TextDisabled("Left/Right: scene  Up/Down: view  T: tour");
+    for (size_t s = 0; s < cat_.scenes.size(); ++s) {
+        const SceneEntry& e = cat_.scenes[s];
+        bool holds = v && v->scene == int(s);
+        if (holds) ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
+        bool open = ImGui::TreeNodeEx(e.path.c_str(), holds ? ImGuiTreeNodeFlags_Selected : 0, "%s", e.title.c_str());
+        if (!e.blurb.empty() && ImGui::BeginItemTooltip()) {
+            ImGui::PushTextWrapPos(ImGui::GetFontSize() * 30);
+            ImGui::TextUnformatted(e.blurb.c_str());
+            ImGui::PopTextWrapPos();
+            ImGui::EndTooltip();
+        }
+        if (!open) continue;
+        if (!e.error.empty()) ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "%s", e.error.c_str());
+        for (int vi : e.views) {
+            const ViewEntry& ve = cat_.views[size_t(vi)];
+            std::string label = ve.detector + (ve.detector == e.defaultDetector ? "  *" : "");
+            if (ImGui::Selectable((label + "##" + std::to_string(vi)).c_str(), vi == current_)) select(vi);
+            ImGui::SameLine(width * 0.62f);
+            ImGui::TextDisabled("%s", ve.kind == "sensor" ? "readout" : ve.kind.c_str());
+            if (ve.kind == "sensor") ImGui::SetItemTooltip("Incident irradiance on the sensor, not a camera viewpoint. Select an observer to see the physical screen.");
+        }
+        ImGui::TreePop();
+    }
+}
+
+void Viewer::drawRenderPanel() {
+    // One button per backend: the same scene and view, transported elsewhere.
+    for (size_t i = 0; i < usable_.size(); ++i) {
+        if (i) ImGui::SameLine();
+        const Backend* b = usable_[i];
+        if (ImGui::RadioButton(b->name().c_str(), backend_ == b->name())) switchBackend(b->name());
+        ImGui::SetItemTooltip("%s", b->summary().c_str());
+    }
+    for (const auto& [b, why] : unusable_) {
+        ImGui::SameLine();
+        ImGui::BeginDisabled();
+        ImGui::RadioButton(b->name().c_str(), false);
+        ImGui::EndDisabled();
+        ImGui::SetItemTooltip("%s", why.c_str());
+    }
+    const auto& devices = devices_[backend_];
+    if (devices.size() > 1) {
+        std::string cur = "best available";
+        for (const auto& d : devices) if (d.index == device_) cur = d.name;
+        if (ImGui::BeginCombo("device", cur.c_str())) {
+            if (ImGui::Selectable("best available", device_ < 0)) { device_ = -1; send(); }
+            for (auto& d : devices)
+                if (ImGui::Selectable(d.name.c_str(), device_ == d.index)) { device_ = d.index; send(); }
+            ImGui::EndCombo();
+        }
+    }
+    ImGui::SliderFloat("resolution", &scale_, 0.1f, 1.5f, "%.2f ×");
+    if (ImGui::IsItemDeactivatedAfterEdit()) send();
+    ImGui::SetItemTooltip("relative to the detector's own resolution");
+    if (backend(backend_).supports("hybrid") || backend(backend_).supports("light")) {
+        if (ImGui::Checkbox("path integrator only", &pathOnly_)) send();
+        ImGui::SetItemTooltip("otherwise the scene's integrator (light or hybrid) is used");
+    }
+    const char* stops[] = {"256", "1024", "4096", "16384", "never"};
+    if (ImGui::Combo("stop at spp", &maxSppIndex_, stops, 5)) {
+        const long long n[] = {256, 1024, 4096, 16384, 0};
+        worker_.setMaxSpp(n[maxSppIndex_]);
+    }
+    if (ImGui::Button(paused_ ? "Resume" : "Pause")) worker_.setPaused(paused_ = !paused_);
+    ImGui::SameLine();
+    if (ImGui::Button("Restart")) send();
+    ImGui::SameLine();
+    if (ImGui::Button("Save")) saveCurrent();
+    ImGui::SetItemTooltip("out/view_<scene>_<detector>.png, .pfm, .json");
+}
+
+void Viewer::drawDisplayPanel() {
+    int mode = int(exposure_.mode());
+    bool changed = ImGui::RadioButton("manual", &mode, int(ExposureMode::Manual));
+    ImGui::SetItemTooltip("A fixed exposure.");
+    ImGui::SameLine();
+    changed |= ImGui::RadioButton("locked", &mode, int(ExposureMode::Locked));
+    ImGui::SetItemTooltip("Meter each new view once, then keep that exposure while you move (L meters again).");
+    ImGui::SameLine();
+    changed |= ImGui::RadioButton("adaptive", &mode, int(ExposureMode::Adaptive));
+    ImGui::SetItemTooltip("Follow the meter gradually, at most %.1f EV/s brighter and %.1f EV/s darker.",
+                          exposure_.rates.brighten, exposure_.rates.darken);
+    if (changed) setExposureMode(ExposureMode(mode));
+    float ev = float(exposure_.compensation());
+    const bool manual = exposure_.mode() == ExposureMode::Manual;
+    if (ImGui::SliderFloat(manual ? "exposure" : "compensation", &ev, -20, 32, "%+.1f EV")) {
+        exposure_.setCompensation(ev);
+        displayDirty_ = true;
+    }
+    if (manual) {
+        ImGui::Text("shown: %+.1f EV", exposure_.resolvedEV());
+    } else {
+        ImGui::Text("meter %+.1f EV · shown %+.1f EV%s", exposure_.automaticEV(), exposure_.resolvedEV(),
+                    exposure_.adapting() ? " · adapting" : exposure_.locked() ? " · locked" : "");
+        ImGui::SameLine();
+        if (ImGui::SmallButton("meter now")) exposure_.remeter();
+    }
+    if (ImGui::SliderFloat("white", &whiteBalance_, 0, 12000, whiteBalance_ > 0 ? "%.0f K" : "off")) displayDirty_ = true;
+    ImGui::SetItemTooltip("white point (Planckian); 0 = none");
+    if (ImGui::Checkbox("filmic", &filmic_)) displayDirty_ = true;
+    ImGui::SetItemTooltip("AgX view transform: bright colours go gradually to white over 16.5 stops;\n"
+                          "off: linear to white with a short roll-off");
+    ImGui::SameLine();
+    if (ImGui::Checkbox("pixelated", &pixelated_)) displayDirty_ = true;
+    ImGui::SameLine();
+    if (ImGui::Button("scene defaults")) adoptSceneDisplay_ = true;
+    ImGui::TextDisabled("display only: the raw estimate is never altered");
+}
+
+void Viewer::drawCameraPanel(const ViewEntry& v) {
+    ImGui::SliderFloat("f-number", &fNumber_, 1.0f, 32.0f, "f/%.1f", ImGuiSliderFlags_Logarithmic);
+    if (ImGui::IsItemDeactivatedAfterEdit()) setEdit(v.detector + ".f_number", std::to_string(fNumber_));
+    ImGui::SliderFloat("focus", &focus_, 0.3f, 1000.0f, "%.2f m", ImGuiSliderFlags_Logarithmic);
+    if (ImGui::IsItemDeactivatedAfterEdit()) setEdit(v.detector + ".focus", std::to_string(focus_) + " m");
+    ImGui::TextDisabled("the stop resizes and the sensor moves to real focus");
+}
+
+void Viewer::drawEditsPanel() {
+    ImGui::TextDisabled("Block.key=value, e.g. Lens.medium=N-SF11");
+    bool apply = ImGui::InputText("##edit", editBuf_, sizeof editBuf_, ImGuiInputTextFlags_EnterReturnsTrue);
+    ImGui::SameLine();
+    apply |= ImGui::Button("Apply");
+    if (apply && std::strchr(editBuf_, '=')) {
+        std::string e = editBuf_;
+        setEdit(e.substr(0, e.find('=')), e.substr(e.find('=') + 1));
+        editBuf_[0] = 0;
+    }
+    auto& ed = edits_[sceneOf(current_)->path];
+    for (size_t i = 0; i < ed.size(); ++i) {
+        ImGui::PushID(int(i));
+        bool remove = ImGui::SmallButton("x");
+        ImGui::SameLine();
+        ImGui::TextUnformatted(ed[i].c_str());
+        ImGui::PopID();
+        if (remove) {
+            ed.erase(ed.begin() + long(i));
+            send();
+            break;
+        }
+    }
+}
+
+void Viewer::drawStatus(const ViewEntry* v) {
     if (v) {
         const SceneEntry& e = *sceneOf(current_);
         ImGui::Text("%s · %s", e.title.c_str(), v->detector.c_str());
         ImGui::TextWrapped("%s", snap_.description.c_str());
         if (!snap_.note.empty()) ImGui::TextWrapped("%s", snap_.note.c_str());
     }
-    if (snap_.request == requestId_) {
+    if (snap_.request != requestId_ || snap_.state == "loading") {
+        ImGui::TextWrapped("loading… %s", snap_.request == requestId_ ? snap_.phase.c_str() : "");
+    } else {
         if (snap_.state == "error") ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "error: %s", snap_.error.c_str());
         ImGui::Text("%s — %lld spp, %d passes, %.1f s", snap_.state.c_str(), snap_.spp, snap_.passes, snap_.seconds);
         if (snap_.seconds > 0)
@@ -1294,13 +1316,10 @@ void Viewer::drawSidebar(float width) {
             ImGui::TextColored(ImVec4(1, 0.8f, 0.3f, 1), "region inconsistencies %llu, leaks %llu",
                                (unsigned long long)snap_.stats.inconsistencies, (unsigned long long)snap_.stats.leaks);
         ImGui::TextWrapped("%s", snap_.backend.c_str());
-    } else {
-        ImGui::TextWrapped("loading… %s", snap_.request == requestId_ ? snap_.phase.c_str() : "");
     }
     if (!snap_.message.empty()) ImGui::TextWrapped("%s", snap_.message.c_str());
     ImGui::TextDisabled("click a pixel: why is it this colour?");
     ImGui::TextDisabled("Space pause  R restart  S save  G next backend  H panel  F full screen");
-    ImGui::EndChild();
 }
 
 void Viewer::drawImage() {
@@ -1411,11 +1430,7 @@ void Viewer::handleKeys() {
         int nearby = nearbyEyepiece();
         if (nearby >= 0) { select(nearby); tour_ = false; return; }
     }
-    if (navigationReady_ && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_F, false)) {
-        flight_ = !flight_;
-        if (window_) SDL_SetWindowRelativeMouseMode(window_, flight_);
-        tour_ = false;
-    }
+    if (navigationReady_ && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_F, false)) toggleFlight();
     // Movement keys must not also trigger save, exposure or quit shortcuts.
     if (flight_ || lookHeld_ || (imageHovered_ && io.MouseDown[ImGuiMouseButton_Right])) return;
     if (ImGui::IsKeyPressed(ImGuiKey_Home, false)) select(current_);
@@ -1469,6 +1484,115 @@ bool Viewer::screenshot(SDL_Renderer* ren, const std::string& path) {
     return true;
 }
 
+void Viewer::setUpImGui(SDL_Window* win, SDL_Renderer* ren) {
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.IniFilename = nullptr;  // no imgui.ini next to the scenes
+    ImGui::StyleColorsDark();
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.ScaleAllSizes(uiScale_);
+    style.FontScaleDpi = uiScale_;
+    style.FontSizeBase = 16.0f;
+    style.WindowRounding = 0;
+    ImFont* ui = loadFont({"/usr/share/fonts/noto/NotoSans-Regular.ttf", "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+                           "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/TTF/DejaVuSans.ttf",
+                           "/usr/share/fonts/liberation/LiberationSans-Regular.ttf", "/System/Library/Fonts/Supplemental/Arial.ttf",
+                           "/Library/Fonts/Arial.ttf", "C:/Windows/Fonts/segoeui.ttf"},
+                          16.0f);
+    if (!ui) io.Fonts->AddFontDefaultVector();
+    mono_ = loadFont({"/usr/share/fonts/noto/NotoSansMono-Regular.ttf", "/usr/share/fonts/truetype/noto/NotoSansMono-Regular.ttf",
+                      "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
+                      "/usr/share/fonts/liberation/LiberationMono-Regular.ttf", "/System/Library/Fonts/Menlo.ttc",
+                      "C:/Windows/Fonts/consola.ttf"},
+                     15.0f);
+    ImGui_ImplSDL3_InitForSDLRenderer(win, ren);
+    ImGui_ImplSDLRenderer3_Init(ren);
+}
+
+void Viewer::pollEvents(SDL_Window* win) {
+    SDL_Event ev;
+    relativeX_ = relativeY_ = 0;
+    while (SDL_PollEvent(&ev)) {
+        ImGui_ImplSDL3_ProcessEvent(&ev);
+        if (ev.type == SDL_EVENT_MOUSE_MOTION && (flight_ || lookHeld_)) {
+            relativeX_ += ev.motion.xrel;
+            relativeY_ += ev.motion.yrel;
+        }
+        if (ev.type == SDL_EVENT_WINDOW_FOCUS_LOST) { stopFlight(); drag_ = 0; }
+        if (ev.type == SDL_EVENT_QUIT) quit_ = true;
+        if (ev.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && ev.window.windowID == SDL_GetWindowID(win)) quit_ = true;
+        if (ev.type == SDL_EVENT_KEY_DOWN && !ImGui::GetIO().WantTextInput && !flight_ && !lookHeld_ &&
+            !(ev.key.mod & SDL_KMOD_SHIFT) && (ev.key.key == SDLK_F || ev.key.key == SDLK_F11)) {
+            fullscreen_ = !fullscreen_;
+            SDL_SetWindowFullscreen(win, fullscreen_);
+        }
+    }
+}
+
+void Viewer::drawFrame() {
+    ImGui_ImplSDLRenderer3_NewFrame();
+    ImGui_ImplSDL3_NewFrame();
+    ImGui::NewFrame();
+    handleKeys();
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(vp->WorkPos);
+    ImGui::SetNextWindowSize(vp->WorkSize);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+    ImGui::Begin("owe", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                                     ImGuiWindowFlags_NoBringToFrontOnFocus);
+    ImGui::PopStyleVar();
+    if (showPanel_) {
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8 * uiScale_, 8 * uiScale_));
+        drawSidebar(std::min(380 * uiScale_, vp->WorkSize.x * 0.45f));
+        ImGui::PopStyleVar();
+        ImGui::SameLine(0, 0);
+    }
+    drawImage();
+    if (motionPending_ && since(lastMotion_) > 0.25) {
+        worker_.navigate(camera_, false, accommodate_);
+        motionPending_ = false;
+    }
+    ImGui::End();
+    drawProbe();
+    ImGui::Render();
+}
+
+// Tour and screenshots: a view is due once it has rendered for its time (and shows an image).
+// False when a screenshot or the view it waits for failed.
+bool Viewer::advance(SDL_Renderer* ren) {
+    const bool shown = snap_.request == requestId_ && snap_.spp > 0;
+    if (opt_.screenshot.empty()) {
+        if (tour_ && shown && since(viewStart_) >= tourSeconds_) step(+1);
+        return true;
+    }
+    if (snap_.request == requestId_ && snap_.state == "error") {
+        std::fprintf(stderr, "owe view: %s\n", snap_.error.c_str());
+        quit_ = true;
+        return false;
+    }
+    if (!shown || since(viewStart_) < opt_.after) return true;
+    const bool shotDir = opt_.screenshot.back() == '/';
+    std::string path = opt_.screenshot;
+    if (shotDir) {
+        const ViewEntry& e = cat_.views[size_t(current_)];
+        char name[256];
+        std::snprintf(name, sizeof name, "%02d_%s_%s.png", shots_,
+                      fileSafe(fs::path(sceneOf(current_)->path).stem().string()).c_str(), fileSafe(e.detector).c_str());
+        path += name;
+    }
+    ++shots_;
+    if (!screenshot(ren, path)) {
+        std::fprintf(stderr, "owe view: screenshot failed: %s\n", SDL_GetError());
+        quit_ = true;
+        return false;
+    }
+    std::fprintf(stderr, "wrote %s\n", path.c_str());
+    if (!shotDir || !tour_ || shots_ >= int(cat_.views.size())) quit_ = true;
+    else step(+1);
+    return true;
+}
+
 int Viewer::run() {
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         std::fprintf(stderr, "owe view: cannot open a window: %s\n", SDL_GetError());
@@ -1496,119 +1620,22 @@ int Viewer::run() {
     SDL_SetWindowPosition(win, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
     SDL_ShowWindow(win);
 
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO& io = ImGui::GetIO();
-    io.IniFilename = nullptr;  // no imgui.ini next to the scenes
-    ImGui::StyleColorsDark();
-    ImGuiStyle& style = ImGui::GetStyle();
-    style.ScaleAllSizes(uiScale_);
-    style.FontScaleDpi = uiScale_;
-    style.FontSizeBase = 16.0f;
-    style.WindowRounding = 0;
-    ImFont* ui = loadFont({"/usr/share/fonts/noto/NotoSans-Regular.ttf", "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
-                           "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/TTF/DejaVuSans.ttf",
-                           "/usr/share/fonts/liberation/LiberationSans-Regular.ttf", "/System/Library/Fonts/Supplemental/Arial.ttf",
-                           "/Library/Fonts/Arial.ttf", "C:/Windows/Fonts/segoeui.ttf"},
-                          16.0f);
-    if (!ui) io.Fonts->AddFontDefaultVector();
-    mono_ = loadFont({"/usr/share/fonts/noto/NotoSansMono-Regular.ttf", "/usr/share/fonts/truetype/noto/NotoSansMono-Regular.ttf",
-                      "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
-                      "/usr/share/fonts/liberation/LiberationMono-Regular.ttf", "/System/Library/Fonts/Menlo.ttc",
-                      "C:/Windows/Fonts/consola.ttf"},
-                     15.0f);
-    ImGui_ImplSDL3_InitForSDLRenderer(win, ren);
-    ImGui_ImplSDLRenderer3_Init(ren);
-
+    setUpImGui(win, ren);
     worker_.setMaxSpp(4096);
-    const bool shotDir = !opt_.screenshot.empty() && opt_.screenshot.back() == '/';
-    bool fullscreen = false;
     int result = 0;
     while (!quit_) {
-        SDL_Event ev;
-        relativeX_ = relativeY_ = 0;
-        while (SDL_PollEvent(&ev)) {
-            ImGui_ImplSDL3_ProcessEvent(&ev);
-            if (ev.type == SDL_EVENT_MOUSE_MOTION && (flight_ || lookHeld_)) {
-                relativeX_ += ev.motion.xrel;
-                relativeY_ += ev.motion.yrel;
-            }
-            if (ev.type == SDL_EVENT_WINDOW_FOCUS_LOST) { stopFlight(); drag_ = 0; }
-            if (ev.type == SDL_EVENT_QUIT) quit_ = true;
-            if (ev.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && ev.window.windowID == SDL_GetWindowID(win)) quit_ = true;
-            if (ev.type == SDL_EVENT_KEY_DOWN && !io.WantTextInput && !flight_ && !lookHeld_ &&
-                !(ev.key.mod & SDL_KMOD_SHIFT) && (ev.key.key == SDLK_F || ev.key.key == SDLK_F11)) {
-                fullscreen = !fullscreen;
-                SDL_SetWindowFullscreen(win, fullscreen);
-            }
-        }
+        pollEvents(win);
         if (SDL_GetWindowFlags(win) & SDL_WINDOW_MINIMIZED) {
             SDL_Delay(20);
             continue;
         }
         refreshTexture(ren);
-
-        ImGui_ImplSDLRenderer3_NewFrame();
-        ImGui_ImplSDL3_NewFrame();
-        ImGui::NewFrame();
-        handleKeys();
-        const ImGuiViewport* vp = ImGui::GetMainViewport();
-        ImGui::SetNextWindowPos(vp->WorkPos);
-        ImGui::SetNextWindowSize(vp->WorkSize);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-        ImGui::Begin("owe", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
-                                         ImGuiWindowFlags_NoBringToFrontOnFocus);
-        ImGui::PopStyleVar();
-        if (showPanel_) {
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8 * uiScale_, 8 * uiScale_));
-            drawSidebar(std::min(380 * uiScale_, vp->WorkSize.x * 0.45f));
-            ImGui::PopStyleVar();
-            ImGui::SameLine(0, 0);
-        }
-        drawImage();
-        if (motionPending_ && since(lastMotion_) > 0.25) {
-            worker_.navigate(camera_, false, accommodate_);
-            motionPending_ = false;
-        }
-        ImGui::End();
-        drawProbe();
-        ImGui::Render();
-
-        SDL_SetRenderScale(ren, io.DisplayFramebufferScale.x, io.DisplayFramebufferScale.y);
+        drawFrame();
+        SDL_SetRenderScale(ren, ImGui::GetIO().DisplayFramebufferScale.x, ImGui::GetIO().DisplayFramebufferScale.y);
         SDL_SetRenderDrawColorFloat(ren, 0.06f, 0.06f, 0.07f, 1.0f);
         SDL_RenderClear(ren);
         ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), ren);
-
-        // Tour and screenshots: a view is due once it has rendered for its time (and shows an image).
-        const bool shown = snap_.request == requestId_ && snap_.spp > 0;
-        const double wait = opt_.screenshot.empty() ? tourSeconds_ : opt_.after;
-        if (shown && !opt_.screenshot.empty() && since(viewStart_) >= wait) {
-            std::string path = opt_.screenshot;
-            if (shotDir) {
-                const ViewEntry& e = cat_.views[size_t(current_)];
-                char name[256];
-                std::snprintf(name, sizeof name, "%02d_%s_%s.png", shots_,
-                              fileSafe(fs::path(sceneOf(current_)->path).stem().string()).c_str(), fileSafe(e.detector).c_str());
-                path += name;
-            }
-            if (!screenshot(ren, path)) {
-                std::fprintf(stderr, "owe view: screenshot failed: %s\n", SDL_GetError());
-                result = 2;
-                quit_ = true;
-            } else {
-                std::fprintf(stderr, "wrote %s\n", path.c_str());
-            }
-            ++shots_;
-            if (!shotDir || !tour_ || shots_ >= int(cat_.views.size())) quit_ = true;
-            else step(+1);
-        } else if (tour_ && opt_.screenshot.empty() && shown && since(viewStart_) >= tourSeconds_) {
-            step(+1);
-        }
-        if (!opt_.screenshot.empty() && snap_.request == requestId_ && snap_.state == "error") {
-            std::fprintf(stderr, "owe view: %s\n", snap_.error.c_str());
-            result = 2;
-            quit_ = true;
-        }
+        if (!advance(ren)) result = 2;
         SDL_RenderPresent(ren);
         SDL_Delay(1);
     }

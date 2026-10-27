@@ -1,0 +1,6 @@
+Name: Closed helmet
+Author: Virtual Museums of Małopolska
+Licence: CC0 Public Domain
+URL: https://sketchfab.com/3d-models/closed_helmet-c4bd07612f424fcd9f516cbccc2554e6
+Downloaded: 2026-09-29
+Format: glTF (separate textures)

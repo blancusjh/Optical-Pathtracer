@@ -14,26 +14,6 @@ namespace owe::gpu {
 
 namespace {
 
-float roundDown(double x) {
-    float f = float(x);
-    if (double(f) > x) f = std::nextafter(f, -INFINITY);
-    return f;
-}
-float roundUp(double x) {
-    float f = float(x);
-    if (double(f) < x) f = std::nextafter(f, INFINITY);
-    return f;
-}
-float bitsAsFloat(uint32_t u) {
-    float f;
-    std::memcpy(&f, &u, 4);
-    return f;
-}
-uint32_t floatBits(float f) {
-    uint32_t u;
-    std::memcpy(&u, &f, 4);
-    return u;
-}
 
 // Box rounded outward to float, with a margin of a few float ulps of its own magnitude: a float
 // ray reaching a primitive near the box face must still be inside the box.
@@ -56,6 +36,17 @@ void exportRows(const Mat3& R, const Vec3& t, float out[12]) {
 void exportBvh(const Bvh& bvh, const Vec3& origin, uint32_t slotBase, std::vector<GNode>& out) {
     const uint32_t base = uint32_t(out.size());
     const auto& nodes = bvh.nodes();
+    // Preorder subtrees are contiguous. Keep their relative node counts in the unused
+    // inner-node bits so contact traversal can skip a subtree without a private stack.
+    // Relative counts remain valid when the group hierarchy is rebased into the scene.
+    std::vector<uint32_t> subtreeNodes(nodes.size(), 1);
+    for (size_t i = nodes.size(); i-- > 0;) {
+        if (nodes[i].count > 0) continue;
+        const uint64_t span = uint64_t(1) + subtreeNodes[i + 1] + subtreeNodes[nodes[i].start];
+        if (span > ((kNodeInner - 1u) >> 2))
+            throw std::overflow_error("GPU BVH subtree exceeds threaded traversal encoding");
+        subtreeNodes[i] = uint32_t(span);
+    }
     out.resize(base + nodes.size());
     parallelFor(nodes.size(), 1 << 15, [&](size_t begin, size_t end) {
         for (size_t i = begin; i < end; ++i) {
@@ -67,7 +58,7 @@ void exportBvh(const Bvh& bvh, const Vec3& origin, uint32_t slotBase, std::vecto
                 g.b = n.count;
             } else {
                 g.a = base + n.start;
-                g.b = kNodeInner | n.axis;
+                g.b = kNodeInner | n.axis | (subtreeNodes[i] << 2);
             }
             out[base + i] = g;
         }
@@ -77,7 +68,7 @@ void exportBvh(const Bvh& bvh, const Vec3& origin, uint32_t slotBase, std::vecto
 void set3(float out[4], const Vec3& v, float w);
 
 // Vertices (not edges) are rounded, so triangles sharing a vertex share its float value exactly.
-// v0.w: the triangle's index in its mesh; v1.w: the boundary it belongs to (both as bits).
+// Primitive identity and boundary ownership have named integer fields in the shared ABI.
 GTriangle exportTriangle(const Vec3& a, const Vec3& b, const Vec3& c, uint32_t prim, uint32_t owner) {
     GTriangle t{};
     const Vec3* v[3] = {&a, &b, &c};
@@ -87,9 +78,9 @@ GTriangle exportTriangle(const Vec3& a, const Vec3& b, const Vec3& c, uint32_t p
         out[k][1] = float(v[k]->y);
         out[k][2] = float(v[k]->z);
     }
-    t.v0[3] = bitsAsFloat(prim);
-    t.v1[3] = bitsAsFloat(owner);
-    t.v2[3] = bitsAsFloat(kGpuNone);
+    t.primitive = prim;
+    t.owner = owner;
+    t.corners = kGpuNone;
     return t;
 }
 
@@ -118,8 +109,42 @@ void exportFrame(const Boundary& b, const Vec3& origin, GBoundary& r) {
     r.scale = float(length(origin - b.toWorld.t) + (std::isfinite(ext) ? ext : 0.0));
 }
 
+// Intersection-only coordinates for a sphere viewed close to its surface. Its native frame stays
+// unchanged for textures and light sampling. In the auxiliary frame the north pole is at z=0 and
+// the SAME full sphere is x²+y²+z²+2Rz=0; nearby heights never subtract two planetary-size floats.
+// Every sphere reserves these records so a moving observer can enter/leave the near-surface case.
+bool exportSphereFrame(const Boundary& b, const Vec3& origin, GBoundary& r, std::vector<float>& data) {
+    const auto* sphere = dynamic_cast<const SphereShape*>(b.shape.get());
+    if (!sphere) return false;
+    const double radius = sphere->radius();
+    const Vec3 delta = origin - b.toWorld.t;
+    const double distance = length(delta);
+    const bool enabled = radius > 4096 * std::max(1e-9, std::abs(distance - radius));
+    const size_t at = size_t(r.data) * 4;
+    const bool wasEnabled = data[at + 1] != 0;
+    data[at + 1] = enabled ? 1.0f : 0.0f;
+    if (!enabled) return wasEnabled;
+    const Transform pole = Transform::alignZ(delta / distance);
+    // Form this camera-relative translation in double before rounding. The lost fraction of the
+    // planet's native centre is retained in a small pole displacement, e.g. -0.6 m rather than R.
+    const Vec3 anchor = b.toWorld.t - origin + (delta / distance) * radius;
+    float rows[24];
+    exportRows(pole.R.transposed(), -(pole.R.transposed() * anchor), rows);
+    exportRows(pole.R, anchor, rows + 12);
+    const bool changed = !wasEnabled || !std::equal(rows, rows + 24, data.data() + at + 4);
+    std::copy(rows, rows + 24, data.data() + at + 4);
+    return changed;
+}
+
 float groupScale(const World& w, const MeshGroup& g, const Vec3& origin) {
     return float(length(origin - w.boundaries()[g.frame].toWorld.t) + g.ext);
+}
+
+// A mesh group's record: the frame of its members, its box and error scale (camera-relative).
+void exportGroupFrame(const World& w, const MeshGroup& grp, const Vec3& origin, GBoundary& r) {
+    exportFrame(w.boundaries()[grp.frame], origin, r);
+    exportBox(grp.worldBox, origin, r.boxLo, r.boxHi);
+    r.scale = groupScale(w, grp, origin);
 }
 
 bool sameFrame(const Transform& a, const Transform& b) {
@@ -218,7 +243,7 @@ std::shared_ptr<const MeshGroups> buildMeshGroups(const World& w) {
                         out->normals[at++] = floatBits(uv[0]);
                         out->normals[at++] = floatBits(uv[1]);
                     }
-                out3.v2[3] = bitsAsFloat(cw);
+                out3.corners = cw;
             }
         });
     }
@@ -334,15 +359,26 @@ public:
             r.roughness = float(o.roughness);
             r.texScale = float(o.texture.scale);
             r.texParam = float(o.texture.param);
-            if (o.texture.kind == Texture::Kind::Image && o.texture.image) {
-                // The image record, with the mapping in the top bits (31: triplanar, 30: uv).
-                uint32_t rec = imageRecord(*o.texture.image);
-                if (o.texture.mapping == Texture::Mapping::Triplanar) rec |= 0x80000000u;
-                if (o.texture.mapping == Texture::Mapping::UV) rec |= 0x40000000u;
-                std::memcpy(&r.texParam, &rec, 4);
-            }
+            // An image placed by a mapping: its record, with the mapping in the top bits (31:
+            // triplanar, 30: uv); kGpuNone: none.
+            auto mappedImage = [&](const std::shared_ptr<const ImageRGB>& img, Texture::Mapping mapping) -> uint32_t {
+                if (!img) return kGpuNone;
+                uint32_t rec = imageRecord(*img);
+                if (mapping == Texture::Mapping::Triplanar) rec |= 0x80000000u;
+                if (mapping == Texture::Mapping::UV) rec |= 0x40000000u;
+                return rec;
+            };
+            if (o.texture.kind == Texture::Kind::Image && o.texture.image)
+                r.texParam = bitsAsFloat(mappedImage(o.texture.image, o.texture.mapping));
             if (o.roughnessMap.size() == 3 && o.texture.kind != Texture::Kind::None)
                 for (int k = 0; k < 4; ++k) r.roughMap[k] = k < 3 ? float(o.roughnessMap[size_t(k)]) : 1.0f;
+            r.maps[0] = mappedImage(o.normalImage.image, o.normalImage.mapping);
+            r.maps[1] = mappedImage(o.roughnessImage.image, o.roughnessImage.mapping);
+            r.maps[2] = floatBits(float(o.normalImage.scale));
+            r.maps[3] = floatBits(float(o.roughnessImage.scale));
+            r.mapParams[0] = float(o.normalStrength);
+            r.mapParams[1] = o.normalDirectX ? 1.0f : 0.0f;
+            r.mapParams[2] = float(o.roughnessChannel);
             if (o.reliefDepth > 0) {
                 r.relief[0] = float(o.reliefScale);
                 r.relief[1] = float(o.reliefDepth);
@@ -360,8 +396,7 @@ public:
                 r.sampleAimCenter[2] = float(g.haze);
                 r.sampleAimCenter[3] = float(g.reflectionScale);
                 r.sampleAimNormal[0] = float(g.maskThreshold);
-                const uint32_t stone = g.stone >= 0 ? uint32_t(g.stone) : kGpuNone;
-                std::memcpy(&r.sampleAimNormal[1], &stone, 4);
+                r.sampleAimNormal[1] = bitsAsFloat(g.stone >= 0 ? uint32_t(g.stone) : kGpuNone);
                 r.sampleAimNormal[2] = float(g.thickness);
                 r.roughness = 0;
             } else if (o.sampleAimShare > 0) {
@@ -382,25 +417,43 @@ public:
         images_.push_back(&img);
         return uint32_t(images_.size() - 1);
     }
+    // The environment map (sky model 3): its image, sampling distribution and frame.
+    void environmentMap(const Environment& env) {
+        GGlobals& G = g_.globals;
+        const auto& D = env.mapDist;
+        G.envRecord = imageRecord(*env.map);
+        auto pushAll = [&](const std::vector<double>& v) {
+            uint32_t at = uint32_t(g_.scalars.size());
+            for (double x : v) g_.scalars.push_back(float(x));
+            return at;
+        };
+        G.envMarginal = pushAll(D.marginal);
+        G.envConditional = pushAll(D.conditional);
+        G.envRowWeight = pushAll(D.rowWeight);
+        G.envRotation = float(env.mapRotation);
+        G.envScale = float(env.mapScale);
+        G.envTotal = float(D.marginal.empty() ? 0.0 : D.marginal.back());
+        G.envNorm = float(rgbIlluminantNorm());
+        Vec3 e1, e2;
+        env.mapFrame(e1, e2);
+        set3(G.envE1, e1, float(D.W));
+        set3(G.envE2, e2, float(D.H));
+    }
     void finishImages() {
         const size_t header = 4 * images_.size();
         g_.texels.assign(std::max<size_t>(header, 4), 0);
+        g_.images = images_;
+        size_t at = g_.texels.size();
         for (size_t i = 0; i < images_.size(); ++i) {
             const ImageRGB& img = *images_[i];
-            g_.texels[4 * i] = uint32_t(g_.texels.size());
+            if (at > 0xFFFFFFFFull) throw std::runtime_error("images exceed the GPU's 16 GB texel addressing");
+            g_.texels[4 * i] = uint32_t(at);
             g_.texels[4 * i + 1] = uint32_t(img.width);
             g_.texels[4 * i + 2] = uint32_t(img.height);
-            g_.texels[4 * i + 3] = img.srgb8.empty() ? 1u : 0u;
-            if (!img.srgb8.empty()) {
-                g_.texels.insert(g_.texels.end(), img.srgb8.begin(), img.srgb8.end());
-            } else {
-                for (float f : img.rgb) {
-                    uint32_t u;
-                    std::memcpy(&u, &f, 4);
-                    g_.texels.push_back(u);
-                }
-            }
+            g_.texels[4 * i + 3] = img.hdr ? 1u : 0u;
+            at += imageBytes(img) / 4;
         }
+        g_.texelWords = at;
     }
 
     void push4(double a, double b = 0, double c = 0, double d = 0) {
@@ -426,6 +479,7 @@ public:
         } else if (auto* sp = dynamic_cast<const SphereShape*>(&sh)) {
             r.shape = kShapeSphere;
             push4(sp->radius());
+            for (int k = 0; k < 6; ++k) push4(0);  // auxiliary world↔pole transforms
         } else if (auto* c = dynamic_cast<const CylinderShape*>(&sh)) {
             r.shape = kShapeCylinder;
             push4(c->radius(), c->z0(), c->z1());
@@ -473,12 +527,11 @@ public:
         r.meshCount = uint32_t(m.triangles().size());
         const auto& pos = m.positions();
         uint32_t cdf = uint32_t(g_.scalars.size());
-        double acc = 0, total = m.area();
+        const double total = m.area();
         for (uint32_t prim = 0; prim < m.triangles().size(); ++prim) {
             const auto& t = m.triangles()[prim];
             g_.triangles.push_back(exportTriangle(pos[t[0]], pos[t[1]], pos[t[2]], prim, owner));
-            acc += 0.5 * length(cross(pos[t[1]] - pos[t[0]], pos[t[2]] - pos[t[0]]));
-            g_.scalars.push_back(total > 0 ? float(acc / total) : 1.0f);
+            g_.scalars.push_back(total > 0 ? float(m.areaCdf()[prim] / total) : 1.0f);  // the mesh's own area CDF
         }
         if (!m.triangles().empty()) g_.scalars.back() = 1.0f;
         g_.shapeData[4 * r.data] = bitsAsFloat(cdf);
@@ -499,6 +552,7 @@ public:
             exportFrame(b, origin, r);
             std::vector<const MeshShape*> unused;
             shape(*b.shape, r, unused);
+            exportSphereFrame(b, origin, r, g_.shapeData);
             if (!unused.empty()) meshes[i] = unused.front();
             r.front = b.front;
             r.back = b.back;
@@ -527,9 +581,7 @@ public:
         for (size_t k = 0; k < groups_->groups.size(); ++k) {
             const MeshGroup& grp = groups_->groups[k];
             GBoundary r{};
-            exportFrame(w_.boundaries()[grp.frame], origin, r);
-            exportBox(grp.worldBox, origin, r.boxLo, r.boxHi);
-            r.scale = groupScale(w_, grp, origin);
+            exportGroupFrame(w_, grp, origin, r);
             r.shape = kShapeMesh;
             r.data = 0;
             r.front = r.back = r.optics = 0;
@@ -553,8 +605,15 @@ public:
             if (n.b & kNodeInner) n.a += base;
             g_.nodes.push_back(n);
         }
-        for (size_t k = 0; k < groups_->groups.size(); ++k)
-            g_.boundaries[nb + k].meshNodes = base + groups_->groups[k].nodeBase;
+        for (size_t k = 0; k < groups_->groups.size(); ++k) {
+            const MeshGroup& group = groups_->groups[k];
+            const uint32_t root = base + group.nodeBase;
+            g_.boundaries[nb + k].meshNodes = root;
+            // An owner may need a native re-query after projecting its departure anchor.
+            // Group members have exactly the same frame; the shared hierarchy retains
+            // each triangle's owner and the query filters all other members.
+            for (uint32_t owner : group.members) g_.boundaries[owner].meshNodes = root;
+        }
     }
 
     std::shared_ptr<const MeshGroups> groups_;
@@ -594,21 +653,44 @@ void setCentre(GGlobals& G, const Vec3& c) {
     G.emit[3] = float(c.z);
 }
 
-}  // namespace
-
-size_t GpuScene::bytes() const {
-    return sizeof(globals) + nodes.size() * sizeof(GNode) + boundaries.size() * sizeof(GBoundary) +
-           shapeData.size() * 4 + triangles.size() * sizeof(GTriangle) + regions.size() * 4 +
-           media.size() * sizeof(GMedium) + spectra.size() * sizeof(GSpectrum) + scalars.size() * 4 +
-           optics.size() * sizeof(GOptics) + emissions.size() * sizeof(GEmission) + lights.size() * sizeof(GLight) +
-           texels.size() * 4 + normals.size() * 4;
-}
-
-namespace {
 // The observer's pupil guide, relative to the eye (the camera-relative origin).
 void setGuide(GGlobals& G, const IdealObserver& o) {
     set3(G.guide, o.guide.center - o.position, float(o.guide.radius));
     G.guideShare = float(o.guide.share);
+}
+
+// An observer's eye: its frame, field, pupil, focus and pupil guide.
+void setObserver(GGlobals& G, const IdealObserver& o) {
+    G.detectorKind = kDetObserver;
+    set3(G.fwd, o.forward());
+    set3(G.right, o.right());
+    set3(G.upv, o.upVec());
+    G.tanX = float(o.tanX());
+    G.tanY = float(o.tanY());
+    G.pupilRadius = float(o.pupilRadius);
+    G.focusDistance = std::isfinite(o.focusDistance) ? float(o.focusDistance) : -1.0f;
+    setGuide(G, o);
+}
+
+// A surface sensor centred at origin: its frame, extent, flips and the aim and focus regions its
+// samples are guided toward.
+void setSensor(GGlobals& G, const SurfaceSensor& s, const Vec3& origin) {
+    G.detectorKind = kDetSensor;
+    const Mat3& R = s.toWorld().R;
+    set3(G.fwd, Vec3(R.m[0][0], R.m[0][1], R.m[0][2]));
+    set3(G.right, Vec3(R.m[1][0], R.m[1][1], R.m[1][2]));
+    set3(G.upv, Vec3(R.m[2][0], R.m[2][1], R.m[2][2]));
+    set3(G.sensorNormal, s.normal(), float(s.aimShare));
+    G.halfX = float(s.halfX);
+    G.halfY = float(s.halfY);
+    G.flipX = s.flipX ? 1 : 0;
+    G.flipY = s.flipY ? 1 : 0;
+    G.hasAim = s.hasAim ? 1 : 0;
+    set3(G.aimCenter, s.aimCenter - origin, float(s.focusShare));
+    set3(G.aimNormal, s.aimNormal);
+    set3(G.focusCenter, s.focusCenter - origin);
+    G.aimRadius = float(s.aimRadius);
+    G.focusRadius = float(s.focusRadius);
 }
 }  // namespace
 
@@ -622,33 +704,10 @@ GpuScene flattenScene(const Scene& scene, int detectorIndex, const RenderSetting
     // The camera-relative origin: the observer's eye or the sensor's centre.
     if (auto* o = dynamic_cast<const IdealObserver*>(&det)) {
         g.origin = o->position;
-        G.detectorKind = kDetObserver;
-        set3(G.fwd, o->forward());
-        set3(G.right, o->right());
-        set3(G.upv, o->upVec());
-        G.tanX = float(o->tanX());
-        G.tanY = float(o->tanY());
-        G.pupilRadius = float(o->pupilRadius);
-        G.focusDistance = std::isfinite(o->focusDistance) ? float(o->focusDistance) : -1.0f;
-        setGuide(G, *o);
+        setObserver(G, *o);
     } else if (auto* s = dynamic_cast<const SurfaceSensor*>(&det)) {
         g.origin = s->toWorld().t;
-        G.detectorKind = kDetSensor;
-        const Mat3& R = s->toWorld().R;
-        set3(G.fwd, Vec3(R.m[0][0], R.m[0][1], R.m[0][2]));
-        set3(G.right, Vec3(R.m[1][0], R.m[1][1], R.m[1][2]));
-        set3(G.upv, Vec3(R.m[2][0], R.m[2][1], R.m[2][2]));
-        set3(G.sensorNormal, s->normal(), float(s->aimShare));
-        G.halfX = float(s->halfX);
-        G.halfY = float(s->halfY);
-        G.flipX = s->flipX ? 1 : 0;
-        G.flipY = s->flipY ? 1 : 0;
-        G.hasAim = s->hasAim ? 1 : 0;
-        set3(G.aimCenter, s->aimCenter - g.origin, float(s->focusShare));
-        set3(G.aimNormal, s->aimNormal);
-        set3(G.focusCenter, s->focusCenter - g.origin);
-        G.aimRadius = float(s->aimRadius);
-        G.focusRadius = float(s->focusRadius);
+        setSensor(G, *s, g.origin);
     } else {
         throw std::runtime_error("GPU backend: unsupported detector type");
     }
@@ -663,28 +722,9 @@ GpuScene flattenScene(const Scene& scene, int detectorIndex, const RenderSetting
     ex.optics(g.origin);
     ex.boundaries(g.origin);
     ex.lights();
-    // The environment map, its sampling distribution and the RGB basis (sky model 3).
     G.envLight = w.environmentLight() >= 0 ? uint32_t(w.environmentLight()) : kGpuNone;
-    if (w.env.skyModel == Environment::Sky::Map && w.env.map) {
-        const auto& D = w.env.mapDist;
-        G.envRecord = ex.imageRecord(*w.env.map);
-        auto pushAll = [&](const std::vector<double>& v) {
-            uint32_t at = uint32_t(g.scalars.size());
-            for (double x : v) g.scalars.push_back(float(x));
-            return at;
-        };
-        G.envMarginal = pushAll(D.marginal);
-        G.envConditional = pushAll(D.conditional);
-        G.envRowWeight = pushAll(D.rowWeight);
-        G.envRotation = float(w.env.mapRotation);
-        G.envScale = float(w.env.mapScale);
-        G.envTotal = float(D.marginal.empty() ? 0.0 : D.marginal.back());
-        G.envNorm = float(rgbIlluminantNorm());
-        Vec3 e1, e2;
-        w.env.mapFrame(e1, e2);
-        set3(G.envE1, e1, float(D.W));
-        set3(G.envE2, e2, float(D.H));
-    }
+    if (w.env.skyModel == Environment::Sky::Map && w.env.map) ex.environmentMap(w.env);
+    // The RGB basis of rgb spectra and of the environment map.
     double A[3][3];
     rgbBasisMatrix(A);
     for (int i = 0; i < 3; ++i)
@@ -706,7 +746,7 @@ GpuScene flattenScene(const Scene& scene, int detectorIndex, const RenderSetting
     set3(G.sunDir, env.sunDir, float(std::cos(env.sunAngularRadius)));
     G.sunSolidAngle = float(env.sunSolidAngle());
     G.cieYIntegral = float(cieYIntegral());
-    G.fresnelFloor = float(clampd(settings.fresnelFloor, 0.0, 0.49));
+    G.fresnelFloor = float(clamp(settings.fresnelFloor, 0.0, 0.49));
     G.sceneScale = float(w.sceneRadius());
     G.maxDepth = settings.maxDepth;
     G.rrDepth = settings.rrDepth;
@@ -734,19 +774,11 @@ GpuScene flattenScene(const Scene& scene, int detectorIndex, const RenderSetting
 
 void updateObserver(GpuScene& g, const World& w, const IdealObserver& o) {
     GGlobals& G = g.globals;
-    G.detectorKind = kDetObserver;
+    setObserver(G, o);
     G.detRegion = o.region;
     G.width = o.width;
     G.height = o.height;
-    set3(G.fwd, o.forward());
-    set3(G.right, o.right());
-    set3(G.upv, o.upVec());
-    G.tanX = float(o.tanX());
-    G.tanY = float(o.tanY());
-    G.pupilRadius = float(o.pupilRadius);
-    G.focusDistance = std::isfinite(o.focusDistance) ? float(o.focusDistance) : -1.0f;
     G.pixelSigma = float(o.pixelSigma);
-    setGuide(G, o);
     // Rebase from the original double-precision world each time, never from previous float data.
     g.origin = o.position;
     setCentre(G, w.sceneCenter() - g.origin);
@@ -756,13 +788,15 @@ void updateObserver(GpuScene& g, const World& w, const IdealObserver& o) {
             set3(g.optics[i].sampleAimCenter, optics.sampleAimCenter - g.origin, float(optics.sampleAimRadius));
     }
     const size_t nb = w.boundaries().size();
-    for (size_t i = 0; i < nb; ++i) exportFrame(w.boundaries()[i], g.origin, g.boundaries[i]);
+    g.sphereFramesChanged = false;
+    for (size_t i = 0; i < nb; ++i) {
+        exportFrame(w.boundaries()[i], g.origin, g.boundaries[i]);
+        g.sphereFramesChanged |= exportSphereFrame(w.boundaries()[i], g.origin, g.boundaries[i], g.shapeData);
+    }
     for (size_t k = 0; k < g.groups->groups.size(); ++k) {
         const MeshGroup& grp = g.groups->groups[k];
         GBoundary& r = g.boundaries[nb + k];
-        exportFrame(w.boundaries()[grp.frame], g.origin, r);
-        exportBox(grp.worldBox, g.origin, r.boxLo, r.boxHi);
-        r.scale = groupScale(w, grp, g.origin);
+        exportGroupFrame(w, grp, g.origin, r);
     }
     for (size_t i = 0; i < g.top->nodes().size(); ++i) exportBox(g.top->nodes()[i].box, g.origin, g.nodes[i].lo, g.nodes[i].hi);
 }

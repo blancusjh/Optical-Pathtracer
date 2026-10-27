@@ -1,31 +1,37 @@
+# CURATION PLAN — Wright, A Philosopher Lecturing on the Orrery; La Tour,
+# Magdalene with the Smoking Flame; Hammershoi, Interior with Young Woman Seen from the Back.
+# Hero: Tiffany's amber/teal opalescent shade. Key: its three real 2100K carbon
+# filaments, each41.469lm; brightest feather-eyes, darkest table undercroft. Bronze,
+# walnut, warm-grey plaster; a measured antique binding anchors the foreground.
+# CC0 environment: Poly Haven round_wooden_table_01 (Ulan Cabanilla), wood_floor,
+# oak_veneer_01, white_plaster_02. CC0 binding: Varldskulturmuseerna.
+# Original full-resolution colour and OpenGL normal/roughness maps retained.
+# All three filaments sit clear of their opaque ferrules and lead-in wires; total124.407lm.
 # THE PEACOCK LAMP — a study, c. 1905. Light is the subject, furniture its quiet frame.
 # References: Joseph Wright of Derby, A Philosopher Lecturing on the Orrery (1766);
-# Georges de La Tour, Magdalene with the Smoking Flame (c. 1642–44);
+# Georges de La Tour, The Magdalen with the Smoking Flame (c. 1635–37);
 # Vilhelm Hammershoi, Interior with Young Woman Seen from the Back (1903–04).
 # Intent: amber feather-eyes and blue-green glass first, then the fall of coloured light
-# across warm grey plaster, then the desk edge disappearing into walnut-black shadow.
-# Room: foreground folio and desk edge; middle-ground lamp at the right third;
+# across warm grey plaster, then the table edge disappearing into walnut-black shadow.
+# Room: foreground antique binding and curved table edge; middle-ground lamp;
 # background panel rhythm and an almost black window. No moon, fill lights or painted glow.
 # Credits: Cleveland Museum of Art, 2018.281 (CC0), scan by Dale Utt;
-# Poly Haven, Qwantani Night Pure Sky (CC0). Museum record:
+# Poly Haven environment maps and pedestal table (CC0). Museum record:
 # https://www.clevelandart.org/art/2018.281 — c. 1902; Clara Wolcott Driscoll,
 # Tiffany Studios; diameter 48cm, overall 65cm; original kerosene apparatus AND
-# electric attachment survive. This view chooses electricity, one socket switched on.
+# electric attachment survive. This view chooses electricity, three sockets switched on.
 # 2100K: NBS Museum, https://nvlpubs.nist.gov/nistpubs/Legacy/IR/nbsir76-1125.pdf
-# 4 horizontal cp: 1908 Bureau of Standards carbon-lamp specification, Table 3.
+# Each bulb:4 horizontal cp: 1908 Bureau of Standards carbon-lamp specification, Table 3.
 # https://www.govinfo.gov/content/pkg/GOVPUB-C13-4ed3e0af3f8fbdbed1c8f03c529b9581/pdf/GOVPUB-C13-4ed3e0af3f8fbdbed1c8f03c529b9581.pdf
 # Spherical factor .825 -> 41.469 lm. A 16cp bulb is ~166lm, ~50 W, NOT 50lm.
 # The object's historic bulb rating is unknown: 4cp is a scene choice, not an attribution.
 # Photometry follows the Observatory convention: one scene Y = 14713 cd/m2.
-# The HDR upper-hemisphere weighted RGB Y is .89012138; scale below targets
-# 1e-4 cd/m2 moonless sky (RGB approximation, not a calibrated HDR capture).
+# No sky contribution: every visible light path originates at a carbon filament.
 # Exposures are engine log2 display gains, NOT photographic EV100.
 # The shade is a stained_glass slab with .90 diffuse (opalescent) transmission and one colour atlas
-# for both appearances; semantics and limitations: docs/scenes/peacock_lamp.txt.
+# for both appearances; semantics and limitations: docs/scenes/the_peacock_lamp.md.
 units = m
-world { up = (0, 0, 1)
-    sky = map("../assets/hdri/qwantani_night_puresky_4k.hdr", rotation = 112deg, scale = 7.635711866e-9)
-}
+world { up = (0,0,1) sky = none }
 
 material PeacockGlass {
     type = stained_glass
@@ -37,6 +43,8 @@ material PeacockGlass {
     reflectance = image("../assets/sketchfab/peacock_table_lamp/textures/Shade_baseColor.png", mapping = uv)
     reflection_scale = 0.18
     roughness = 0.035
+# Recomputed smooth shade normals avoid dark patches from imported normals.
+# Keep the original normal image on disk; do not apply its mismatched frame here.
 }
 # Thin clear glass (a bulb's envelope, a window pane): a stained-glass slab of clear glass, so
 # direct light crosses it as it does the real thin glass.
@@ -44,19 +52,21 @@ material ClearGlass { type = stained_glass  transmittance = 0.98  index = consta
 material Bronze {
     type = conductor  metal = copper  roughness = 0.38
     texture = image("../assets/sketchfab/peacock_table_lamp/textures/Lamp_Material_baseColor.jpeg", mapping = uv)
-    relief = noise(scale = 3mm, depth = 0.045mm)
+ normal_map = image("../assets/sketchfab/peacock_table_lamp/textures/Lamp_Material_normal.jpeg", mapping = uv) normal_strength = .5
+ roughness_map = image("../assets/sketchfab/peacock_table_lamp/textures/Lamp_Material_metallicRoughness.png", mapping = uv)
 }
 material Ferrule { type = conductor  metal = copper  roughness = 0.25
     texture = image("../assets/sketchfab/peacock_table_lamp/textures/Filament_Material_baseColor.png", mapping = uv) }
 material Carbon { type = absorber }
-material Walnut { type = diffuse
-    texture = wood(a = rgb(0.115, 0.071, 0.040), b = rgb(0.059, 0.034, 0.021), scale = 7mm, turbulence = 0.35)
-    relief = noise(scale = 6mm, depth = 0.035mm) }
-material FloorOak { type = diffuse
-    texture = wood(a = rgb(0.13, 0.085, 0.046), b = rgb(0.071, 0.043, 0.027), scale = 11mm, turbulence = 0.25) }
-material Plaster { type = diffuse
-    texture = noise(a = rgb(0.49, 0.46, 0.39), b = rgb(0.55, 0.52, 0.45), scale = 0.09)
-    relief = noise(scale = 2mm, depth = 0.08mm) }
+material Walnut { type = diffuse texture = image("../assets/polyhaven/oak_veneer_01/fumed.jpg", mapping = triplanar, scale = 1.8)
+ normal_map = image("../assets/polyhaven/oak_veneer_01/oak_veneer_01_nor_gl_16k.jpg", mapping = triplanar, scale = 1.8) normal_strength = .65
+ roughness_map = image("../assets/polyhaven/oak_veneer_01/oak_veneer_01_rough_16k.jpg", mapping = triplanar, scale = 1.8) }
+material FloorOak { type = diffuse texture = image("../assets/polyhaven/wood_floor/wood_floor_diff_8k.jpg", mapping = triplanar, scale = 2)
+ normal_map = image("../assets/polyhaven/wood_floor/wood_floor_nor_gl_8k.jpg", mapping = triplanar, scale = 2) normal_strength = .65
+ roughness_map = image("../assets/polyhaven/wood_floor/wood_floor_rough_8k.jpg", mapping = triplanar, scale = 2) }
+material Plaster { type = diffuse texture = image("../assets/polyhaven/white_plaster_02/white_plaster_02_diff_8k.jpg", mapping = triplanar, scale = 2)
+ normal_map = image("../assets/polyhaven/white_plaster_02/white_plaster_02_nor_gl_8k.jpg", mapping = triplanar, scale = 2) normal_strength = .65
+ roughness_map = image("../assets/polyhaven/white_plaster_02/white_plaster_02_rough_8k.jpg", mapping = triplanar, scale = 2) }
 material CeilingPaint { type = diffuse  reflectance = rgb(0.63, 0.60, 0.53) }
 material Oxblood { type = diffuse  reflectance = rgb(0.095, 0.025, 0.023)
     relief = noise(scale = 0.8mm, depth = 0.025mm) }
@@ -66,24 +76,24 @@ material Paper { type = diffuse  reflectance = rgb(0.77, 0.73, 0.62)
     relief = noise(scale = 0.5mm, depth = 0.015mm) }
 material AgedBrass { type = conductor  metal = gold  tint = rgb(0.55, 0.40, 0.23)  roughness = 0.28 }
 
-# Small room: 3.4 x 3.0 x 2.65m. The window is on the left wall, away from the
+# Tall study: 3.4 x 3.0 x 3.4m. The window is on the left wall, away from the
 # luminous shade silhouette. Upper wall and ceiling receive the soft coloured accent.
 body Floor { type = sheet  size = (3.4, 3.0)  material = FloorOak }
-body Ceiling { type = sheet  size = (3.4, 3.0)  position = (0, 0, 2.65)  material = CeilingPaint }
-body NorthWall { type = sheet  size = (3.4, 2.65)  position = (0, 1.50, 1.325)
+body Ceiling { type = sheet  size = (3.4, 3.0)  position = (0, 0, 3.4)  material = Walnut }
+body NorthWall { type = sheet  size = (3.4, 3.4)  position = (0, 1.50, 1.7)
     axis = (0, -1, 0)  up = (0, 0, 1)  material = Plaster }
-body SouthWall { type = sheet  size = (3.4, 2.65)  position = (0, -1.50, 1.325)
+body SouthWall { type = sheet  size = (3.4, 3.4)  position = (0, -1.50, 1.7)
     axis = (0, 1, 0)  up = (0, 0, 1)  material = Plaster }
-body EastWall { type = sheet  size = (3.0, 2.65)  position = (1.70, 0, 1.325)
+body EastWall { type = sheet  size = (3.0, 3.4)  position = (1.70, 0, 1.7)
     axis = (-1, 0, 0)  up = (0, 0, 1)  material = Plaster }
 # Left-wall window: y .25–1.05, z 1.05–2.15 (80 x 110cm).
-body WestFront { type = sheet  size = (1.75, 2.65)  position = (-1.70, -0.625, 1.325)
+body WestFront { type = sheet  size = (1.75, 3.4)  position = (-1.70, -0.625, 1.7)
     axis = (1, 0, 0)  up = (0, 0, 1)  material = Plaster }
-body WestRear { type = sheet  size = (0.45, 2.65)  position = (-1.70, 1.275, 1.325)
+body WestRear { type = sheet  size = (0.45, 3.4)  position = (-1.70, 1.275, 1.7)
     axis = (1, 0, 0)  up = (0, 0, 1)  material = Plaster }
 body WestSillWall { type = sheet  size = (0.8, 1.05)  position = (-1.70, 0.65, 0.525)
     axis = (1, 0, 0)  up = (0, 0, 1)  material = Plaster }
-body WestHeadWall { type = sheet  size = (0.8, 0.50)  position = (-1.70, 0.65, 2.40)
+body WestHeadWall { type = sheet  size = (0.8, 1.25)  position = (-1.70, 0.65, 2.775)
     axis = (1, 0, 0)  up = (0, 0, 1)  material = Plaster }
 body WindowPane { type = sheet  size = (0.8, 1.10)  position = (-1.704, 0.65, 1.60)  axis = (1, 0, 0)  up = (0, 0, 1)  material = ClearGlass }
 body WindowSill { type = box  size = (0.16, 0.94, 0.045)  position = (-1.64, 0.65, 1.0275)  material = Walnut }
@@ -103,62 +113,53 @@ body EastWainscot { type = box  size = (0.026, 3.0, 0.92)  position = (1.676, 0,
 body EastRail { type = box  size = (0.047, 3.0, 0.055)  position = (1.6595, 0, 0.9475)  material = Walnut }
 body EastBase { type = box  size = (0.043, 3.0, 0.11)  position = (1.6615, 0, 0.055)  material = Walnut }
 
-# Writing table 145 x 68cm, top at 76cm; lamp foot rests directly on it.
-assembly Desk { position = (0.28, 0.94, 0)  rotate = (0, 0, -3deg)
-    body Top { type = box  size = (1.45, 0.68, 0.045)  position = (0, 0, 0.7375)  material = Walnut }
-    body FrontApron { type = box  size = (1.30, 0.035, 0.12)  position = (0, -0.2725, 0.655)  material = Walnut }
-    body RearApron { type = box  size = (1.30, 0.035, 0.12)  position = (0, 0.2725, 0.655)  material = Walnut }
-    body EndApronA { type = box  size = (0.035, 0.51, 0.12)  position = (-0.6325, 0, 0.655)  material = Walnut }
-    body EndApronB { type = box  size = (0.035, 0.51, 0.12)  position = (0.6325, 0, 0.655)  material = Walnut }
-    body LegA { type = box  size = (0.047, 0.047, 0.715)  position = (-0.64, -0.275, 0.3575)  material = Walnut }
-    body LegB { type = box  size = (0.047, 0.047, 0.715)  position = (0.64, -0.275, 0.3575)  material = Walnut }
-    body LegC { type = box  size = (0.047, 0.047, 0.715)  position = (-0.64, 0.275, 0.3575)  material = Walnut }
-    body LegD { type = box  size = (0.047, 0.047, 0.715)  position = (0.64, 0.275, 0.3575)  material = Walnut }
-    # A folio and two cloth/leather bindings, resting flat and slightly turned.
-    assembly Folio { position = (-0.37, -0.11, 0.760)  rotate = (0, 0, 9deg)
-        body LowerCover { type = box  size = (0.24, 0.32, 0.003)  position = (0, 0, 0.0015)  material = Oxblood }
-        body Leaves { type = box  size = (0.229, 0.31, 0.025)  position = (0.002, 0, 0.0155)  material = Paper }
-        body UpperCover { type = box  size = (0.24, 0.32, 0.003)  position = (0, 0, 0.0295)  material = Oxblood }
-        body Spine { type = box  size = (0.006, 0.32, 0.025)  position = (-0.117, 0, 0.0155)  material = Oxblood }
-    }
-    assembly Books { position = (-0.48, 0.195, 0.760)  rotate = (0, 0, -7deg)
-        body BindingA { type = box  size = (0.20, 0.115, 0.035)  position = (0, 0, 0.0175)  material = OliveLeather }
-        body PagesA { type = box  size = (0.184, 0.003, 0.025)  position = (0.003, -0.059, 0.0175)  material = Paper }
-        body BindingB { type = box  size = (0.17, 0.105, 0.024)  position = (-0.011, 0.003, 0.047)  rotate = (0, 0, 6deg)  material = Oxblood }
-    }
-    assembly Lamp { position = (0.32, 0.035, 0.760)  rotate = (0, 0, 13deg)
+# The lamp foot and book rest directly on the curated table at native scale.
+# Native Poly Haven dimensions: diameter1.39935m, height1.00502m.
+# One antique binding replaces the block-built decorative books.
+material TableWood { type = diffuse
+ texture = image("../assets/polyhaven/round_wooden_table_01/textures/dark_walnut_8k.jpg", mapping = uv)
+ normal_map = image("../assets/polyhaven/round_wooden_table_01/textures/round_wooden_table_01_nor_gl_8k.jpg", mapping = uv)
+ roughness_map = image("../assets/polyhaven/round_wooden_table_01/textures/round_wooden_table_01_arm_8k.jpg", mapping = uv) }
+material Binding { type = diffuse texture = image("../assets/sketchfab/coptic_prayer_book/textures/material0_baseColor.png", mapping = uv)
+ normal_map = image("../assets/sketchfab/coptic_prayer_book/textures/material0_normal.png", mapping = uv) }
+assembly TableEnsemble { position = (.20,.30,0) rotate = (0,0,-6)
+ body Table { type = mesh file = "../assets/polyhaven/round_wooden_table_01/round_wooden_table_01_8k.gltf" ground = true normals = file material = TableWood }
+ body Book { type = mesh file = "../assets/sketchfab/coptic_prayer_book/scene.gltf" fit_height = .071352451 normals = file position = (-.27,.10,1.0050213933) rotate = (0,0,17) material = Binding }
+assembly Lamp { position = (0.18, 0.22, 1.0050213933)  rotate = (0, 0, 193deg)
         body BronzeBase { type = mesh  file = "../models/crafted/the_peacock_lamp.gltf"
             part = "Lamp_Material"  fit_height = 65cm  normals = file  material = Bronze }
         body ShadeGlass { type = mesh  file = "../models/crafted/the_peacock_lamp.gltf"
-            part = "Shade"  fit_height = 65cm  normals = file  material = PeacockGlass }
+            part = "Shade"  fit_height = 65cm  normals = smooth(crease = 65deg)  material = PeacockGlass }
         body Bulbs { type = mesh  file = "../models/crafted/the_peacock_lamp.gltf"
             part = "Bulb_Glass"  fit_height = 65cm  normals = file  material = ClearGlass }
         body Ferrules { type = mesh  file = "../models/crafted/the_peacock_lamp.gltf"
             part = "Filament_Material"  fit_height = 65cm  normals = file  material = Ferrule }
-        # Hot carbon loop inside first bulb; ferrule mesh is not the emitting filament.
+        # Hot carbon loops inside all three bulbs; ferrule mesh is not an emitter.
         # Imported bounds: z -0.936..88.424. Scale .007274; loop centre in first bulb.
-        # Torus area 4*pi^2*R*r = 9.47482e-6 m2; flux = pi*A*Y*14713 = 41.469lm.
-        # Second and third sockets remain unlit. This is the ONLY local light source.
-        body CarbonLoop { type = torus  radius = 3mm  tube_radius = 0.08mm
-            segments = 48  tube_segments = 12  position = (0.0094, 0.101, 0.508)
-            material = Carbon  emission = blackbody(2100K, 94.689477) }
-    }
+        # Each torus area4*pi^2*.002*.00008=6.31655e-6m2; flux=pi*A*Y*14713=41.469lm.
+        # This single lamp fixture is the ONLY light source.
+        body CarbonLoop { type = torus  radius = 2mm  tube_radius = 0.08mm
+            segments = 48  tube_segments = 12  position = (0.0126666667, 0.137, 0.518)
+            material = Carbon  emission = blackbody(2100K, 142.034216) }
+        body CarbonLoop2 { type = torus radius = 2mm tube_radius = .08mm segments = 48 tube_segments = 12 position = (-.1116871913,-.0758024910,.5067357504) material = Carbon emission = blackbody(2100K,142.034216) }
+        body CarbonLoop3 { type = torus radius = 2mm tube_radius = .08mm segments = 48 tube_segments = 12 position = (.1259230368,-.0308393817,.5062568622) material = Carbon emission = blackbody(2100K,142.034216) }
+
+# Lead-in wires: position = base, axis = direction only (normalised), height = length.
+# Each stops 30um short of its loop: whole end disc clear of tube and 48x12 mesh. Lead2A and
+# Lead3B, chords of their loops, stop before the near crossing. Emitters never start in a wire.
+body Lead1A { type = cylinder radius = .05mm height = 0.018047179 position = (0.0106666667,0.1210000000,0.5090000000) axis = (0.0000000000,0.0160000000,0.0090000000) material = Ferrule }
+body Lead1B { type = cylinder radius = .05mm height = 0.018047179 position = (0.0146666667,0.1210000000,0.5090000000) axis = (0.0000000000,0.0160000000,0.0090000000) material = Ferrule }
+body Lead2A { type = cylinder radius = .05mm height = 0.039520824 position = (-0.0920000000,-0.0400000000,0.5067357504) axis = (-0.0216871913,-0.0358024910,0.0000000000) material = Ferrule }
+body Lead2B { type = cylinder radius = .05mm height = 0.041593242 position = (-0.0880000000,-0.0400000000,0.5067357504) axis = (-0.0216871913,-0.0358024910,0.0000000000) material = Ferrule }
+body Lead3A { type = cylinder radius = .05mm height = 0.041085917 position = (0.0980000000,-0.0630000000,0.5062568622) axis = (0.0259230368,0.0321606183,0.0000000000) material = Ferrule }
+body Lead3B { type = cylinder radius = .05mm height = 0.038575667 position = (0.1020000000,-0.0630000000,0.5062568622) axis = (0.0259230368,0.0321606183,0.0000000000) material = Ferrule }
+}
 }
 
+
 # Level camera axes keep verticals plumb. The shade is wholly within the close frame.
-observer Room { position = (-0.75, -1.18, 1.17)  look_at = (0.22, 0.94, 1.17)
-    up = (0, 0, 1)  fov = 56deg  pupil = 3mm  focus = 2.45  resolution = (960, 600)
-    white_balance = 3000K  tone = agx }
-observer Shade { position = (0.59, -0.45, 1.285)  look_at = (0.59, 0.96, 1.285)
-    up = (0, 0, 1)  fov = 30deg  pupil = 2mm  focus = 1.40  resolution = (960, 600)
-    white_balance = 3000K  tone = agx }
-observer Wall { position = (-0.34, -0.36, 1.69)  look_at = (0.72, 1.49, 1.69)
-    up = (0, 0, 1)  fov = 54deg  pupil = 3mm  focus = 2.15  resolution = (960, 600)
-    white_balance = 3000K  tone = agx }
-# Optional sky observer: adapted to the sky. At gain 25, 1e-4cd/m2 -> ~.228 scene
-# display Y; the lamp would saturate. No separate lighting/exposure compositing.
-observer Window { position = (-1.30, 0.65, 1.65)  look_at = (-2.0, 0.65, 1.65)
-    up = (0, 0, 1)  fov = 60deg  pupil = 3mm  focus = 100  resolution = (960, 600)
-    exposure = 25.0  white_balance = none  tone = agx }
-render { detector = Room  integrator = vcm  spp = 256  photons = 0.25  max_depth = 16
+observer Room { position = (-.28,-.72,1.36) look_at = (.05,.44,1.36) fov = 40deg focus = 1.35 exposure = 12.115 up = (0,0,1) pupil = 3mm resolution = (960,600) white_balance = 3000K tone = agx }
+observer Shade { position = (.402,-.44,1.51) look_at = (.402,.50,1.51) fov = 30deg focus = .94 exposure = 10.915 up = (0,0,1) pupil = 3mm resolution = (960,600) white_balance = 3000K tone = agx }
+
+render { detector = Room  integrator = vcm spp = 512  max_depth = 16
     seed = 17 }

@@ -1,0 +1,6 @@
+Name: Gregorian reflecting telescope (1700s)
+Author: Virtual Museums of Małopolska
+Licence: CC0 Public Domain
+URL: https://sketchfab.com/3d-models/gregorian_telescope-385fa9f09a064c8b8d81e5085e2d76f4
+Downloaded: 2026-09-29
+Format: glTF (separate textures)

@@ -1,0 +1,42 @@
+[ RUN  ] planetary_sphere_preserves_twenty_centimetre_surface_clearance
+[  OK  ] planetary_sphere_preserves_twenty_centimetre_surface_clearance (0.00 s)
+[ RUN  ] gpu_planetary_sphere_frame_preserves_height_and_observer_rebasing
+[  OK  ] gpu_planetary_sphere_frame_preserves_height_and_observer_rebasing (0.00 s)
+[ RUN  ] gpu_planetary_sphere_preserves_nearby_occlusion
+[  OK  ] gpu_planetary_sphere_preserves_nearby_occlusion (50.88 s)
+[ RUN  ] gpu_planetary_sphere_keeps_stable_distant_origin_roots
+    far-origin sphere surface meanY=0.30000067, expected=0.3
+    far-origin Earth/pinhole surface meanY=0.0027513322, expected=0.002970297
+[  OK  ] gpu_planetary_sphere_keeps_stable_distant_origin_roots (0.56 s)
+[ RUN  ] vcm_cache_overflow_replays_the_pass_without_losing_vertices
+vcm: light vertex cache (4 vertices) overflowed; replaying pass with 628 vertices
+vcm: light vertex cache (628 vertices) overflowed; replaying pass with 1248 vertices
+vcm: light vertex cache (1248 vertices) overflowed; replaying pass with 1872 vertices
+    replay image max error 0 (tolerance 0)
+vcm: light vertex cache (4 vertices) overflowed; replaying pass with 628 vertices
+vcm: light vertex cache (628 vertices) overflowed; replaying pass with 1212 vertices
+vcm: light vertex cache (1212 vertices) overflowed; replaying pass with 1818 vertices
+    replay image max error 1.49012e-08 (tolerance 4.36161e-06)
+[  OK  ] vcm_cache_overflow_replays_the_pass_without_losing_vertices (103.45 s)
+[ RUN  ] vcm_cache_overflow_rejects_a_bounded_allocation_and_can_recover
+vcm: light vertex cache (4 vertices) overflowed; replaying pass with 628 vertices
+vcm: light vertex cache (4 vertices) overflowed; replaying pass with 628 vertices
+vcm: light vertex cache (628 vertices) overflowed; replaying pass with 1212 vertices
+    replay image max error 3.97364e-08 (tolerance 4.28827e-06)
+[  OK  ] vcm_cache_overflow_rejects_a_bounded_allocation_and_can_recover (0.31 s)
+[ RUN  ] vcm_cached_diffuse_packets_match_coloured_textures_and_shading_normals
+    bdpt front coloured diffuse channel 0 ratio 0.99992
+    bdpt front coloured diffuse channel 1 ratio 1.00006
+    bdpt front coloured diffuse channel 2 ratio 0.99960
+    vcm front coloured diffuse channel 0 ratio 0.99991
+    vcm front coloured diffuse channel 1 ratio 1.00004
+    vcm front coloured diffuse channel 2 ratio 0.99965
+    bdpt back coloured diffuse channel 0 ratio 1.00003
+    bdpt back coloured diffuse channel 1 ratio 1.00014
+    bdpt back coloured diffuse channel 2 ratio 0.99867
+    vcm back coloured diffuse channel 0 ratio 0.99999
+    vcm back coloured diffuse channel 1 ratio 1.00010
+    vcm back coloured diffuse channel 2 ratio 0.99856
+[  OK  ] vcm_cached_diffuse_packets_match_coloured_textures_and_shading_normals (2.21 s)
+
+7/7 tests passed

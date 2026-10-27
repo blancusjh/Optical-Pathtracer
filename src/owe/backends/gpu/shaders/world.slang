@@ -12,9 +12,126 @@ struct SurfaceHit {
     float3 nLocal;
     float2 uv;      // texture coordinates (textured meshes, where hasUv)
     bool hasUv;
+    uint tri;       // meshes: the hit triangle's record (normal maps' tangent frame); else kGpuNone
     uint boundary;
+    uint prim;      // meshes: global triangle slot (area sampling may use its separate copy)
     float scale;    // float error scale of the boundary's local frame (ray offsets)
+    bool ambiguousContact;
 };
+
+struct Endpoint {
+    float3 p, normal;
+    float scale, error;
+    uint region, boundary, primitive;
+};
+Endpoint endpoint(float3 p, uint region, float scale = 0, uint boundary = kGpuNone,
+                  float3 normal = float3(0), uint primitive = kGpuNone) {
+    Endpoint e;
+    e.p = p; e.region = region; e.scale = scale; e.error = 0;
+    e.boundary = boundary; e.normal = normal; e.primitive = primitive;
+    return e;
+}
+Endpoint endpoint(SurfaceHit h, uint region) {
+    return endpoint(h.p, region, h.scale, h.boundary, h.n, h.prim);
+}
+
+float3 pointOnTrianglePlane(GTriangle tri, float3 p) {
+    float3 n = triangleNormal(tri.v0.xyz, tri.v1.xyz, tri.v2.xyz);
+    float3 q = p - tri.v0.xyz, a = abs(n);
+    if (a.x >= a.y && a.x >= a.z && a.x > 0) p.x = tri.v0.x - (q.y * n.y + q.z * n.z) / n.x;
+    else if (a.y >= a.z && a.y > 0) p.y = tri.v0.y - (q.x * n.x + q.z * n.z) / n.y;
+    else if (a.z > 0) p.z = tri.v0.z - (q.x * n.x + q.y * n.y) / n.z;
+    return p;
+}
+
+// Where the ray lo + t ld meets triangle tri's plane (false if parallel to it).
+bool trianglePlaneDistance(GTriangle tri, float3 lo, float3 ld, out float t) {
+    float3 np = triangleNormal(tri.v0.xyz, tri.v1.xyz, tri.v2.xyz);
+    float denom = dot(ld, np);
+    t = -dot(lo - tri.v0.xyz, np) / denom;
+    return denom != 0;
+}
+// The ray lo + t ld at triangle tri (record slot), in the triangle's frame.
+LocalHit triangleHit(GTriangle tri, uint slot, float3 lo, float3 ld, float t) {
+    LocalHit lh = (LocalHit)0;
+    lh.t = t;
+    lh.p = lo + ld * t;
+    lh.n = normalize(triangleNormal(tri.v0.xyz, tri.v1.xyz, tri.v2.xyz));
+    lh.prim = tri.primitive;
+    lh.owner = tri.owner;
+    lh.slot = slot;
+    return lh;
+}
+
+// A native far-origin root may round away the centre's low part. Recover its spherical direction
+// on the SAME pole-anchored sphere used by nearby rays, rather than reverting to a shifted planet.
+// Stable sag reconstruction also places the hit on the surface when a huge t cannot encode its
+// centimetre-scale final displacement. Both hemispheres remain analytic; no plane replaces it.
+void reconstructBoundaryHit(GBoundary b, float3 o, float3 d, LocalHit lh, inout SurfaceHit hit) {
+    if (!hasSphereFrame(b)) {
+        if (b.shape == kShapeMesh) {
+            lh.p = pointOnTrianglePlane(g_triangles[lh.slot], lh.p);
+            hit.pLocal = lh.p;
+        }
+        hit.p = xfPoint(b.toWorld, lh.p);
+        hit.n = normalize(xfVector(b.toWorld, lh.n));
+        hit.scale = b.scale;
+        return;
+    }
+    uint data = b.data;
+    float R = g_shapeData[data].x;
+    float4 toPole[3], fromPole[3];
+    [ForceUnroll] for (int k = 0; k < 3; ++k) {
+        toPole[k] = g_shapeData[data + 1 + k];
+        fromPole[k] = g_shapeData[data + 4 + k];
+    }
+    float3 p;
+    bool north;
+    if (usesSphereFrame(b, o)) {
+        p = xfPoint(toPole, o) + xfVector(toPole, d) * lh.t;
+        north = p.z >= -R;
+    } else {
+        float3 n = normalize(xfVector(toPole, xfVector(b.toWorld, lh.n)));
+        p = float3(n.xy * R, 0);
+        north = n.z >= 0;
+    }
+    float2 xy = p.xy / R;
+    float r2 = dot(xy, xy);
+    if (r2 > 1) { p.xy /= sqrt(r2); xy = p.xy / R; r2 = 1; }
+    float nz = safeSqrt(1 - r2);
+    p.z = north ? -R * r2 / (1 + nz) : -R * (1 + nz);
+    float3 normal = normalize(float3(xy, north ? nz : -nz));
+    hit.p = xfPoint(fromPole, p);
+    hit.n = normalize(xfVector(fromPole, normal));
+    hit.pLocal = xfPoint(b.toLocal, hit.p);
+    hit.nLocal = normalize(xfVector(b.toLocal, hit.n));
+    // The point was reconstructed on the surface from small pole coordinates. Its precision now
+    // follows those coordinates, not the millions-of-metres native centre or the ray's old origin.
+    hit.scale = max(maxAbsComponent(p), max(abs(fromPole[0].w), max(abs(fromPole[1].w), abs(fromPole[2].w))));
+}
+
+// The surface hit of the ray o + t d at the winning local hit lh on boundary record bi: the world
+// point and normal reconstructed (reconstructBoundaryHit), a mesh's shading normal and texture
+// coordinates interpolated.
+SurfaceHit completeHit(uint bi, LocalHit lh, float3 o, float3 d) {
+    GBoundary b = g_boundaries[bi];
+    SurfaceHit hit = (SurfaceHit)0;
+    hit.t = lh.t;
+    hit.pLocal = lh.p;
+    hit.nLocal = lh.n;
+    reconstructBoundaryHit(b, o, d, lh, hit);
+    hit.ns = hit.n;
+    hit.tri = kGpuNone;
+    if (b.shape == kShapeMesh) {
+        float3 ns = meshShadingNormal(lh.slot, lh.p, lh.n);
+        if (any(ns != lh.n)) hit.ns = normalize(xfVector(b.toWorld, ns));
+        hit.hasUv = meshUv(lh.slot, lh.p, hit.uv);
+        hit.tri = lh.slot;
+    }
+    hit.boundary = bi;
+    hit.prim = b.shape == kShapeMesh ? lh.slot : lh.prim;
+    return hit;
+}
 
 #ifdef OWE_RAY_QUERY
 // Hardware traversal (VK_KHR_ray_query): the device walks its acceleration structures; analytic
@@ -30,6 +147,7 @@ RayDesc makeRay(float3 o, float3 d, float tmax) {
     return ray;
 }
 
+[noinline]
 bool intersectWorld(float3 o, float3 d, float tmax, out SurfaceHit hit) {
     hit = (SurfaceHit)0;
     if (globals().counts.x == 0) return false;
@@ -48,7 +166,7 @@ bool intersectWorld(float3 o, float3 d, float tmax, out SurfaceHit hit) {
         float best = q.CommittedStatus() == COMMITTED_NOTHING ? tmax : q.CommittedRayT();
         LocalHit lh;
         lh.owner = kGpuNone;
-        if (intersectShape(b, xfPoint(b.toLocal, o), xfVector(b.toLocal, d), 0, best, lh)) {
+        if (intersectBoundary(b, o, d, 0, best, lh)) {
             bestLocal = lh;
             bestB = bi;
             q.CommitProceduralPrimitiveHit(lh.t);
@@ -58,31 +176,16 @@ bool intersectWorld(float3 o, float3 d, float tmax, out SurfaceHit hit) {
     if (status == COMMITTED_NOTHING) return false;
     if (status == COMMITTED_TRIANGLE_HIT) {
         GBoundary g = g_boundaries[q.CommittedInstanceID()];
-        GTriangle tri = g_triangles[g.mesh.z + q.CommittedPrimitiveIndex()];
+        uint slot = g.meshTris + q.CommittedPrimitiveIndex();
+        GTriangle tri = g_triangles[slot];
         float3 lo = xfPoint(g.toLocal, o), ld = xfVector(g.toLocal, d);
         // The distance re-solved against the triangle's plane, exactly as the software path does.
-        float3 np = triangleNormal(tri.v0.xyz, tri.v1.xyz, tri.v2.xyz);
-        bestLocal.t = -dot(lo - tri.v0.xyz, np) / dot(ld, np);
-        bestLocal.p = lo + ld * bestLocal.t;
-        bestLocal.n = normalize(np);
-        bestLocal.prim = asuint(tri.v0.w);
-        bestLocal.slot = g.mesh.z + q.CommittedPrimitiveIndex();
-        bestB = asuint(tri.v1.w);
+        float t;
+        trianglePlaneDistance(tri, lo, ld, t);
+        bestLocal = triangleHit(tri, slot, lo, ld, t);
+        bestB = tri.owner;
     }
-    GBoundary b = g_boundaries[bestB];
-    hit.t = bestLocal.t;
-    hit.pLocal = bestLocal.p;
-    hit.nLocal = bestLocal.n;
-    hit.p = xfPoint(b.toWorld, bestLocal.p);
-    hit.n = normalize(xfVector(b.toWorld, bestLocal.n));
-    hit.ns = hit.n;
-    if (asuint(b.boxLo.w) == kShapeMesh) {
-        float3 ns = meshShadingNormal(bestLocal.slot, bestLocal.p, bestLocal.n);
-        if (any(ns != bestLocal.n)) hit.ns = normalize(xfVector(b.toWorld, ns));
-        hit.hasUv = meshUv(bestLocal.slot, bestLocal.p, hit.uv);
-    }
-    hit.boundary = bestB;
-    hit.scale = b.misc.x;
+    hit = completeHit(bestB, bestLocal, o, d);
     return true;
 }
 
@@ -98,12 +201,13 @@ bool anyHit(float3 o, float3 d, float tmax, uint mask) {
         GBoundary b = g_boundaries[q.CandidateInstanceID()];
         LocalHit lh;
         lh.owner = kGpuNone;
-        if (intersectShape(b, xfPoint(b.toLocal, o), xfVector(b.toLocal, d), 0, tmax, lh))
+        if (intersectBoundary(b, o, d, 0, tmax, lh))
             q.CommitProceduralPrimitiveHit(lh.t);
     }
     return q.CommittedStatus() != COMMITTED_NOTHING;
 }
 
+[noinline]
 bool occluded(float3 o, float3 d, float tmax, out bool sawNull) {
     sawNull = false;
     if (globals().counts.x == 0) return false;
@@ -115,6 +219,7 @@ bool occluded(float3 o, float3 d, float tmax, out bool sawNull) {
 #else
 // Software traversal (every device): the top-level hierarchy, then each candidate in its frame.
 
+[noinline]
 bool intersectWorld(float3 o, float3 d, float tmax, out SurfaceHit hit) {
     hit = (SurfaceHit)0;
     if (globals().counts.x == 0) return false;
@@ -140,11 +245,9 @@ bool intersectWorld(float3 o, float3 d, float tmax, out SurfaceHit hit) {
                 float tb;
                 if (!rs.hit(g_boundaries[bi].boxLo.xyz, g_boundaries[bi].boxHi.xyz, 0, best, tb)) continue;
                 GBoundary b = g_boundaries[bi];
-                float3 lo = xfPoint(b.toLocal, o);
-                float3 ld = xfVector(b.toLocal, d);
                 LocalHit lh;
                 lh.owner = kGpuNone;
-                if (intersectShape(b, lo, ld, 0, best, lh)) {
+                if (intersectBoundary(b, o, d, 0, best, lh)) {
                     best = lh.t;
                     bestLocal = lh;
                     bestB = lh.owner != kGpuNone ? lh.owner : bi;  // a mesh group reports its member
@@ -175,26 +278,14 @@ bool intersectWorld(float3 o, float3 d, float tmax, out SurfaceHit hit) {
         cur = stackNode[sp];
     }
     if (!found) return false;
-    GBoundary b = g_boundaries[bestB];
-    hit.t = bestLocal.t;
-    hit.pLocal = bestLocal.p;
-    hit.nLocal = bestLocal.n;
-    hit.p = xfPoint(b.toWorld, bestLocal.p);
-    hit.n = normalize(xfVector(b.toWorld, bestLocal.n));
-    hit.ns = hit.n;
-    if (asuint(b.boxLo.w) == kShapeMesh) {
-        float3 ns = meshShadingNormal(bestLocal.slot, bestLocal.p, bestLocal.n);
-        if (any(ns != bestLocal.n)) hit.ns = normalize(xfVector(b.toWorld, ns));
-        hit.hasUv = meshUv(bestLocal.slot, bestLocal.p, hit.uv);
-    }
-    hit.boundary = bestB;
-    hit.scale = b.misc.x;
+    hit = completeHit(bestB, bestLocal, o, d);
     return true;
 }
 
 // Is the open segment (0, tmax) blocked by matter — a boundary that is not null? Shadow rays need
 // only this, so the first opaque hit ends the search (no ordering). sawNull: a null boundary lies
 // on the segment; the caller then walks the segment in order (regions and media change there).
+[noinline]
 bool occluded(float3 o, float3 d, float tmax, out bool sawNull) {
     sawNull = false;
     if (globals().counts.x == 0) return false;
@@ -216,14 +307,14 @@ bool occluded(float3 o, float3 d, float tmax, out bool sawNull) {
                 GBoundary b = g_boundaries[bi];
                 float3 lo = xfPoint(b.toLocal, o);
                 float3 ld = xfVector(b.toLocal, d);
-                if (asuint(b.boxLo.w) == kShapeMesh) {
+                if (b.shape == kShapeMesh) {
                     if (occludedMesh(b, lo, ld, 0, tmax, sawNull)) return true;
                     continue;
                 }
                 LocalHit lh;
                 lh.owner = kGpuNone;
-                if (!intersectShape(b, lo, ld, 0, tmax, lh)) continue;
-                if (!isPassableType(g_optics[b.links.z].a.x)) return true;
+                if (!intersectBoundary(b, o, d, 0, tmax, lh)) continue;
+                if (!isPassableType(g_optics[b.optics].a.x)) return true;
                 sawNull = true;
             }
         } else {
@@ -248,14 +339,8 @@ bool occluded(float3 o, float3 d, float tmax, out bool sawNull) {
 
 #endif
 
-// Moves a new ray origin off a surface along the new ray itself (no lateral error); grazing
-// directions fall back to the normal. The displacement follows float precision: a few hundred
-// ulps of the larger of the point's and the local frame's coordinates, far below optical
-// feature sizes (40 nm for an eyepiece lens 2 cm from the eye, 20 µm at 10 m).
-float surfaceEpsilon(float3 p, float scale) { return 2e-6 * max(maxAbsComponent(p), scale) + 1e-9; }
-float3 offsetOrigin(float3 p, float3 n, float3 dir, float scale) {
-    float e = surfaceEpsilon(p, scale);
-    float c = dot(dir, n);
-    if (abs(c) > 0.05) return p + dir * (e / abs(c));
-    return c >= 0 ? p + n * e : p - n * e;
+// The region a ray along d meets hit from: the front's if it arrives against the normal.
+uint incidentRegion(SurfaceHit hit, float3 d) {
+    GBoundary b = g_boundaries[hit.boundary];
+    return dot(d, hit.n) < 0 ? b.front : b.back;
 }

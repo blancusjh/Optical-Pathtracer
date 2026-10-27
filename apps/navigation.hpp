@@ -1,7 +1,11 @@
 // Viewer camera motion in double precision. This is a virtual eye, never a moved sensor or lens.
 #pragma once
 #include <algorithm>
+#include <memory>
+#include <string>
+
 #include "owe/scene/detector.hpp"
+#include "owe/scene/scene.hpp"
 
 namespace owe {
 // Scale with the nearby geometry, while retaining a useful 2 cm/s base speed at glass.
@@ -97,5 +101,17 @@ struct NavigationCamera {
 // observer: no mode, no substitute image, the same measurement.
 inline void adoptPixelResponse(IdealObserver& eye, const Detector& base) {
     eye.pixelSigma = dynamic_cast<const IdealObserver*>(&base) ? base.pixelSigma : IdealObserver::kDefaultPixelSigma;
+}
+// The scene's free eye exploring view `base`: an observer added to the scene once (explorer: its
+// index, −1 before) and named after the view, with the view's pixel response.
+inline IdealObserver& freeEye(Scene& scene, int& explorer, const Detector& base, const std::string& suffix = " (explore)") {
+    if (explorer < 0) {
+        explorer = int(scene.detectors.size());
+        scene.detectors.push_back(std::make_unique<IdealObserver>());
+    }
+    auto& eye = static_cast<IdealObserver&>(*scene.detectors[size_t(explorer)]);
+    eye.name = base.name + suffix;
+    adoptPixelResponse(eye, base);
+    return eye;
 }
 } // namespace owe

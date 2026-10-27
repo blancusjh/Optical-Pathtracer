@@ -40,6 +40,13 @@ void parallelParts(size_t n, size_t parts, F&& f) {
     if (error) std::rethrow_exception(error);
 }
 
+// Calls f(worker) for workers 0 … n−1, each on its own thread (the caller's among them). The first
+// exception thrown is rethrown once all have finished.
+template <class F>
+void parallelWorkers(size_t n, F&& f) {
+    parallelParts(n, n, [&](size_t worker, size_t, size_t) { f(worker); });
+}
+
 // Calls f(begin, end) over [0, n) in ranges of at least `grain` items, in parallel.
 template <class F>
 void parallelFor(size_t n, size_t grain, F&& f) {

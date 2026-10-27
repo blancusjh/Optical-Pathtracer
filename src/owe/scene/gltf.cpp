@@ -34,9 +34,7 @@ const char* resultName(cgltf_result r) {
 
 // The image a material's base colour comes from, as a path beside the model; empty when it has
 // none or the image is embedded in a buffer.
-std::string baseColorImage(const cgltf_material& m, const std::filesystem::path& dir) {
-    if (!m.has_pbr_metallic_roughness) return {};
-    const cgltf_texture* t = m.pbr_metallic_roughness.base_color_texture.texture;
+std::string textureImage(const cgltf_texture* t, const std::filesystem::path& dir) {
     if (!t || !t->image || !t->image->uri || std::strncmp(t->image->uri, "data:", 5) == 0) return {};
     std::string uri = t->image->uri;
     cgltf_decode_uri(uri.data());
@@ -44,33 +42,60 @@ std::string baseColorImage(const cgltf_material& m, const std::filesystem::path&
     return (dir / uri).lexically_normal().string();
 }
 
-}  // namespace
+// One glTF file turned into a polygon soup: its materials as parts, then the triangle primitives
+// of the meshes its scene's nodes place, in the engine's frame.
+class GltfImporter {
+public:
+    GltfImporter(const cgltf_data& raw, const std::string& path, double scale) : raw_(raw), path_(path), scale_(scale) {}
 
-MeshData loadGltf(const std::string& path, double scale) {
-    cgltf_options options{};
-    cgltf_data* raw = nullptr;
-    cgltf_result r = cgltf_parse_file(&options, path.c_str(), &raw);
-    if (r != cgltf_result_success) throw std::runtime_error("cannot read glTF file " + path + ": " + resultName(r));
-    std::unique_ptr<cgltf_data, void (*)(cgltf_data*)> data(raw, cgltf_free);
-    r = cgltf_load_buffers(&options, raw, path.c_str());
-    if (r != cgltf_result_success) throw std::runtime_error("cannot load the buffers of " + path + ": " + resultName(r));
-
-    MeshData m;
-    const std::filesystem::path dir = std::filesystem::path(path).parent_path();
-    for (size_t i = 0; i < raw->materials_count; ++i) {
-        const cgltf_material& mat = raw->materials[i];
-        m.partNames.push_back(mat.name && *mat.name ? mat.name : "material" + std::to_string(i));
-        m.partImages.push_back(baseColorImage(mat, dir));
+    MeshData run() {
+        materials();
+        for (const cgltf_node* node : meshNodes()) {
+            float M[16];
+            cgltf_node_transform_world(node, M);
+            for (size_t p = 0; p < node->mesh->primitives_count; ++p) primitive(node->mesh->primitives[p], M);
+        }
+        return finish();
     }
-    const uint32_t unnamed = uint32_t(raw->materials_count);  // primitives without a material
-    bool anyNormals = false, anyUvs = false, anyUnnamed = false;
-    std::vector<float> buf;
-    std::vector<uint32_t> idx;
 
-    auto addPrimitive = [&](const cgltf_primitive& prim, const float M[16]) {
+private:
+    // Each material is a part, with the images of its base colour, normal and roughness maps.
+    void materials() {
+        const std::filesystem::path dir = std::filesystem::path(path_).parent_path();
+        for (size_t i = 0; i < raw_.materials_count; ++i) {
+            const cgltf_material& mat = raw_.materials[i];
+            m_.partNames.push_back(mat.name && *mat.name ? mat.name : "material" + std::to_string(i));
+            const cgltf_pbr_metallic_roughness* pbr = mat.has_pbr_metallic_roughness ? &mat.pbr_metallic_roughness : nullptr;
+            m_.partImages.push_back(pbr ? textureImage(pbr->base_color_texture.texture, dir) : "");
+            m_.partNormalImages.push_back(textureImage(mat.normal_texture.texture, dir));
+            m_.partRoughnessImages.push_back(pbr ? textureImage(pbr->metallic_roughness_texture.texture, dir) : "");
+        }
+    }
+
+    // The nodes with a mesh of the default scene (or the first, or every root), walked from its roots.
+    std::vector<const cgltf_node*> meshNodes() const {
+        const cgltf_scene* scene = raw_.scene ? raw_.scene : (raw_.scenes_count ? &raw_.scenes[0] : nullptr);
+        std::vector<const cgltf_node*> stack, out;
+        if (scene) {
+            for (size_t i = 0; i < scene->nodes_count; ++i) stack.push_back(scene->nodes[i]);
+        } else {
+            for (size_t i = 0; i < raw_.nodes_count; ++i)
+                if (!raw_.nodes[i].parent) stack.push_back(&raw_.nodes[i]);
+        }
+        while (!stack.empty()) {
+            const cgltf_node* node = stack.back();
+            stack.pop_back();
+            for (size_t i = 0; i < node->children_count; ++i) stack.push_back(node->children[i]);
+            if (node->mesh) out.push_back(node);
+        }
+        return out;
+    }
+
+    // A triangle primitive placed by world matrix M (column-major).
+    void primitive(const cgltf_primitive& prim, const float M[16]) {
         if (prim.type != cgltf_primitive_type_triangles) return;
         if (prim.has_draco_mesh_compression)
-            throw std::runtime_error("glTF file " + path + " is Draco-compressed; export it uncompressed");
+            throw std::runtime_error("glTF file " + path_ + " is Draco-compressed; export it uncompressed");
         const cgltf_accessor *pos = nullptr, *nrm = nullptr, *tex = nullptr;
         int uvSet = 0;
         if (prim.material && prim.material->has_pbr_metallic_roughness)
@@ -83,97 +108,106 @@ MeshData loadGltf(const std::string& path, double scale) {
         }
         if (!pos || pos->count == 0) return;
         const size_t nv = pos->count;
-        // Column-major M; glTF's y-up turned to z-up: (x, y, z) → (x, −z, y). Normals transform
-        // by the cofactor matrix (the inverse transpose up to the determinant's scale).
-        const double a00 = M[0], a01 = M[4], a02 = M[8], a10 = M[1], a11 = M[5], a12 = M[9], a20 = M[2], a21 = M[6],
-                     a22 = M[10];
-        const double det = a00 * (a11 * a22 - a12 * a21) - a01 * (a10 * a22 - a12 * a20) + a02 * (a10 * a21 - a11 * a20);
-        auto zUp = [](double x, double y, double z) { return Vec3(x, -z, y); };
-        const size_t base = m.positions.size(), nbase = m.normals.size();
-        buf.resize(nv * 3);
-        cgltf_accessor_unpack_floats(pos, buf.data(), nv * 3);
-        for (size_t k = 0; k < nv; ++k) {
-            const double x = buf[3 * k], y = buf[3 * k + 1], z = buf[3 * k + 2];
-            m.positions.push_back(zUp(a00 * x + a01 * y + a02 * z + M[12], a10 * x + a11 * y + a12 * z + M[13],
-                                      a20 * x + a21 * y + a22 * z + M[14]) *
-                                  scale);
-        }
-        if (nrm && nrm->count == nv) {
-            anyNormals = true;
-            cgltf_accessor_unpack_floats(nrm, buf.data(), nv * 3);
-            const double c00 = a11 * a22 - a12 * a21, c01 = a12 * a20 - a10 * a22, c02 = a10 * a21 - a11 * a20,
-                         c10 = a02 * a21 - a01 * a22, c11 = a00 * a22 - a02 * a20, c12 = a01 * a20 - a00 * a21,
-                         c20 = a01 * a12 - a02 * a11, c21 = a02 * a10 - a00 * a12, c22 = a00 * a11 - a01 * a10;
-            const double s = det < 0 ? -1 : 1;
-            for (size_t k = 0; k < nv; ++k) {
-                const double x = buf[3 * k], y = buf[3 * k + 1], z = buf[3 * k + 2];
-                Vec3 n = zUp(c00 * x + c10 * y + c20 * z, c01 * x + c11 * y + c21 * z, c02 * x + c12 * y + c22 * z) * s;
-                const double l = length(n);
-                m.normals.push_back(l > 0 ? n / l : Vec3());
-            }
-        } else {
-            nrm = nullptr;
-        }
+        const double rows[3][3] = {{M[0], M[4], M[8]}, {M[1], M[5], M[9]}, {M[2], M[6], M[10]}};
+        const Mat3 A = Mat3::fromRows(rows);
+        const bool mirrored = A.determinant() < 0;
+        const size_t base = m_.positions.size(), nbase = m_.normals.size();
+        positions(pos, A, Vec3(M[12], M[13], M[14]));
+        if (nrm && nrm->count == nv) normals(nrm, A, mirrored);
+        else nrm = nullptr;
         std::vector<float> uv;
         if (tex && tex->count == nv) {
-            anyUvs = true;
+            anyUvs_ = true;
             uv.resize(nv * 2);
             cgltf_accessor_unpack_floats(tex, uv.data(), nv * 2);
         }
         const size_t ni = prim.indices ? prim.indices->count : nv;
-        idx.resize(ni);
-        if (prim.indices) cgltf_accessor_unpack_indices(prim.indices, idx.data(), sizeof(uint32_t), ni);
-        else for (size_t k = 0; k < ni; ++k) idx[k] = uint32_t(k);
-        uint32_t part = unnamed;
-        if (prim.material) part = uint32_t(cgltf_material_index(raw, prim.material));
-        else anyUnnamed = true;
+        idx_.resize(ni);
+        if (prim.indices) cgltf_accessor_unpack_indices(prim.indices, idx_.data(), sizeof(uint32_t), ni);
+        else for (size_t k = 0; k < ni; ++k) idx_[k] = uint32_t(k);
+        uint32_t part = uint32_t(raw_.materials_count);  // primitives without a material: "unnamed"
+        if (prim.material) part = uint32_t(cgltf_material_index(&raw_, prim.material));
+        else anyUnnamed_ = true;
         for (size_t t = 0; t + 2 < ni; t += 3) {
             // A mirroring transform reverses the winding; restore counter-clockwise fronts.
-            std::array<uint32_t, 3> c{idx[t], idx[t + 1], idx[t + 2]};
-            if (det < 0) std::swap(c[1], c[2]);
+            std::array<uint32_t, 3> c{idx_[t], idx_[t + 1], idx_[t + 2]};
+            if (mirrored) std::swap(c[1], c[2]);
             for (uint32_t v : c)
-                if (v >= nv) throw std::runtime_error("glTF index out of range in " + path);
-            m.triangles.push_back({uint32_t(base + c[0]), uint32_t(base + c[1]), uint32_t(base + c[2])});
-            m.normalIndex.push_back(nrm ? std::array<uint32_t, 3>{uint32_t(nbase + c[0]), uint32_t(nbase + c[1]),
-                                                                  uint32_t(nbase + c[2])}
-                                        : std::array<uint32_t, 3>{MeshData::kNoNormal, MeshData::kNoNormal, MeshData::kNoNormal});
+                if (v >= nv) throw std::runtime_error("glTF index out of range in " + path_);
+            m_.triangles.push_back({uint32_t(base + c[0]), uint32_t(base + c[1]), uint32_t(base + c[2])});
+            m_.normalIndex.push_back(nrm ? std::array<uint32_t, 3>{uint32_t(nbase + c[0]), uint32_t(nbase + c[1]),
+                                                                   uint32_t(nbase + c[2])}
+                                         : std::array<uint32_t, 3>{MeshData::kNoNormal, MeshData::kNoNormal, MeshData::kNoNormal});
             MeshShape::UvCorners w{};
             if (!uv.empty())
                 for (int k = 0; k < 3; ++k) w[size_t(k)] = {uv[2 * c[size_t(k)]], uv[2 * c[size_t(k)] + 1]};
-            m.uvs.push_back(w);
-            m.part.push_back(part);
+            m_.uvs.push_back(w);
+            m_.part.push_back(part);
         }
-    };
+    }
 
-    // The default scene (or the first), walked from its roots with each node's world transform.
-    const cgltf_scene* scene = raw->scene ? raw->scene : (raw->scenes_count ? &raw->scenes[0] : nullptr);
-    std::vector<const cgltf_node*> stack;
-    if (scene) {
-        for (size_t i = 0; i < scene->nodes_count; ++i) stack.push_back(scene->nodes[i]);
-    } else {
-        for (size_t i = 0; i < raw->nodes_count; ++i)
-            if (!raw->nodes[i].parent) stack.push_back(&raw->nodes[i]);
+    // glTF's y-up turned to z-up: (x, y, z) → (x, −z, y).
+    static Vec3 zUp(const Vec3& v) { return Vec3(v.x, -v.z, v.y); }
+
+    void positions(const cgltf_accessor* pos, const Mat3& A, const Vec3& translation) {
+        const size_t nv = pos->count;
+        buf_.resize(nv * 3);
+        cgltf_accessor_unpack_floats(pos, buf_.data(), nv * 3);
+        for (size_t k = 0; k < nv; ++k)
+            m_.positions.push_back(zUp(A * Vec3(buf_[3 * k], buf_[3 * k + 1], buf_[3 * k + 2]) + translation) * scale_);
     }
-    while (!stack.empty()) {
-        const cgltf_node* node = stack.back();
-        stack.pop_back();
-        for (size_t i = 0; i < node->children_count; ++i) stack.push_back(node->children[i]);
-        if (!node->mesh) continue;
-        float M[16];
-        cgltf_node_transform_world(node, M);
-        for (size_t p = 0; p < node->mesh->primitives_count; ++p) addPrimitive(node->mesh->primitives[p], M);
+
+    // Normals transform by the cofactor matrix (the inverse transpose up to the determinant's scale).
+    void normals(const cgltf_accessor* nrm, const Mat3& A, bool mirrored) {
+        const size_t nv = nrm->count;
+        anyNormals_ = true;
+        buf_.resize(nv * 3);
+        cgltf_accessor_unpack_floats(nrm, buf_.data(), nv * 3);
+        const Mat3 C = A.cofactor();
+        const double s = mirrored ? -1 : 1;
+        for (size_t k = 0; k < nv; ++k) {
+            const Vec3 n = zUp(C * Vec3(buf_[3 * k], buf_[3 * k + 1], buf_[3 * k + 2])) * s;
+            const double l = length(n);
+            m_.normals.push_back(l > 0 ? n / l : Vec3());
+        }
     }
-    if (m.triangles.empty()) throw std::runtime_error("glTF file has no triangles: " + path);
-    if (!anyNormals) {
-        m.normals.clear();
-        m.normalIndex.clear();
+
+    MeshData finish() {
+        if (m_.triangles.empty()) throw std::runtime_error("glTF file has no triangles: " + path_);
+        if (!anyNormals_) {
+            m_.normals.clear();
+            m_.normalIndex.clear();
+        }
+        if (!anyUvs_) m_.uvs.clear();
+        if (anyUnnamed_) {
+            m_.partNames.push_back("unnamed");
+            m_.partImages.emplace_back();
+            m_.partNormalImages.emplace_back();
+            m_.partRoughnessImages.emplace_back();
+        }
+        return std::move(m_);
     }
-    if (!anyUvs) m.uvs.clear();
-    if (anyUnnamed) {
-        m.partNames.push_back("unnamed");
-        m.partImages.emplace_back();
-    }
-    return m;
+
+    const cgltf_data& raw_;
+    const std::string& path_;
+    const double scale_;
+    MeshData m_;
+    bool anyNormals_ = false, anyUvs_ = false, anyUnnamed_ = false;
+    std::vector<float> buf_;
+    std::vector<uint32_t> idx_;
+};
+
+}  // namespace
+
+MeshData loadGltf(const std::string& path, double scale) {
+    cgltf_options options{};
+    cgltf_data* raw = nullptr;
+    cgltf_result r = cgltf_parse_file(&options, path.c_str(), &raw);
+    if (r != cgltf_result_success) throw std::runtime_error("cannot read glTF file " + path + ": " + resultName(r));
+    std::unique_ptr<cgltf_data, void (*)(cgltf_data*)> data(raw, cgltf_free);
+    r = cgltf_load_buffers(&options, raw, path.c_str());
+    if (r != cgltf_result_success) throw std::runtime_error("cannot load the buffers of " + path + ": " + resultName(r));
+    return GltfImporter(*raw, path, scale).run();
 }
 
 MeshData loadModel(const std::string& path, double scale) {
@@ -198,6 +232,8 @@ MeshData selectParts(const MeshData& m, const std::vector<std::string>& names) {
     out.normals = m.normals;
     out.partNames = m.partNames;
     out.partImages = m.partImages;
+    out.partNormalImages = m.partNormalImages;
+    out.partRoughnessImages = m.partRoughnessImages;
     for (size_t t = 0; t < m.triangles.size(); ++t) {
         if (!keep[m.part[t]]) continue;
         out.triangles.push_back(m.triangles[t]);

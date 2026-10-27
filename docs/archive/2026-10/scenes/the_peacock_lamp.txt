@@ -1,0 +1,271 @@
+Historical record, retained for provenance. Current state: ../../../STATUS.md
+
+10 OCTOBER 2026 — PROMOTED ROOM GALLERY CAPTURE
+
+Current local gallery: docs/gallery/peacock_lamp_room.png, with native metadata
+in docs/gallery/peacock_lamp_room.json and reviewed provenance in
+docs/gallery/peacock_lamp_room.gallery.json.
+Raw image and logs: out/gallery/final_review_20261010_v1/peacock_lamp_room.*.
+GPU VCM, 512 iterations, 960 x 600, depth 16, seed 17, one pass.
+Transport: 905.054 s; process wall time: 928.926 s; mean Y: 1.29353e-5.
+Diagnostics: 3,643,940 region inconsistencies, 0 leaks; first event at Lead2B.side.
+The high contact-event count remains an unresolved production transport limitation.
+The image is locally accepted visually, not certified as clean conformance or
+as a fully converged reference. Zero reported leaks does not erase the inconsistencies.
+
+Composition: the complete shade, finial and base fit alongside the binding, with
+an intentional curved-table foreground and intact upper peacock pattern.
+Lighting: amber and teal transmission dominate; real filament illumination produces
+coherent wall light and bronze highlights. The dark body loses some surface detail,
+and fine wall grain remains, without concealing the silhouette or material story.
+Materials: coloured glass, leading, bronze, worn binding and dark timber remain
+legible. Original scan textures and recomputed smooth shade normals are retained;
+no emissive shade, artificial fill, denoising or retouching was added.
+
+Portable current records: benchmarks/results/20261010_gallery.json and
+benchmarks/results/20261009_gallery_engine.json.
+Asset installation: docs/GALLERY_WORKFLOW.md (Curated scene asset setup).
+Credits and source records: docs/ASSET_CREDITS.md and docs/assets/.
+
+--- HISTORICAL CURATION AND CAPTURES — 7–9 OCTOBER 2026 ---
+The earlier Room and Shade "final" files below retain their original identities.
+Only the current Room capture above is part of the refreshed seven-view gallery.
+Earlier reports and priorities describe the historical curation state, not additional
+requirements for this gallery milestone.
+
+FINAL REPORT — PEACOCK LAMP
+Plan: Wright's Orrery, La Tour's Magdalen with the Smoking Flame, Hammershoi's
+Interior with Young Woman Seen from the Back. Hero: amber/teal opalescent shade;
+key: its three2100K carbon bulbs,124.407lm total. Dark wood and bronze, warm-grey
+plaster; one fixture and no sky/fill. Two catalogue views,40degree/30degree.
+Finals: out/scenes/peacock_lamp/final_room.png and final_shade.png.
+Both960x600,GPU VCM512,max_depth16,seed17,WB3000K,AgX. Wall times510.06s and
+385.86s; peak2616.78MiB. Room sharedGPU briefly with the controlled diagnostic.
+Assets: CC0 Cleveland Peacock lamp, Varldskulturmuseerna Coptic book; CC0
+Poly Haven round_wooden_table_01, wood_floor, oak_veneer_01, white_plaster_02.
+Full-resolution source files, map sets and licences remain in both manifests.
+Wishlist: none. Priorities: imported-normal robustness; rough stained-glass
+reflection; coated wood/patina; calibrated glass transmission/reflection maps.
+Problems: file shade normals cause dark patches (recomputed smooth normals fix
+it); stained_glass roughness warns and stays specular; high contact-inconsistency
+counts at lead junctions but no reported leaks. Exact repros and caveats below.
+No engine modifications. All helpers reside in assets/curation or scenes/tools.
+
+PEACOCK LAMP — art-direction and render audit, 7 October 2026
+
+CURRENT DESIGN: three real2100K carbon filaments,41.469lm each,124.407lm
+total, one lamp fixture and no sky/fill. Recomputed shade normals resolve
+the imported-normal defect. Full-resolution source textures remain intact.
+Earlier one-socket trials below are retained as the review audit.
+
+Plan: Wright, A Philosopher Lecturing on the Orrery; La Tour, Magdalene with
+the Smoking Flame; Hammershoi, Interior with Young Woman Seen from the Back.
+Amber/teal opalescent glass above patinated bronze, dark timber and warm-grey
+plaster. One historical 4-cp/41.469-lm carbon filament, no sky or fill source.
+Native-scale CC0 Poly Haven pedestal table replaces block-built desk/books.
+
+Baseline Room/path512 and VCM32 opened at640x400:
+Composition: lamp squeezed toward edge, furniture reads as slabs.
+Light: black shade against bright wall streaks; neither estimator fixes it.
+Materials: no convincing wood joinery or opalescent glow.
+Fix: curated pedestal table and real antique binding, full-resolution maps;
+measure the actual bulb/ferrule triangles before relocating the filament.
+Original loop lay largely inside opaque ferrule. New centre (.0126667,.137,.518)
+has4.8mm sampled surface clearance for3.08mm outer-radius loop. CPU ray audit
+only establishes geometry; CPU stained-glass transport is unsupported.
+
+Review01/path512,640x400 opened:
+Composition: too much empty shadow, lamp too small.
+Light: useful lower pool but near face remains black; lit bulb faces away.
+Materials: table grain begins to read, bronze and shade remain underexposed.
+Fix: turn lamp180degrees, move camera closer at50deg, raise display exposure
+11.4→14.4. Filament temperature, area and radiance remain unchanged.
+
+Review02/VCM128 opened: the shade now glows and bronze reads as metal.
+Composition: clipped rosette above competes with hero; lower level camera11cm.
+Light: feather-eyes clip toward white; reduce exposure one stop.
+Materials: bright orange table competes; stain full-resolution colour in linear
+RGB by(.40,.34,.29), documented CC0 derivative, with original maps retained.
+
+Review03/path1024 opened:
+Composition: upper rosette still clipped; move complete table/lamp43cm from wall
+and reframe level at1.35m, giving the shade a stronger right-third placement.
+Light: path leaves the transmitted shade mostly black/noisy whereasVCM128
+resolves it at comparable time. UseVCM; report estimator limitation, not a
+claim of a physical flux discrepancy from images alone. Exposure14.0.
+Materials: stained table now restrained, but path noise conceals patina; useVCM.
+Shade camera moves closer for the actual glass catalogue detail.
+
+Reference records: https://collections.lacma.org/object/30854 (La Tour,
+c.1635–37); https://derbymuseums.org/collection/joseph-wright-of-derby/
+(Wright collection/Orrery). Match restrained light/value grouping, not content.
+
+Review04/VCM192 opened:
+Composition: lamp/right and book/left now balanced; move room camera18cm closer.
+Light: rosette still clips because it is on the pale ceiling. Specify a real
+wood-panelled ceiling matching the study joinery, reducing its reflectance.
+Materials: transmitted glass and bronze resolve; preserve their settings.
+The restrained wood ceiling makes the shade the sole strongest accent.
+
+Shade review01/VCM128 opened:
+Composition: pleasing close crop but rough left rim interrupts the silhouette.
+Light: amber and teal are distinct; retain exposure12.5 and41.469lm source.
+Materials: bronze highlights believable; scan has a dark/notched rim region.
+Turn complete lamp30degrees to test a cleaner catalogue aspect without
+retouching an image or adding a second shade shell.
+
+ASSETS / LICENCES
+Cleveland Museum of Art2018.281, Tiffany/Clara Driscoll Peacock lamp, CC0:
+https://sketchfab.com/3d-models/peacock_table_lamp-a24bcb6b7a2e448fad661004f403ae12
+Museum physical dimensions65cm overall,48cm diameter:
+https://www.clevelandart.org/art/2018.281
+Varldskulturmuseerna Coptic prayer book, CC0,71.35mm scan height:
+https://sketchfab.com/3d-models/coptic_prayer_book-500ec4621d764f0dadb8edc93b8700ae
+Poly Haven, CC0: round_wooden_table_01 (Ulan Cabanilla), white_plaster_02,
+oak_veneer_01, wood_floor. Each https://polyhaven.com/a/<id>; full file URLs
+and full-resolution derivatives recorded in assets/polyhaven/MANIFEST.json.
+Pedestal table used at native1399.35mm diameter x1005.02mm height.
+Full-resolution source images retained; engine default2048MB texture budget.
+
+ENGINE / ASSET PRIORITIES
+1. Stained-glass reflection roughness is parsed but explicitly unsupported;
+normal mapping is attached elsewhere. Repro: build/owe info scenes/the_peacock_lamp.owe
+prints that PeacockGlass reflection stays specular.
+2. VCM is much more useful here than path at comparable time: two bulb-glass
+crossings plus diffuse shade transmission converge poorly in path views.
+Repro: build/owe render scenes/the_peacock_lamp.owe --backend gpu --device 1 --detector Room --integrator path --spp 1024 --resolution 640x400 --out out/scenes/peacock_lamp/repro_path
+Compare with --integrator vcm --spp 192 at the same view.
+3. Coated diffuse wood would add restrained varnish highlights to the table;
+its normal/roughness images are already attached but the closure is diffuse.
+4. Measured transmission and reflection images would improve the shade beyond
+its single photographic atlas; do not mistake this estimate for measured glass.
+Lead contacts produce region-inconsistency counters but no reported leaks in
+review02. Repro: Room, GPU VCM128,640x400; first contact LeadA.side.
+No engine code changed. No emissive shade, extra light or image retouching.
+
+Shade review02/VCM128 opened:
+Composition:30degree turn brought the defective region forward instead.
+Light: transmitted pattern otherwise excellent, retain physical source.
+Materials: patch is not in the colour atlas; test without the shade normal map.
+CPUprobe returns zero through unsupported glass and cannot diagnose this GPU path.
+
+Shade review03/VCM128 opened:
+Composition: same dark patch; it is not fixed by removing the normal map.
+Light: elsewhere the shade still transmits correctly.
+Materials: normal removal makes patch black rather than speckled. Colour atlas
+has coloured RGB there, no duplicate shade faces; simple point-to-filament
+geometry audit finds only the bulb and shade. Cause remains unresolved, so do
+not label this a proven normal-map bug. Restore map, turn lamp60degrees the
+other way to present the intact catalogue aspect. No geometry or photo repair.
+
+Shade review04/VCM128 opened:
+Composition: alternate angle reveals another dark region on the opposite side.
+Light: one socket gives strongly uneven shade illumination. Choose all three
+actual sockets lit, each a4-cp carbon bulb; the fixture remains the sole source.
+Materials: do not paint away dark regions or alter transmission to mask them.
+Geometry-audited centres2/3 have3.07/3.37mm sampled clearance for2.08mm loops.
+Each2mm-radius loop with.08mm wire has radiance142.034216 at2100K for41.469lm;
+fixture total124.407lm. Lower all exposures bylog2(3)=1.585stops. This is a
+new lighting-state choice, not a claim about the museum object's bulb ratings.
+
+Shade review05/VCM128 opened:
+Composition: original193degree aspect minimizes but does not remove rim break.
+Light: three real filaments light the bronze better, retain this state.
+Materials: patch persists with three sockets, so uneven socket illumination is
+not its complete cause. Test the scan's alternative Shell surface by itself
+(4675triangles versus Shade4823), never stack coincident shade layers.
+
+Shade review06/VCM128 opened:
+Composition: alternative shell leaves the same rim break.
+Light: stable output and useful bronze reflection; keep three sockets.
+Materials: discard alternative shell, recompute smooth shade normals from its
+original geometry to test imported shading-frame behaviour. No geometric edits.
+CPU primary-ray audit hits ShadeGlass at the dark region, so it is not simply
+a missing front surface. Treat source/transport cause as unresolved.
+
+Shade review07/VCM128 opened — rim defect resolved:
+Composition: complete continuous shade silhouette; keep193degree orientation.
+Light: transmitted feather pattern and bronze reflection now read coherently.
+Materials: recomputed smooth65degree normals fix the patch with unchanged
+positions/triangles/UV/colour/source output. Retain this geometry-normal setup,
+not imported shade normals. Final close-up increases resolution and samples
+for the remaining fine shadow grain. The earlier conjectures (hole, overlapping
+shell, socket illumination) did not explain the defect; this comparison does.
+
+Repro for imported-normal defect (asset/loader cause not established):
+build/owe render scenes/the_peacock_lamp.owe --backend gpu --device 1 --detector Shade --integrator vcm --spp 128 --resolution 640x400 --set ShadeGlass.normals=file --out out/scenes/peacock_lamp/repro_imported_normals
+Default smooth(crease=65deg) is clean. No engine changes made.
+
+Room review05/VCM192 opened:
+Composition: ceiling pattern still grazes top edge; lower level eye20cm.
+Light: shade is now clean but bright; reduce display exposure0.3stop.
+Materials: wood table occupies too much of the bright foreground; lower eye
+also foreshortens this plane, strengthening the lamp silhouette.
+Contact audit: tabletop at lamp1.0050068m and book1.0050069m, versus placed
+1.0050214m: only15micrometres difference. Native scale/contact are sound.
+
+Room review06/VCM128 opened:
+Composition: low eye foreshortens the shade too severely and hides the binding.
+Light: tiny residual ceiling pattern remains at frame top; do not keep chasing
+it by lowering the viewpoint. A taller3.4m study is a plausible physical setting.
+Materials: underside view loses the rich outer glass; restore1.36m camera height.
+Raise the real ceiling and wall tops to3.4m, retaining the same source output,
+wood ceiling and room footprint. This lets the lamp be viewed at its best height.
+
+Wall review01/VCM128 opened:
+Composition: isolated broad bands lack a compelling focal point.
+Light: the real diffuse/hazy shade gives a soft warm field, not a crisp coloured
+stained-glass projection; preserve that physics.
+Materials: plaster grain resolves but becomes the main subject of this crop.
+Curation fix: remove redundant Wall observer; Room already includes its cast
+light. Final observers are Room and Shade only, both carefully composed.
+
+Room review07/VCM128 opened:
+Composition: clipping persists; the upper pattern is on the high wall, not the
+ceiling (correcting the earlier interpretation). Choose a40degree close still
+life, within the requested25–40degree range for close views.
+Light: transmitted shade is clean and dominant; keep source/exposure unchanged.
+Materials: tabletop colour is restrained but the foreground binding would clip
+at40degrees; move it back to(-.27,.10) on the real tabletop, retaining its turn.
+The taller study remains a plausible room but did not fix the pattern by itself.
+
+Room review08/VCM128 opened — composition accepted:
+Composition: complete lamp at right, complete binding at left, curved foreground
+and no clipped upper pattern.40degrees is a close catalogue still life.
+Light: strongest accent is transmitted glass; real cast light supports it.
+Materials: warm metal, dark stained timber and aged binding now separate well.
+Remaining issue in all three categories is fine Monte Carlo grain in shadow;
+finals increase to960x600,VCM512 with unchanged composition/materials/lighting.
+
+WISHLIST
+None pending. The curated CC0 table and antique binding supply the environment
+without adding decorative clutter; final views are Room and Shade.
+
+Controlled imported-normal repro opened (all else matches final scene):
+Composition: the same small left-rim break reappears with normals=file.
+Light: filament settings and exposure are identical; brightness elsewhere agrees.
+Materials: smooth65degree normals give the continuous surface; file normals do
+not. Keep the smooth setting. No source triangles or RGB texels were modified.
+repro_file_normals.png usesVCM128,640x400; wall133.57s while sharingGPU with
+final Room, peak2524.94MiB. This verifies the documented CLI reproduction.
+
+FINAL ROOM opened and accepted,960x600,VCM512,WB3000K,AgX:
+Composition: full lamp and binding, intentional foreground table crop, plumb
+verticals; no clipped upper rosette. Light: coloured shade dominates, real cast
+light supports the silhouette. Materials: continuous glass/lead pattern, metal
+highlights, worn binding and dark timber resolve. Fine shadow grain remains
+but does not conceal the form or surface character.
+out/scenes/peacock_lamp/final_room.png
+Transport490.82s; wall510.06s (includes a
+shared-GPU diagnostic); peak2616.78MiB; exposure+12.115.
+
+FINAL SHADE opened and accepted,960x600,VCM512,WB3000K,AgX:
+Composition: intact shade silhouette and deliberate upper-bronze crop.
+Light: amber and teal transmission retained without an emissive surface.
+Materials: continuous lead/glass pattern and metal reflections resolve cleanly.
+out/scenes/peacock_lamp/final_shade.png
+Transport365.72s; wall385.86s;
+peak2615.34MiB; exposure+10.915.
+Exact point-to-triangle centre clearances for the three loops are4.770,2.980,
+and3.355mm, all larger than their2.08mm outer radii. Intended lead contacts
+are the only added junctions. No texture-budget increase or engine edits.

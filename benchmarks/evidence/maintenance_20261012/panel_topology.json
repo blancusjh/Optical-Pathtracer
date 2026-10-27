@@ -1,0 +1,13 @@
+{
+  "asset": "models/caustic/sacred_heart_panel.obj",
+  "sha256": "1e16e59cc374d8323c649dbf9aae175990c2f0e912bb90e1358fa6673a2a4f32",
+  "vertices": 767909,
+  "triangles": 1535814,
+  "boundary_edges": 0,
+  "nonmanifold_edges": 0,
+  "edges_with_orientation_mismatch": 0,
+  "zero_area_faces": 0,
+  "minimum_area_m2": 1.7211265700694331e-07,
+  "finite_vertices": true,
+  "scope": "Indexed topology only; does not validate floating-point traversal or self-intersections."
+}

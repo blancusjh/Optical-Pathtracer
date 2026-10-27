@@ -1,0 +1,19 @@
+# Camera-path NEE oracle: the source-end screen blocks ALL illumination of the
+# near diffuse receiver. Large emission compensates inverse-square dilution.
+# Scalar endpoint shortening skips this 5 cm gap at a distance of 1,000,000 m.
+# Side-open: SourceBlocker.position=(1,0,999999.95).
+# Beyond-source: SourceBlocker.position=(0,0,1000000.05).
+units = m
+world { up = (0,1,0) sky = none }
+material white { type = diffuse reflectance = 0.8 }
+material black { type = absorber }
+body Receiver { type = sheet size = (0.4,0.4) position = (0,0,0)
+ axis = (0,0,1) up = (0,1,0) material = white }
+body FarEmitter { type = sheet size = (0.1,0.1) position = (0,0,1000000)
+ axis = (0,0,-1) up = (0,1,0) material = black emission = 1e12 }
+body SourceBlocker { type = sheet size = (0.4,0.4) position = (0,0,999999.95)
+ axis = (0,0,-1) up = (0,1,0) material = black }
+observer Eye { position = (0,-0.1,0.3) look_at = (0,0,0) up = (0,1,0)
+ fov = 20deg pupil = 0 resolution = (16,16)
+ exposure = 0 white_balance = none }
+render { detector = Eye integrator = path spp = 128 max_depth = 2 seed = 11 }
